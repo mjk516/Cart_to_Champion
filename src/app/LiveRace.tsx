@@ -63,15 +63,24 @@ function genericTrackPath(circuitId: string, W: number, H: number): string {
   return pts.join(' ') + ' Z';
 }
 
+/** 깃발 상황별 트랙 색과 차 속도(1 = 그린 플래그 실제 속도) */
+const TRACK_FLAG: Record<LapRecord['phase'], { track: string; dash: string; border: string; glow?: string; bannerBg: string; bannerFg: string; pace: number }> = {
+  green: { track: '#3f3f46', dash: '#52525b', border: 'rgba(255,255,255,0.1)', bannerBg: 'rgba(0,0,0,0.7)', bannerFg: '#fafafa', pace: 1 },
+  sc: { track: '#eab308', dash: '#713f12', border: '#eab308', glow: '#facc15', bannerBg: '#facc15', bannerFg: '#18181b', pace: 1 / 1.4 },
+  vsc: { track: '#eab308', dash: '#713f12', border: '#eab308', glow: '#facc15', bannerBg: '#facc15', bannerFg: '#18181b', pace: 1 / 1.3 },
+  red: { track: '#dc2626', dash: '#7f1d1d', border: '#dc2626', glow: '#ef4444', bannerBg: '#dc2626', bannerFg: '#ffffff', pace: 0.35 },
+};
+
 /** 트랙 뷰가 보여 주는 실제 레이스 시간(초) */
 const TRACK_WINDOW_SEC = 6;
 /** 트랙 뷰에서 선두가 출발하는 위치(랩 비율) */
 const LEADER_START = 0.25;
 
-function TrackView({ circuitId, realLayout, prev, cur, baseLap, banner, focus, x, speed, onEnd }: {
+function TrackView({ circuitId, realLayout, prev, cur, baseLap, banner, focus, x, speed, onSpeed, onEnd }: {
   circuitId: string; realLayout: boolean; prev: LapRecord | null; cur: LapRecord; baseLap: number; banner: string; focus: string[]; x: Ctx;
   /** 재생 배속. ×1이면 차가 실제 레이스 속도로 움직인다 */
   speed: number;
+  onSpeed: (s: number) => void;
   onEnd: () => void;
 }) {
   const W = 640, H = 300;
@@ -88,36 +97,43 @@ function TrackView({ circuitId, realLayout, prev, cur, baseLap, banner, focus, x
   }, []);
   // 실제 레이아웃은 F1 그랑프리에서만 쓴다. 하부 리그는 같은 서킷이라도 일반 레이아웃
   const d = useMemo(() => (realLayout && CIRCUIT_PATHS[circuitId]) || genericTrackPath(circuitId, W, H), [circuitId, realLayout]);
-  const [tau, setTau] = useState(0);
+  // 지금까지 보여 준 실제 레이스 시간(초). 프레임마다 배속만큼 늘어나서, 보는 중에 배속을 바꿔도 바로 반영된다
+  const [raceSec, setRaceSec] = useState(0);
+  const speedRef = useRef(speed);
+  speedRef.current = speed;
   useEffect(() => {
     let raf = 0;
     let end: ReturnType<typeof setTimeout> | undefined;
-    const start = performance.now();
-    // 실제 레이스 시간 TRACK_WINDOW_SEC초를 보여 준다. ×1이면 그 시간 그대로, ×2·×4면 그만큼 빠르게
-    const duration = (TRACK_WINDOW_SEC * 1000) / speed;
+    let last = performance.now();
+    let acc = 0;
     const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / duration);
-      setTau(t);
-      if (t < 1) raf = requestAnimationFrame(tick);
+      acc = Math.min(TRACK_WINDOW_SEC, acc + ((now - last) / 1000) * speedRef.current);
+      last = now;
+      setRaceSec(acc);
+      if (acc < TRACK_WINDOW_SEC) raf = requestAnimationFrame(tick);
       else end = setTimeout(onEnd, 900);
     };
     raf = requestAnimationFrame(tick);
     return () => { cancelAnimationFrame(raf); if (end) clearTimeout(end); };
   }, [cur.lap]); // eslint-disable-line react-hooks/exhaustive-deps
+  const tau = raceSec / TRACK_WINDOW_SEC;
+  // 깃발 상황: SC·VSC는 노란색, 레드 플래그는 빨간색 트랙. 차도 그만큼 느려진다(레드 플래그는 천천히 피트로 돌아가는 속도)
+  const flag = TRACK_FLAG[cur.phase];
   const prevGap = new Map((prev?.order ?? []).map((e) => [e.id, e.gap]));
   const L = pathRef.current?.getTotalLength() ?? 0;
   const pos = (id: string, gap: number) => {
     if (!pathRef.current || !L) return null;
     const g = (prevGap.get(id) ?? gap) * (1 - tau) + gap * tau;
     // 선두는 랩의 1/4 지점에서 출발해 실제 속도로 TRACK_WINDOW_SEC초만큼 달린다(예전에는 3초에 한 바퀴를 돌아 너무 빨랐다)
-    const p = (((LEADER_START + (tau * TRACK_WINDOW_SEC) / baseLap - g / baseLap) % 1) + 1) % 1;
+    const p = (((LEADER_START + (raceSec * flag.pace) / baseLap - g / baseLap) % 1) + 1) % 1;
     return pathRef.current.getPointAtLength(p * L);
   };
   return (
-    <div ref={boxRef} className="relative rounded-xl border border-white/10 bg-zinc-950 p-2">
+    <div ref={boxRef} className="relative rounded-xl border bg-zinc-950 p-2 transition-colors duration-500" style={{ borderColor: flag.border }} data-flag={cur.phase}>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label={`트랙 뷰: ${banner}`}>
-        <path d={d} fill="none" stroke="#3f3f46" strokeWidth={18 * Math.min(k, 1.6)} strokeLinejoin="round" />
-        <path ref={pathRef} d={d} fill="none" stroke="#52525b" strokeWidth={2} strokeDasharray="6 8" />
+        {flag.glow && <path d={d} fill="none" stroke={flag.glow} strokeOpacity={0.35} strokeWidth={30 * Math.min(k, 1.6)} strokeLinejoin="round" />}
+        <path d={d} fill="none" stroke={flag.track} strokeWidth={18 * Math.min(k, 1.6)} strokeLinejoin="round" style={{ transition: 'stroke 400ms' }} />
+        <path ref={pathRef} d={d} fill="none" stroke={flag.dash} strokeWidth={2} strokeDasharray="6 8" />
         {[...cur.order].reverse().map((e) => {
           const pt = pos(e.id, e.gap);
           if (!pt) return null;
@@ -130,8 +146,14 @@ function TrackView({ circuitId, realLayout, prev, cur, baseLap, banner, focus, x
           );
         })}
       </svg>
-      <div className="absolute left-3 top-3 rounded-lg bg-black/70 px-3 py-1 text-sm font-black">{banner}</div>
+      <div className="absolute left-3 top-3 rounded-lg px-3 py-1 text-sm font-black" style={{ background: flag.bannerBg, color: flag.bannerFg }}>{banner}</div>
       <button onClick={onEnd} className="absolute right-3 top-3 rounded-lg bg-black/70 px-3 py-1 text-xs text-zinc-200 hover:bg-black">계속 ▶</button>
+      <div className="absolute bottom-3 right-3 flex gap-1" role="group" aria-label="트랙 뷰 배속">
+        {[1, 2, 4].map((s2) => (
+          <button key={s2} onClick={() => onSpeed(s2)} aria-pressed={speed === s2}
+            className={`rounded-lg px-2 py-1 text-xs font-bold ${speed === s2 ? 'bg-racing text-white' : 'bg-black/70 text-zinc-300 hover:bg-black'}`}>×{s2}</button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -242,7 +264,7 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
       </div>
 
       {track && rec && (
-        <TrackView circuitId={input.circuit.id} realLayout={realLayout} prev={laps[cur - 2] ?? null} cur={rec} baseLap={input.circuit.baseLap} banner={track.banner} focus={track.focus} x={x} speed={speed} onEnd={() => setTrack(null)} />
+        <TrackView circuitId={input.circuit.id} realLayout={realLayout} prev={laps[cur - 2] ?? null} cur={rec} baseLap={input.circuit.baseLap} banner={track.banner} focus={track.focus} x={x} speed={speed} onSpeed={setSpeed} onEnd={() => setTrack(null)} />
       )}
 
       {outcome.status === 'pending' && cur >= laps.length && !track && (
