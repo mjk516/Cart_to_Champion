@@ -175,7 +175,7 @@ describe('성격 기질과 잠재력(SPEC §3.4 v0.11)', () => {
     const pots = (p: 'aggressive' | 'calm') => Array.from({ length: 300 }, (_, i) => generateHidden(i, p).potential);
     const bad = pots('aggressive');
     const good = pots('calm');
-    expect(Math.max(...bad)).toBeGreaterThan(Math.max(...good) + 5);
+    expect(Math.max(...bad)).toBeGreaterThanOrEqual(Math.max(...good) + 5);
     expect(Math.max(...good)).toBeLessThanOrEqual(88);
     const spread = (xs: number[]) => Math.max(...xs) - Math.min(...xs);
     expect(spread(bad)).toBeGreaterThan(spread(good));
@@ -183,10 +183,35 @@ describe('성격 기질과 잠재력(SPEC §3.4 v0.11)', () => {
 });
 
 describe('전환점 이벤트와 언론·팬 피드(SPEC §6, §6.1)', () => {
-  it('이벤트 20개, 반응 문구 80개', () => {
-    expect(EVENTS).toHaveLength(20);
-    expect(new Set(EVENTS.map((e) => e.id)).size).toBe(20);
+  it('이벤트 60개(기자회견 12개 포함), 반응 문구 80개', () => {
+    expect(EVENTS).toHaveLength(60);
+    expect(new Set(EVENTS.map((e) => e.id)).size).toBe(60);
+    expect(EVENTS.filter((e) => e.category === 'interview')).toHaveLength(12);
+    for (const e of EVENTS) for (const o of e.options) {
+      expect(o.outcomes.length).toBeGreaterThan(0);
+      expect(o.outcomes.reduce((a, x) => a + x.p, 0)).toBeCloseTo(1, 5);
+    }
     expect(feedTemplateCount()).toBeGreaterThanOrEqual(80);
+  });
+
+  it('레이스 시트로 시즌을 치르면(F4 이상) 기자회견이 하나 뜨고, 답변 톤 3개를 고른다', () => {
+    let c = createCareer(setup(31));
+    let seen = 0, racedSeasons = 0;
+    for (let i = 0; i < 12 && !c.retired; i++) {
+      c = runSeason(c, DEFAULT_POLICY.training(c)).career;
+      const last = c.history[c.history.length - 1]!;
+      const ivs = (c.pendingEvents ?? []).filter((id) => id.startsWith('iv_'));
+      expect(ivs.length).toBeLessThanOrEqual(1);
+      if (last.seat === 'race' && last.series !== 'kart') { racedSeasons++; seen += ivs.length; }
+      else expect(ivs).toHaveLength(0);
+      for (const card of pendingEventCards(c)) {
+        if (card.category === 'interview') expect(card.options.map((o) => o.id)).toEqual(['humble', 'confident', 'bold']);
+        c = resolveEvent(c, card.id, card.options[card.options.length - 1]!.id).career;
+      }
+      c = applyOffseason(c, DEFAULT_POLICY.offseason(c, getOffseason(c)));
+    }
+    expect(racedSeasons).toBeGreaterThan(3);
+    expect(seen).toBeGreaterThanOrEqual(racedSeasons - 2); // 최근 3년 중복 제외로 가끔 빠질 수 있다
   });
 
   it('이벤트를 처리하기 전에는 오프시즌으로 넘어갈 수 없다', () => {

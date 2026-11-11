@@ -25,7 +25,7 @@ export function generateHidden(seed: number, personality: Personality): Hidden {
   const potential = t === 'good'
     ? clamp(Math.round(82.5 + normal(r) * 2.5), 78, 88)
     : t === 'bad'
-      ? clamp(Math.round(86 + normal(r) * 5), 76, 97)
+      ? clamp(Math.round(84 + normal(r) * 4.5), 76, 93)
       : clamp(Math.round(82 + normal(r) * 3), 77, 88);
   const growthType = weightedPick<GrowthType>(r, ['early', 'standard', 'late', 'longevity'], (g) =>
     g === 'early' ? (personality === 'instinctive' ? 0.4 : 0.25)

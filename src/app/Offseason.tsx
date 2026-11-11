@@ -148,6 +148,13 @@ function ManagerCard({ a }: { a: ManagerAdvice }) {
   );
 }
 
+/** 기자회견 답변 톤 표시(SPEC §6.1 v0.20) */
+const INTERVIEW_TONE: Record<string, { label: string; tone: 'green' | 'amber' | 'red' }> = {
+  humble: { label: '겸손', tone: 'green' },
+  confident: { label: '자신감', tone: 'amber' },
+  bold: { label: '도발', tone: 'red' },
+};
+
 function OfferCard({ o, onPick, advice }: { o: Offer; onPick: () => void; advice?: OfferAdvice }) {
   const { showKrw } = useGame();
   return (
@@ -210,7 +217,24 @@ export function Offseason() {
                 {e.summary.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{e.summary.map((s, i) => <Pill key={i} tone={effectTone(s)}>{s}</Pill>)}</div>}
               </div>
             ))}
-            {pending.map((card) => (
+            {pending.map((card) => card.category === 'interview' ? (
+              <div key={card.id} className="rounded-xl border border-sky-400/40 bg-sky-400/5 p-3">
+                <div className="flex items-center gap-2"><Pill tone="blue">🎙 {EVENT_CATEGORY_LABEL[card.category]}</Pill><b>{card.title}</b></div>
+                <div className="mt-3 rounded-lg bg-black/30 p-3">
+                  <div className="text-[11px] text-zinc-400">기자 질문</div>
+                  <p className="mt-0.5 text-sm text-zinc-100">{card.text}</p>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                  {card.options.map((o) => (
+                    <button key={o.id} onClick={() => chooseEvent(card.id, o.id)} className="rounded-xl border border-white/15 p-3 text-left hover:bg-white/5">
+                      <Pill tone={INTERVIEW_TONE[o.id]?.tone ?? 'zinc'}>{INTERVIEW_TONE[o.id]?.label ?? o.id}</Pill>
+                      <div className="mt-1 font-bold">{o.label}</div>
+                      {o.hint && <div className="mt-0.5 text-xs text-zinc-400">{o.hint}</div>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
               <div key={card.id} className="rounded-xl border border-racing/50 bg-racing/5 p-3">
                 <div className="flex items-center gap-2"><Pill tone="red">{EVENT_CATEGORY_LABEL[card.category]}</Pill><b>{card.title}</b></div>
                 <p className="mt-2 text-sm text-zinc-200">{card.text}</p>

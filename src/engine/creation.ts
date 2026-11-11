@@ -83,8 +83,8 @@ export interface WealthTierDef {
 }
 
 export const WEALTH_TIERS: Record<WealthTier, WealthTierDef> = {
-  1: { tier: 1, label: '빠듯함', startFunds: 30_000, familySupport: 15_000, growthBonus: 0.1, reputationGain: 0.2, academyInterest: 0, sponsorBonus: 0.15 },
-  2: { tier: 2, label: '보통', startFunds: 150_000, familySupport: 80_000, growthBonus: 0.05, reputationGain: 0, academyInterest: 0, sponsorBonus: 0.1 },
+  1: { tier: 1, label: '빠듯함', startFunds: 30_000, familySupport: 15_000, growthBonus: 0.03, reputationGain: 0.2, academyInterest: 0, sponsorBonus: 0.15 },
+  2: { tier: 2, label: '보통', startFunds: 150_000, familySupport: 80_000, growthBonus: 0.01, reputationGain: 0, academyInterest: 0, sponsorBonus: 0.1 },
   3: { tier: 3, label: '여유', startFunds: 800_000, familySupport: 300_000, growthBonus: 0, reputationGain: 0, academyInterest: 0, sponsorBonus: 0 },
   4: { tier: 4, label: '부유', startFunds: 4_000_000, familySupport: 1_200_000, growthBonus: 0, reputationGain: -0.1, academyInterest: -0.15, sponsorBonus: 0 },
   5: { tier: 5, label: '재벌', startFunds: 25_000_000, familySupport: 4_000_000, growthBonus: 0, reputationGain: -0.25, academyInterest: -0.3, sponsorBonus: 0 },
