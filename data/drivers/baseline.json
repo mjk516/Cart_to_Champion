@@ -1,0 +1,181 @@
+{
+  "_설명": "rate-drivers의 사전 추정치(손으로 정한 원래 값). 스크립트는 늘 이 값을 기준으로 기록과 섞으므로 여러 번 돌려도 결과가 같다",
+  "drivers": {
+    "NOR": {
+      "pace": 94,
+      "racecraft": 90,
+      "tyre": 90,
+      "consistency": 89,
+      "wet": 88,
+      "feedback": 88
+    },
+    "PIA": {
+      "pace": 93,
+      "racecraft": 89,
+      "tyre": 91,
+      "consistency": 90,
+      "wet": 85,
+      "feedback": 86
+    },
+    "RUS": {
+      "pace": 93,
+      "racecraft": 87,
+      "tyre": 88,
+      "consistency": 89,
+      "wet": 88,
+      "feedback": 89
+    },
+    "ANT": {
+      "pace": 88,
+      "racecraft": 84,
+      "tyre": 80,
+      "consistency": 78,
+      "wet": 84,
+      "feedback": 78
+    },
+    "VER": {
+      "pace": 97,
+      "racecraft": 96,
+      "tyre": 92,
+      "consistency": 93,
+      "wet": 96,
+      "feedback": 92
+    },
+    "HAD": {
+      "pace": 86,
+      "racecraft": 83,
+      "tyre": 80,
+      "consistency": 80,
+      "wet": 80,
+      "feedback": 79
+    },
+    "LEC": {
+      "pace": 96,
+      "racecraft": 90,
+      "tyre": 87,
+      "consistency": 86,
+      "wet": 88,
+      "feedback": 88
+    },
+    "HAM": {
+      "pace": 91,
+      "racecraft": 92,
+      "tyre": 93,
+      "consistency": 90,
+      "wet": 95,
+      "feedback": 95
+    },
+    "ALB": {
+      "pace": 87,
+      "racecraft": 86,
+      "tyre": 87,
+      "consistency": 88,
+      "wet": 85,
+      "feedback": 87
+    },
+    "SAI": {
+      "pace": 89,
+      "racecraft": 88,
+      "tyre": 91,
+      "consistency": 89,
+      "wet": 88,
+      "feedback": 92
+    },
+    "ALO": {
+      "pace": 89,
+      "racecraft": 94,
+      "tyre": 94,
+      "consistency": 92,
+      "wet": 93,
+      "feedback": 96
+    },
+    "STR": {
+      "pace": 80,
+      "racecraft": 79,
+      "tyre": 82,
+      "consistency": 80,
+      "wet": 80,
+      "feedback": 80
+    },
+    "LAW": {
+      "pace": 83,
+      "racecraft": 82,
+      "tyre": 80,
+      "consistency": 79,
+      "wet": 80,
+      "feedback": 78
+    },
+    "LIN": {
+      "pace": 82,
+      "racecraft": 80,
+      "tyre": 77,
+      "consistency": 76,
+      "wet": 77,
+      "feedback": 75
+    },
+    "OCO": {
+      "pace": 85,
+      "racecraft": 84,
+      "tyre": 86,
+      "consistency": 85,
+      "wet": 86,
+      "feedback": 85
+    },
+    "BEA": {
+      "pace": 85,
+      "racecraft": 84,
+      "tyre": 81,
+      "consistency": 82,
+      "wet": 80,
+      "feedback": 79
+    },
+    "GAS": {
+      "pace": 86,
+      "racecraft": 85,
+      "tyre": 86,
+      "consistency": 86,
+      "wet": 86,
+      "feedback": 86
+    },
+    "COL": {
+      "pace": 80,
+      "racecraft": 81,
+      "tyre": 78,
+      "consistency": 76,
+      "wet": 78,
+      "feedback": 76
+    },
+    "HUL": {
+      "pace": 85,
+      "racecraft": 84,
+      "tyre": 86,
+      "consistency": 88,
+      "wet": 85,
+      "feedback": 90
+    },
+    "BOR": {
+      "pace": 84,
+      "racecraft": 82,
+      "tyre": 80,
+      "consistency": 82,
+      "wet": 81,
+      "feedback": 79
+    },
+    "PER": {
+      "pace": 85,
+      "racecraft": 85,
+      "tyre": 90,
+      "consistency": 82,
+      "wet": 84,
+      "feedback": 86
+    },
+    "BOT": {
+      "pace": 86,
+      "racecraft": 82,
+      "tyre": 87,
+      "consistency": 87,
+      "wet": 84,
+      "feedback": 88
+    }
+  }
+}

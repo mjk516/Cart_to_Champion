@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyOffseason, autoplayCareer, createCareer, DEFAULT_POLICY, getOffseason, MAX_TEAMS, MIN_TEAMS, replayCareer,
   CALENDAR_2026, f1WeekendFor, isF1RaceSeason, radioKey, type RadioOptionId, EVENTS, managerAdvice, MAJOR_FLOOR, OTHERS_CAP, feedTemplateCount, pendingEventCards, resolveEvent, F1_WINNER_TEAMS, f1Rules, generateHidden, initialWorld, NEW_TEAM_START, PERSONALITIES, runOffseason, TEAMS_2026, runSeason, STAT_KEYS, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, superLicencePoints, type CareerSetup,
-  evolveCalendar, RETURNING_CIRCUITS, CALENDAR_CHANGE_FROM, CALENDAR_COOLDOWN, f1Calendar, type CalendarChange, hasHomeGp, homeGpEffect, type Personality,
+  evolveCalendar, RETURNING_CIRCUITS, CALENDAR_2027_SLOTS, ALL_F1_CIRCUITS, CALENDAR_CHANGE_FROM, CALENDAR_COOLDOWN, f1Calendar, type CalendarChange, hasHomeGp, homeGpEffect, type Personality,
 } from '../src/engine';
 import { CIRCUIT_PATHS } from '../src/app/circuitPaths';
 
@@ -366,15 +366,15 @@ describe('결정성과 재생(랭킹 검증 SPEC §9)', () => {
 });
 
 describe('F1 캘린더 변화 (SPEC §2.1 v0.17)', () => {
-  const known = [...CALENDAR_2026.map((x) => x.id), ...RETURNING_CIRCUITS.map((x) => x.id)];
-  const start = CALENDAR_2026.map((x) => ({ id: x.id, sprint: x.sprint }));
+  const known = ALL_F1_CIRCUITS.map((x) => x.id);
+  const start = CALENDAR_2027_SLOTS;
 
   it('낮은 확률로 바뀌고, 라운드·스프린트 수와 개막전·최종전은 그대로, 서킷은 겹치지 않는다', () => {
     let changes = 0, years = 0;
     for (let seed = 1; seed <= 60; seed++) {
       let slots = start;
       const past: CalendarChange[] = [];
-      for (let season = 2027; season <= 2056; season++) {
+      for (let season = 2028; season <= 2057; season++) {
         const out = evolveCalendar(slots, season, seed, known, past);
         years++;
         if (out.change) {
@@ -388,8 +388,8 @@ describe('F1 캘린더 변화 (SPEC §2.1 v0.17)', () => {
         slots = out.slots;
         expect(slots).toHaveLength(24);
         expect(new Set(slots.map((s) => s.id)).size).toBe(24);
-        expect(slots.filter((s) => s.sprint)).toHaveLength(6);
-        expect(slots[0]!.id).toBe('australia');
+        expect(slots.filter((s) => s.sprint)).toHaveLength(10);
+        expect(slots[0]!.id).toBe('bahrain');
         expect(slots[23]!.id).toBe('abu_dhabi');
       }
     }
@@ -400,7 +400,7 @@ describe('F1 캘린더 변화 (SPEC §2.1 v0.17)', () => {
 
   it('복귀 후보는 모두 실제 레이아웃이 있다', () => {
     for (const x of RETURNING_CIRCUITS) expect(CIRCUIT_PATHS[x.id]).toBeTruthy();
-    for (const x of CALENDAR_2026) expect(CIRCUIT_PATHS[x.id]).toBeTruthy();
+    for (const x of ALL_F1_CIRCUITS) expect(CIRCUIT_PATHS[x.id]).toBeTruthy();
   });
 
   it('커리어 중 캘린더가 바뀌어도 리플레이가 같은 결과를 낸다', () => {
@@ -408,6 +408,20 @@ describe('F1 캘린더 변화 (SPEC §2.1 v0.17)', () => {
     const r = replayCareer(c.setup, c.choiceLog);
     expect(r.world.calendar).toEqual(c.world.calendar);
     expect(f1Calendar(c)).toHaveLength(24);
+  });
+
+  it('2026은 실제로 치러진 23라운드, 2027은 공식 발표 캘린더로 넘어간다', () => {
+    expect(CALENDAR_2026).toHaveLength(23);
+    expect(CALENDAR_2026.map((x) => x.id)).not.toContain('saudi_arabia');
+    expect(CALENDAR_2026[15]!.id).toBe('sepang');
+    expect(CALENDAR_2026.filter((x) => x.sprint)).toHaveLength(6);
+    let c = createCareer(setup(5));
+    c = runSeason(c, DEFAULT_POLICY.training(c)).career;
+    for (const card of pendingEventCards(c)) c = resolveEvent(c, card.id, card.options[0]!.id).career;
+    c = applyOffseason(c, DEFAULT_POLICY.offseason(c, getOffseason(c)));
+    expect(c.year).toBe(2027);
+    expect(f1Calendar(c).map((x) => x.id)).toEqual(CALENDAR_2027_SLOTS.map((s) => s.id));
+    expect(c.world.news.some((n) => n.kind === 'calendar' && n.season === 2027)).toBe(true);
   });
 });
 

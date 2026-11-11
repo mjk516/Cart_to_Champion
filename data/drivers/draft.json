@@ -1,0 +1,214 @@
+{
+  "seasons": [
+    2024,
+    2025,
+    2026
+  ],
+  "weights": {
+    "2024": 1,
+    "2025": 2,
+    "2026": 3
+  },
+  "wetRaces": [
+    "2024-villeneuve",
+    "2024-interlagos",
+    "2025-albert_park",
+    "2025-silverstone",
+    "2025-spa"
+  ],
+  "kept": [
+    "ANT.wet",
+    "VER.wet",
+    "HAD.wet",
+    "ALB.wet",
+    "SAI.wet",
+    "ALO.wet",
+    "STR.wet",
+    "LAW.wet",
+    "LIN.wet",
+    "GAS.wet",
+    "COL.wet",
+    "HUL.wet",
+    "BOR.wet",
+    "PER.wet",
+    "BOT.wet"
+  ],
+  "drivers": {
+    "NOR": {
+      "pace": 88,
+      "racecraft": 89,
+      "tyre": 88,
+      "consistency": 88,
+      "wet": 88,
+      "feedback": 86
+    },
+    "PIA": {
+      "pace": 86,
+      "racecraft": 89,
+      "tyre": 87,
+      "consistency": 88,
+      "wet": 84,
+      "feedback": 82
+    },
+    "RUS": {
+      "pace": 92,
+      "racecraft": 83,
+      "tyre": 87,
+      "consistency": 89,
+      "wet": 89,
+      "feedback": 87
+    },
+    "ANT": {
+      "pace": 89,
+      "racecraft": 83,
+      "tyre": 81,
+      "consistency": 81,
+      "wet": 84,
+      "feedback": 78
+    },
+    "VER": {
+      "pace": 98,
+      "racecraft": 92,
+      "tyre": 97,
+      "consistency": 93,
+      "wet": 96,
+      "feedback": 90
+    },
+    "HAD": {
+      "pace": 92,
+      "racecraft": 84,
+      "tyre": 84,
+      "consistency": 84,
+      "wet": 80,
+      "feedback": 76
+    },
+    "LEC": {
+      "pace": 91,
+      "racecraft": 87,
+      "tyre": 87,
+      "consistency": 86,
+      "wet": 87,
+      "feedback": 87
+    },
+    "HAM": {
+      "pace": 88,
+      "racecraft": 90,
+      "tyre": 90,
+      "consistency": 89,
+      "wet": 93,
+      "feedback": 94
+    },
+    "ALB": {
+      "pace": 85,
+      "racecraft": 85,
+      "tyre": 87,
+      "consistency": 85,
+      "wet": 85,
+      "feedback": 85
+    },
+    "SAI": {
+      "pace": 89,
+      "racecraft": 85,
+      "tyre": 88,
+      "consistency": 87,
+      "wet": 88,
+      "feedback": 90
+    },
+    "ALO": {
+      "pace": 90,
+      "racecraft": 92,
+      "tyre": 92,
+      "consistency": 91,
+      "wet": 93,
+      "feedback": 95
+    },
+    "STR": {
+      "pace": 80,
+      "racecraft": 82,
+      "tyre": 81,
+      "consistency": 81,
+      "wet": 80,
+      "feedback": 86
+    },
+    "LAW": {
+      "pace": 88,
+      "racecraft": 84,
+      "tyre": 82,
+      "consistency": 82,
+      "wet": 80,
+      "feedback": 80
+    },
+    "LIN": {
+      "pace": 85,
+      "racecraft": 82,
+      "tyre": 78,
+      "consistency": 78,
+      "wet": 77,
+      "feedback": 75
+    },
+    "OCO": {
+      "pace": 87,
+      "racecraft": 85,
+      "tyre": 86,
+      "consistency": 86,
+      "wet": 86,
+      "feedback": 87
+    },
+    "BEA": {
+      "pace": 91,
+      "racecraft": 85,
+      "tyre": 84,
+      "consistency": 83,
+      "wet": 81,
+      "feedback": 79
+    },
+    "GAS": {
+      "pace": 88,
+      "racecraft": 87,
+      "tyre": 87,
+      "consistency": 87,
+      "wet": 86,
+      "feedback": 87
+    },
+    "COL": {
+      "pace": 80,
+      "racecraft": 85,
+      "tyre": 80,
+      "consistency": 79,
+      "wet": 78,
+      "feedback": 78
+    },
+    "HUL": {
+      "pace": 85,
+      "racecraft": 86,
+      "tyre": 86,
+      "consistency": 82,
+      "wet": 85,
+      "feedback": 91
+    },
+    "BOR": {
+      "pace": 84,
+      "racecraft": 83,
+      "tyre": 81,
+      "consistency": 79,
+      "wet": 81,
+      "feedback": 76
+    },
+    "PER": {
+      "pace": 85,
+      "racecraft": 85,
+      "tyre": 89,
+      "consistency": 83,
+      "wet": 84,
+      "feedback": 90
+    },
+    "BOT": {
+      "pace": 81,
+      "racecraft": 81,
+      "tyre": 85,
+      "consistency": 84,
+      "wet": 84,
+      "feedback": 90
+    }
+  }
+}
