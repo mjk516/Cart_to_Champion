@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyOffseason, autoplayCareer, createCareer, DEFAULT_POLICY, getOffseason, MAX_TEAMS, MIN_TEAMS, replayCareer,
-  EVENTS, managerAdvice, MAJOR_FLOOR, OTHERS_CAP, feedTemplateCount, pendingEventCards, resolveEvent, F1_WINNER_TEAMS, f1Rules, generateHidden, initialWorld, NEW_TEAM_START, PERSONALITIES, runOffseason, TEAMS_2026, runSeason, STAT_KEYS, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, superLicencePoints, type CareerSetup,
+  CALENDAR_2026, f1WeekendFor, isF1RaceSeason, radioKey, type RadioOptionId, EVENTS, managerAdvice, MAJOR_FLOOR, OTHERS_CAP, feedTemplateCount, pendingEventCards, resolveEvent, F1_WINNER_TEAMS, f1Rules, generateHidden, initialWorld, NEW_TEAM_START, PERSONALITIES, runOffseason, TEAMS_2026, runSeason, STAT_KEYS, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, superLicencePoints, type CareerSetup,
 } from '../src/engine';
 
 const setup = (seed: number, extra: Partial<CareerSetup> = {}): CareerSetup => ({
@@ -269,6 +269,48 @@ describe('선수 매니저 조언(SPEC §7 v0.15)', () => {
       }
     }
     expect(checkedMajor).toBe(true);
+  });
+});
+
+describe('F1 라이브 주말(SPEC §5.3, §5.5)', () => {
+  it('화면에서 라운드별로 고른 무전을 넘기면 시즌 결과가 화면에서 본 레이스와 같고, 재생도 같다', () => {
+    // F1 레이스 시트를 얻을 때까지 진행
+    let c = createCareer(setup(41, { wealthTier: 5, personality: 'aggressive' }));
+    for (let y = 0; y < 30 && !isF1RaceSeason(c); y++) {
+      c = runSeason(c, DEFAULT_POLICY.training(c)).career;
+      for (const card of pendingEventCards(c)) c = resolveEvent(c, card.id, card.options[0]!.id).career;
+      c = applyOffseason(c, DEFAULT_POLICY.offseason(c, getOffseason(c)));
+    }
+    expect(isF1RaceSeason(c)).toBe(true);
+    const plan = DEFAULT_POLICY.training(c);
+    const radio: Record<string, RadioOptionId> = {};
+    const seen: Array<{ round: number; kind: string; order: string[] }> = [];
+    let decisions = 0;
+    for (let round = 0; round < CALENDAR_2026.length; round++) {
+      let wk = f1WeekendFor(c, plan, round, radio);
+      // 무전이 남아 있으면 추천이 아닌 선택지를 골라 다시 계산한다
+      for (let guard = 0; guard < 10; guard++) {
+        const pending = wk.sessions.find((x) => x.type === 'race' && x.outcome.status === 'pending');
+        if (!pending || pending.type !== 'race' || pending.outcome.status !== 'pending') break;
+        const d = pending.outcome.decision;
+        const pick = d.options.find((o) => !o.recommended) ?? d.options[0]!;
+        radio[radioKey(round, pending.kind, d.id)] = pick.id;
+        decisions++;
+        wk = f1WeekendFor(c, plan, round, radio);
+      }
+      for (const x of wk.sessions) if (x.type === 'race' && x.outcome.status === 'finished') seen.push({ round, kind: x.kind, order: x.outcome.classification.map((r) => r.id) });
+    }
+    expect(seen.length).toBeGreaterThanOrEqual(CALENDAR_2026.length);
+    const { career: after, record } = runSeason(c, plan, radio);
+    // 시즌 기록의 우승·포디움이 화면에서 본 결과와 같다
+    const wins = seen.filter((x) => x.kind === 'race' && x.order[0] === 'player').length;
+    const podiums = seen.filter((x) => x.kind === 'race' && x.order.slice(0, 3).includes('player')).length;
+    expect(record.wins).toBe(wins);
+    expect(record.podiums).toBe(podiums);
+    if (decisions > 0) expect(after.choiceLog[after.choiceLog.length - 1]).toMatchObject({ kind: 'training', radio });
+    // 기록 재생도 같은 결과
+    const replayed = replayCareer(after.setup, after.choiceLog);
+    expect(JSON.stringify(replayed.history)).toBe(JSON.stringify(after.history));
   });
 });
 
