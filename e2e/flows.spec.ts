@@ -106,7 +106,7 @@ test('F1 라이브 중 대시보드의 "남은 시즌 한 번에 진행"이 진�
   await page.getByRole('button', { name: /시즌 라이브로 시작/ }).click();
   await page.getByRole('button', { name: '다음 세션' }).click();
   await page.getByRole('button', { name: /카트에서 챔피언까지/ }).first().click(); // 홈
-  await page.getByRole('button', { name: /이어하기/ }).click();
+  await page.getByRole('button', { name: /이어하기/ }).first().click();
   await page.getByRole('button', { name: '남은 시즌 한 번에 진행' }).click();
   await expect(page.getByText(`${c.year} 시즌 결과`)).toBeVisible();
 });
