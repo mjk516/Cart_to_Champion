@@ -1,0 +1,181 @@
+import { describe, expect, it } from 'vitest';
+import {
+  applyOffseason, autoplayCareer, createCareer, DEFAULT_POLICY, getOffseason, MAX_TEAMS, MIN_TEAMS, replayCareer,
+  F1_WINNER_TEAMS, f1Rules, generateHidden, initialWorld, NEW_TEAM_START, PERSONALITIES, runOffseason, TEAMS_2026, runSeason, STAT_KEYS, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, superLicencePoints, type CareerSetup,
+} from '../src/engine';
+
+const setup = (seed: number, extra: Partial<CareerSetup> = {}): CareerSetup => ({
+  seed, name: '테스트', nationality: 'KR', wealthTier: 3, personality: 'fighter', candidateIndex: 0, focus: ['pace'], ...extra,
+});
+
+describe('커리어 생성', () => {
+  it('12세 카트 선수로 시작하고, 자산 규모만큼 자금을 받는다', () => {
+    const c = createCareer(setup(1, { wealthTier: 1 }));
+    expect(c.age).toBe(12);
+    expect(c.contract?.series).toBe('kart');
+    expect(c.funds).toBe(30_000);
+    expect(c.world.teams.teams).toHaveLength(11);
+    expect(c.world.drivers.filter((d) => d.teamId)).toHaveLength(22);
+  });
+});
+
+describe('시즌과 오프시즌', () => {
+  it('runSeason과 applyOffseason은 입력을 바꾸지 않는다', () => {
+    const c = createCareer(setup(2));
+    const snap = JSON.stringify(c);
+    const after = runSeason(c, DEFAULT_POLICY.training(c)).career;
+    expect(JSON.stringify(c)).toBe(snap);
+    const snap2 = JSON.stringify(after);
+    applyOffseason(after, DEFAULT_POLICY.offseason(after, getOffseason(after)));
+    expect(JSON.stringify(after)).toBe(snap2);
+  });
+
+  it('없는 제안이나 감당할 수 없는 제안은 거부한다', () => {
+    const c = runSeason(createCareer(setup(3)), ['rest', 'longrun']).career;
+    expect(() => applyOffseason(c, { offerId: 'nope' })).toThrow();
+    const pricey = getOffseason(c).offers.find((o) => !o.affordable);
+    if (pricey) expect(() => applyOffseason(c, { offerId: pricey.id })).toThrow();
+  });
+
+  it('시즌 기록에 성장이 훈련·경기·환경으로 나뉘어 남는다', () => {
+    const start = createCareer(setup(4));
+    const { record } = runSeason(start, DEFAULT_POLICY.training(start));
+    expect(record.ovrEnd).toBeGreaterThan(record.ovrStart);
+    expect(record.growth.training).toBeGreaterThan(0);
+    expect(record.growth.racing).toBeGreaterThan(0);
+  });
+});
+
+describe('자동 진행 커리어', () => {
+  const personalities = ['aggressive', 'calm', 'analytical', 'instinctive', 'fighter', 'showman'] as const;
+  const careers = Array.from({ length: 24 }, (_, i) =>
+    autoplayCareer(setup(100 + i, { wealthTier: ((i % 5) + 1) as 1 | 2 | 3 | 4 | 5, personality: personalities[i % 6]!, candidateIndex: i % 3 })),
+  );
+
+  it('모든 커리어가 은퇴로 끝나고, 해마다 나이가 1씩 늘어난다', () => {
+    for (const c of careers) {
+      expect(c.retired).toBe(true);
+      c.history.forEach((h, i) => {
+        expect(h.age).toBe(12 + i);
+        expect(h.year).toBe(2026 + i);
+      });
+    }
+  });
+
+  it('F1 레이스 데뷔는 슈퍼 라이선스 40점과 18세 이상일 때만', () => {
+    for (const c of careers) {
+      if (c.f1Debut === null) continue;
+      const debut = c.history.find((h) => h.year === c.f1Debut);
+      expect(debut?.series).toBe('f1');
+      expect(debut!.age).toBeGreaterThanOrEqual(SUPER_LICENCE_MIN_AGE);
+      const before = { ...c, history: c.history.filter((h) => h.year < c.f1Debut!) };
+      expect(superLicencePoints(before, c.f1Debut - 1)).toBeGreaterThanOrEqual(SUPER_LICENCE_REQUIRED);
+    }
+  });
+
+  it('F2·F3 챔피언은 다음 해 같은 시리즈에 나가지 않는다', () => {
+    for (const c of careers) {
+      c.history.forEach((h, i) => {
+        const next = c.history[i + 1];
+        if (h.champion && (h.series === 'f2' || h.series === 'f3') && next && next.seat === 'race') expect(next.series).not.toBe(h.series);
+      });
+    }
+  });
+
+  it('능력치는 20~99, 자금은 유한한 수, F1 팀 수는 10~12', () => {
+    for (const c of careers) {
+      for (const k of STAT_KEYS) {
+        expect(c.driver.stats[k]).toBeGreaterThanOrEqual(20);
+        expect(c.driver.stats[k]).toBeLessThanOrEqual(99);
+      }
+      for (const h of c.history) expect(Number.isFinite(h.fundsEnd)).toBe(true);
+      expect(c.world.teams.teams.length + c.world.teams.pending.length).toBeLessThanOrEqual(MAX_TEAMS);
+      expect(c.world.teams.teams.length).toBeGreaterThanOrEqual(MIN_TEAMS);
+    }
+  });
+
+  it('대부분 F1 드라이버가 된다(80% 이상), 자산 1단계도 포함', () => {
+    const f1 = careers.filter((c) => c.f1Debut !== null).length;
+    expect(f1 / careers.length).toBeGreaterThanOrEqual(0.8);
+    expect(careers.some((c) => c.driver.wealthTier === 1 && c.f1Debut !== null)).toBe(true);
+  });
+
+  it('F1 챔피언은 우승 가능 4팀에서 나온다(90% 이상)', () => {
+    const all = careers.flatMap((c) => c.world.champions);
+    const fromTop = all.filter((x) => (F1_WINNER_TEAMS as readonly string[]).includes(x.teamId)).length;
+    expect(fromTop / all.length).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it('나쁜 성격은 좋은 성격보다 방출이 잦다', () => {
+    const rel = (t: 'good' | 'bad') => {
+      const cs = careers.filter((c) => PERSONALITIES[c.driver.personality].temperament === t);
+      return cs.reduce((a, c) => a + c.totals.releases, 0) / Math.max(1, cs.length);
+    };
+    expect(rel('bad')).toBeGreaterThan(rel('good'));
+  });
+});
+
+describe('신생팀 규칙은 캐딜락만이 아니라 모든 진입 팀에 같다(SPEC §5.1 v0.12)', () => {
+  it('새로 진입한 팀은 캐딜락과 같은 조건으로 출발한다', () => {
+    const world = initialWorld(TEAMS_2026.filter((t) => t.id !== 'cadillac'), 2026);
+    world.pending.push({ name: 'Porsche', manufacturer: true, approvedSeason: 2025, debutSeason: 2027 });
+    const out = runOffseason(world, 2027, 1).world;
+    const porsche = out.teams.find((t) => t.name === 'Porsche')!;
+    const cadillac = TEAMS_2026.find((t) => t.id === 'cadillac')!;
+    expect(porsche.founded).toBe(2027);
+    expect(porsche.quality).toBe(NEW_TEAM_START.quality);
+    expect(porsche.quality).toBe(cadillac.quality);
+    expect(porsche.ops).toBe(cadillac.ops);
+  });
+
+  it('연차별 순위 제한: 1년 차 11위(무득점), 2~3년 차 4위(포디움 없음), 4년 차부터 제한 없음', () => {
+    const c = createCareer(setup(1));
+    c.world.teams.teams.push({ ...c.world.teams.teams[0]!, id: 'porsche_2030', name: 'Porsche', founded: 2030, standings: [] });
+    const capAt = (year: number) => { c.year = year; return f1Rules(c).bestPosition?.['porsche_2030']; };
+    expect(capAt(2030)).toBe(11);
+    expect(capAt(2031)).toBe(4);
+    expect(capAt(2032)).toBe(4);
+    expect(capAt(2033)).toBeUndefined();
+    // 캐딜락도 같은 규칙
+    c.year = 2026;
+    expect(f1Rules(c).bestPosition?.['cadillac']).toBe(11);
+    c.year = 2029;
+    expect(f1Rules(c).bestPosition?.['cadillac']).toBeUndefined();
+  });
+});
+
+describe('성격 기질과 잠재력(SPEC §3.4 v0.11)', () => {
+  it('나쁜 성격은 잠재력 상한이 높고 넓으며, 좋은 성격은 좁고 낮다', () => {
+    const pots = (p: 'aggressive' | 'calm') => Array.from({ length: 300 }, (_, i) => generateHidden(i, p).potential);
+    const bad = pots('aggressive');
+    const good = pots('calm');
+    expect(Math.max(...bad)).toBeGreaterThan(Math.max(...good) + 5);
+    expect(Math.max(...good)).toBeLessThanOrEqual(88);
+    const spread = (xs: number[]) => Math.max(...xs) - Math.min(...xs);
+    expect(spread(bad)).toBeGreaterThan(spread(good));
+  });
+});
+
+describe('결정성과 재생(랭킹 검증 SPEC §9)', () => {
+  it('같은 설정이면 같은 커리어', () => {
+    expect(JSON.stringify(autoplayCareer(setup(7)))).toBe(JSON.stringify(autoplayCareer(setup(7))));
+  });
+
+  it('선택 기록만으로 커리어를 다시 계산하면 기록이 바이트 단위로 같다', () => {
+    for (const seed of [8, 9, 10]) {
+      const c = autoplayCareer(setup(seed, { wealthTier: 4 }));
+      const replayed = replayCareer(c.setup, c.choiceLog);
+      expect(JSON.stringify(replayed.history)).toBe(JSON.stringify(c.history));
+      expect(JSON.stringify(replayed.totals)).toBe(JSON.stringify(c.totals));
+      expect(JSON.stringify(replayed.world)).toBe(JSON.stringify(c.world));
+    }
+  });
+
+  it('조작한 선택 기록은 재생 단계에서 걸린다', () => {
+    const c = autoplayCareer(setup(11));
+    const tampered = structuredClone(c.choiceLog);
+    const off = tampered.find((e) => e.kind === 'offseason');
+    if (off && off.kind === 'offseason') off.choice = { offerId: 'f1:mclaren' };
+    expect(() => replayCareer(c.setup, tampered)).toThrow();
+  });
+});

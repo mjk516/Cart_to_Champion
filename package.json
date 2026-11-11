@@ -1,0 +1,22 @@
+{
+  "name": "kart-to-champion",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "카트에서 챔피언까지 — 웹 레이싱 커리어 시뮬레이션 (엔진 M1)",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "race": "tsx src/cli.ts race",
+    "create": "tsx src/cli.ts create",
+    "teams": "tsx src/cli.ts teams",
+    "balance": "tsx scripts/balance.ts",
+    "career": "tsx src/cli.ts career"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
