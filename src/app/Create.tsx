@@ -1,0 +1,174 @@
+// 드라이버 생성(SPEC §3): 기본 정보 → 자산 규모 → 성격 → 후보 → 집중 육성 → 서명
+
+import { useMemo, useState } from 'react';
+import {
+  generateCandidates, ovr, PERSONALITIES, recommendedFocus, STAT_KEYS, WEALTH_TIERS,
+  type Personality, type StatKey, type WealthTier,
+} from '../engine';
+import { formatMoney, pct } from './format';
+import { SignaturePad } from './SignaturePad';
+import { randomSeed, useGame } from './store';
+import { Bar, Button, Card, Pill, STAT_LABELS, TEMPERAMENT_LABELS } from './ui';
+
+const NATIONS: Array<[string, string]> = [
+  ['KR', '대한민국'], ['JP', '일본'], ['GB', '영국'], ['IT', '이탈리아'], ['DE', '독일'], ['FR', '프랑스'],
+  ['ES', '스페인'], ['NL', '네덜란드'], ['US', '미국'], ['BR', '브라질'], ['AU', '호주'], ['MX', '멕시코'],
+];
+const STEPS = ['기본 정보', '자산 규모', '성격', '후보 선택', '서명'];
+
+export function Create() {
+  const { startCareer, showKrw, go } = useGame();
+  const [seed] = useState(randomSeed);
+  const [step, setStep] = useState(0);
+  const [name, setName] = useState('');
+  const [nationality, setNationality] = useState('KR');
+  const [wealth, setWealth] = useState<WealthTier>(3);
+  const [personality, setPersonality] = useState<Personality>('fighter');
+  const [reroll, setReroll] = useState(0);
+  const [candidate, setCandidate] = useState(0);
+  const [focus, setFocus] = useState<StatKey[]>(recommendedFocus('fighter'));
+  const candidates = useMemo(() => generateCandidates(seed, personality, reroll), [seed, personality, reroll]);
+
+  const choosePersonality = (p: Personality) => {
+    setPersonality(p);
+    setFocus(recommendedFocus(p));
+    setCandidate(0);
+  };
+  const canNext = step === 0 ? name.trim().length > 0 : true;
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-4 px-4 py-6">
+      <div className="flex items-center gap-2 overflow-x-auto text-xs">
+        {STEPS.map((s, i) => (
+          <span key={s} className={`whitespace-nowrap rounded-full px-3 py-1 font-bold ${i === step ? 'bg-racing text-white' : i < step ? 'bg-white/15 text-zinc-200' : 'bg-white/5 text-zinc-500'}`}>
+            {i + 1}. {s}
+          </span>
+        ))}
+      </div>
+
+      {step === 0 && (
+        <Card title="기본 정보">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="space-y-1">
+              <span className="text-xs text-zinc-400">이름</span>
+              <input
+                aria-label="이름" value={name} onChange={(e) => setName(e.target.value.slice(0, 16))} placeholder="예: 김민준"
+                className="w-full rounded-xl border border-white/15 bg-zinc-950 px-3 py-2.5 outline-none focus:border-racing"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs text-zinc-400">국적</span>
+              <select aria-label="국적" value={nationality} onChange={(e) => setNationality(e.target.value)} className="w-full rounded-xl border border-white/15 bg-zinc-950 px-3 py-2.5">
+                {NATIONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
+              </select>
+            </label>
+          </div>
+          <p className="mt-4 text-sm text-zinc-400">12세, 첫 카트 시즌부터 시작합니다.</p>
+        </Card>
+      )}
+
+      {step === 1 && (
+        <Card title="가정 자산 규모">
+          <p className="mb-3 text-sm text-zinc-400">능력치는 모두 같습니다. 돈은 시작하는 팀과 경로를 바꿉니다. 돈이 모자라면 매니지먼트가 시트 비용을 대신 내고 나중에 F1 연봉의 15%를 가져갑니다.</p>
+          <div className="grid gap-2 sm:grid-cols-5">
+            {([1, 2, 3, 4, 5] as WealthTier[]).map((t) => {
+              const w = WEALTH_TIERS[t];
+              return (
+                <button key={t} onClick={() => setWealth(t)} className={`rounded-xl border p-3 text-left transition ${wealth === t ? 'border-racing bg-racing/10' : 'border-white/10 hover:bg-white/5'}`}>
+                  <div className="text-xs text-zinc-400">{t}단계</div>
+                  <div className="text-lg font-black">{w.label}</div>
+                  <div className="mt-2 text-xs text-zinc-300">시작 자금<br /><b>{formatMoney(w.startFunds, showKrw)}</b></div>
+                  <div className="mt-1 text-xs text-zinc-300">가족 지원/년<br /><b>{formatMoney(w.familySupport, showKrw)}</b></div>
+                  {w.growthBonus > 0 && <div className="mt-2"><Pill tone="green">성장 +{pct(w.growthBonus)}</Pill></div>}
+                  {w.academyInterest < 0 && <div className="mt-2"><Pill tone="amber">아카데미 관심 {pct(w.academyInterest)}</Pill></div>}
+                </button>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {step === 2 && (
+        <Card title="성격">
+          <p className="mb-3 text-sm text-zinc-400">성격이 초기 능력치와 커리어를 정합니다. 꾸준한 성격은 성적이 고르지만 챔피언이 되기 어렵고, 한 방 있는 성격은 들쑥날쑥하지만 정상에 오를 수 있습니다. 대신 팀에서 방출될 수 있습니다.</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {(Object.keys(PERSONALITIES) as Personality[]).map((p) => {
+              const d = PERSONALITIES[p];
+              const t = TEMPERAMENT_LABELS[d.temperament]!;
+              return (
+                <button key={p} onClick={() => choosePersonality(p)} className={`rounded-xl border p-3 text-left transition ${personality === p ? 'border-racing bg-racing/10' : 'border-white/10 hover:bg-white/5'}`}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg font-black">{d.label}</span>
+                    <Pill tone={t.tone}>{t.label}</Pill>
+                    <span className="ml-auto text-xs text-zinc-400">방출 위험 {pct(d.releaseRisk)}/시즌</span>
+                  </div>
+                  <p className="mt-1 text-sm italic text-zinc-300">“{d.motto}”</p>
+                  <div className="mt-2 grid grid-cols-3 gap-x-3 gap-y-1 text-[11px] text-zinc-400">
+                    {STAT_KEYS.map((k) => (
+                      <span key={k} className={d.mods[k] > 0 ? 'text-emerald-300' : d.mods[k] < 0 ? 'text-red-300' : ''}>
+                        {STAT_LABELS[k]} {d.mods[k] > 0 ? '+' : ''}{d.mods[k]}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs text-zinc-500">{t.desc}</p>
+                </button>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {step === 3 && (
+        <Card title="후보 선택" right={<Button variant="ghost" onClick={() => { setReroll((r) => r + 1); setCandidate(0); }}>다른 후보 보기</Button>}>
+          <p className="mb-3 text-sm text-zinc-400">세 후보 모두 OVR 45, 능력치 합 270입니다. 구성만 다릅니다.</p>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {candidates.map((cnd, i) => (
+              <button key={i} onClick={() => setCandidate(i)} className={`rounded-xl border p-3 text-left ${candidate === i ? 'border-racing bg-racing/10' : 'border-white/10 hover:bg-white/5'}`}>
+                <div className="mb-2 flex items-baseline justify-between"><b>후보 {i + 1}</b><span className="text-xs text-zinc-400">OVR {Math.round(ovr(cnd.stats))}</span></div>
+                {STAT_KEYS.map((k) => (
+                  <div key={k} className="mb-1.5">
+                    <div className="flex justify-between text-[11px] text-zinc-400"><span>{STAT_LABELS[k]}</span><span>{cnd.stats[k]}</span></div>
+                    <Bar value={cnd.stats[k]} />
+                  </div>
+                ))}
+              </button>
+            ))}
+          </div>
+          <div className="mt-4">
+            <div className="mb-2 text-sm font-bold text-zinc-300">집중 육성(최대 2개, 성장 +20%)</div>
+            <div className="flex flex-wrap gap-2">
+              {STAT_KEYS.map((k) => {
+                const on = focus.includes(k);
+                return (
+                  <button key={k} onClick={() => setFocus((f) => (on ? f.filter((x) => x !== k) : f.length < 2 ? [...f, k] : [f[1]!, k]))}
+                    className={`rounded-full border px-3 py-1 text-xs font-bold ${on ? 'border-racing bg-racing/20 text-white' : 'border-white/15 text-zinc-300'}`}>
+                    {STAT_LABELS[k]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {step === 4 && (
+        <Card title="서명 등록">
+          <p className="mb-1 font-bold">프로 드라이버의 첫걸음. 앞으로 계약서에 쓸 서명을 남겨 주세요.</p>
+          <p className="mb-3 text-xs text-zinc-500">실제로 쓰는 서명은 그리지 마세요. 서명은 이 기기에만 저장됩니다.</p>
+          <SignaturePad
+            name={name.trim()}
+            doneLabel="커리어 시작"
+            onDone={(sig) =>
+              startCareer({ seed, name: name.trim(), nationality, wealthTier: wealth, personality, candidateIndex: candidate, reroll, focus }, sig)
+            }
+          />
+        </Card>
+      )}
+
+      <div className="flex justify-between">
+        <Button variant="ghost" onClick={() => (step === 0 ? go('home') : setStep(step - 1))}>{step === 0 ? '취소' : '이전'}</Button>
+        {step < 4 && <Button onClick={() => setStep(step + 1)} disabled={!canNext}>다음</Button>}
+      </div>
+    </div>
+  );
+}
