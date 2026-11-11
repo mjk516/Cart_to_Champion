@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyOffseason, autoplayCareer, createCareer, DEFAULT_POLICY, getOffseason, MAX_TEAMS, MIN_TEAMS, replayCareer,
-  EVENTS, feedTemplateCount, pendingEventCards, resolveEvent, F1_WINNER_TEAMS, f1Rules, generateHidden, initialWorld, NEW_TEAM_START, PERSONALITIES, runOffseason, TEAMS_2026, runSeason, STAT_KEYS, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, superLicencePoints, type CareerSetup,
+  EVENTS, MAJOR_FLOOR, OTHERS_CAP, feedTemplateCount, pendingEventCards, resolveEvent, F1_WINNER_TEAMS, f1Rules, generateHidden, initialWorld, NEW_TEAM_START, PERSONALITIES, runOffseason, TEAMS_2026, runSeason, STAT_KEYS, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, superLicencePoints, type CareerSetup,
 } from '../src/engine';
 
 const setup = (seed: number, extra: Partial<CareerSetup> = {}): CareerSetup => ({
@@ -105,6 +105,22 @@ describe('자동 진행 커리어', () => {
     const all = careers.flatMap((c) => c.world.champions);
     const fromTop = all.filter((x) => (F1_WINNER_TEAMS as readonly string[]).includes(x.teamId)).length;
     expect(fromTop / all.length).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it('메이저 4팀 레이스 시트 시즌은 대부분 챔피언십 8위 안(85% 이상)', () => {
+    const names = ['McLaren', 'Ferrari', 'Mercedes', 'Red Bull Racing'];
+    const seasons = careers.flatMap((c) => c.history.filter((h) => h.series === 'f1' && h.seat === 'race' && names.includes(h.team ?? '')));
+    expect(seasons.length).toBeGreaterThanOrEqual(15);
+    expect(seasons.filter((h) => (h.position ?? 99) <= 8).length / seasons.length).toBeGreaterThanOrEqual(0.85);
+  });
+
+  it('은퇴 시점 세계: 메이저 4팀은 차 성능 하한 이상, 나머지는 상한 이하', () => {
+    for (const c of careers) {
+      for (const t of c.world.teams.teams) {
+        if ((F1_WINNER_TEAMS as readonly string[]).includes(t.id)) expect(t.quality).toBeGreaterThanOrEqual(MAJOR_FLOOR);
+        else expect(t.quality).toBeLessThanOrEqual(OTHERS_CAP + 1e-9);
+      }
+    }
   });
 
   it('나쁜 성격은 좋은 성격보다 방출이 잦다', () => {

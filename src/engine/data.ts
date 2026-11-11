@@ -38,7 +38,7 @@ export const TEAMS_2026: Team[] = [
   { id: 'mclaren', name: 'McLaren', color: '#FF8000', quality: 0.93, reliability: 0.93, ops: 0.92, budget: 0.95, manufacturer: false },
   { id: 'mercedes', name: 'Mercedes', color: '#27F4D2', quality: 0.925, reliability: 0.92, ops: 0.9, budget: 0.95, manufacturer: true },
   { id: 'red_bull', name: 'Red Bull Racing', color: '#3671C6', quality: 0.919, reliability: 0.88, ops: 0.94, budget: 0.95, manufacturer: false },
-  { id: 'ferrari', name: 'Ferrari', color: '#E8002D', quality: 0.913, reliability: 0.9, ops: 0.85, budget: 0.95, manufacturer: true },
+  { id: 'ferrari', name: 'Ferrari', color: '#E8002D', quality: 0.915, reliability: 0.9, ops: 0.85, budget: 0.95, manufacturer: true },
   { id: 'williams', name: 'Williams', color: '#64C4FF', quality: 0.884, reliability: 0.88, ops: 0.84, budget: 0.75, manufacturer: false },
   { id: 'aston_martin', name: 'Aston Martin', color: '#229971', quality: 0.879, reliability: 0.85, ops: 0.85, budget: 0.9, manufacturer: false },
   { id: 'racing_bulls', name: 'Racing Bulls', color: '#6692FF', quality: 0.879, reliability: 0.87, ops: 0.86, budget: 0.7, manufacturer: false },

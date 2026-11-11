@@ -467,6 +467,9 @@ function f1Cars(c: Career, stats: Stats): RaceCar[] {
 
 /** F1 결과 규칙: 우승은 4팀만, 신생팀은 데뷔 1년 차 포인트 없음·2~3년 차 포디움 없음 */
 export const F1_UPSET_CHANCE = 0.7;
+/** 메이저 4팀 차 성능 하한과 나머지 팀 상한(SPEC §5.1 v0.13) */
+export const MAJOR_FLOOR = 0.915;
+export const OTHERS_CAP = 0.885;
 
 export function f1Rules(c: Career): ResultRules {
   const bestPosition: Record<string, number> = {};
@@ -1012,7 +1015,8 @@ function ageWorldDrivers(c: Career, r: Rng, nextYear: number): void {
     const catchUp = teamAge >= 1 && teamAge <= 2 ? 0.004 : 0;
     // 우승 가능 4팀은 늘 선두권(0.90 이상), 나머지는 0.915 이하: 포디움은 가능하지만 시즌 챔피언 경쟁은 4팀 몫
     const top = (F1_WINNER_TEAMS as readonly string[]).includes(t.id);
-    t.quality = top ? clamp(q, 0.9, 0.95) : clamp(q + catchUp, 0.83, 0.915);
+    // 메이저 4팀(0.915 이상)과 나머지(0.885 이하)가 겹치지 않게: 메이저 팀 레이스 시트면 챔피언십 8위 안이 거의 보장된다
+    t.quality = top ? clamp(q, MAJOR_FLOOR, 0.95) : clamp(q + catchUp, 0.83, OTHERS_CAP);
   }
 }
 
