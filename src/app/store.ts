@@ -29,7 +29,10 @@ export interface SignedContract {
   firstF1: boolean;
 }
 
-export type Screen = 'home' | 'create' | 'dashboard' | 'offseason' | 'retired' | 'settings' | 'weekend';
+export type Screen = 'home' | 'create' | 'dashboard' | 'offseason' | 'retired' | 'settings' | 'weekend' | 'records';
+
+/** 기자회견 자동 응답(SPEC §6.1): null이면 매번 직접 고른다 */
+export type InterviewAuto = null | 'humble' | 'confident' | 'bold';
 
 /** F1 라이브 시즌 진행 상태(SPEC §5.3). 세션 중간에 닫아도 이어진다 */
 export interface LiveSeason {
@@ -54,6 +57,8 @@ interface State {
   lastRecord: SeasonRecord | null;
   showKrw: boolean;
   live: LiveSeason | null;
+  interviewAuto: InterviewAuto;
+  setInterviewAuto: (v: InterviewAuto) => void;
   go: (s: Screen) => void;
   startLive: (plan: TrainingId[]) => void;
   updateLive: (patch: Partial<LiveSeason>) => void;
@@ -71,6 +76,8 @@ interface State {
   setSignature: (s: Signature) => void;
   setShowKrw: (v: boolean) => void;
   reset: () => void;
+  /** 저장 파일을 확인만 한다(가져오기 전 미리 보기). 잘못된 파일이면 이유를 돌려준다 */
+  peekSave: (json: string) => { ok: true; name: string; year: number; retired: boolean } | { ok: false; reason: string };
   importSave: (json: string) => boolean;
   exportSave: () => string;
 }
@@ -93,7 +100,24 @@ const initial = {
   lastRecord: null,
   showKrw: true,
   live: null as LiveSeason | null,
+  interviewAuto: null as InterviewAuto,
 };
+
+/** 기자회견 자동 응답이 켜져 있으면 이번 오프시즌 기자회견을 그 톤으로 처리한다 */
+function autoInterview(c: Career, tone: InterviewAuto): Career {
+  if (!tone) return c;
+  let out = c;
+  for (const id of c.pendingEvents ?? []) if (id.startsWith('iv_')) out = resolveEvent(out, id, tone).career;
+  return out;
+}
+
+function validSave(d: any): string | null {
+  if (d?.app !== 'kart-to-champion') return '이 게임의 저장 파일이 아닙니다.';
+  const c = d.career;
+  if (!c?.schemaVersion || !c.driver?.name || !Array.isArray(c.history) || !c.world?.teams || typeof c.year !== 'number') return '저장 파일이 손상됐거나 형식이 맞지 않습니다.';
+  if ((d.saveVersion ?? 1) > SAVE_VERSION) return '더 새로운 버전에서 만든 저장 파일입니다.';
+  return null;
+}
 
 export const useGame = create<State>()(
   persist(
@@ -114,7 +138,7 @@ export const useGame = create<State>()(
         const l = get().live;
         if (!c || !l) return;
         const { career, record } = runSeason(c, l.plan, l.radio);
-        set({ career, lastRecord: record, live: null, screen: 'offseason' });
+        set({ career: autoInterview(career, get().interviewAuto), lastRecord: record, live: null, screen: 'offseason' });
       },
       startCareer: (setup, signature) =>
         set({ career: createCareer(setup), signature, firstF1Signature: null, contracts: [], lastRecord: null, screen: 'dashboard' }),
@@ -122,7 +146,7 @@ export const useGame = create<State>()(
         const c = get().career;
         if (!c) return;
         const { career, record } = runSeason(c, plan);
-        set({ career, lastRecord: record, screen: 'offseason' });
+        set({ career: autoInterview(career, get().interviewAuto), lastRecord: record, screen: 'offseason' });
       },
       acceptOffer: (offer, joinAcademy, signature) => {
         const c = get().career;
@@ -158,19 +182,33 @@ export const useGame = create<State>()(
       },
       setSignature: (signature) => set({ signature }),
       setShowKrw: (showKrw) => set({ showKrw }),
-      reset: () => set({ ...initial }),
+      setInterviewAuto: (interviewAuto) => set({ interviewAuto }),
+      // 새 커리어: 표시·자동 응답 설정은 남긴다
+      reset: () => set({ ...initial, showKrw: get().showKrw, interviewAuto: get().interviewAuto }),
       exportSave: () => {
-        const { career, signature, firstF1Signature, contracts, showKrw } = get();
-        return JSON.stringify({ app: 'kart-to-champion', saveVersion: SAVE_VERSION, career, signature, firstF1Signature, contracts, showKrw });
+        const { career, signature, firstF1Signature, contracts, showKrw, live, lastRecord, interviewAuto } = get();
+        return JSON.stringify({ app: 'kart-to-champion', saveVersion: SAVE_VERSION, exportedAt: new Date().toISOString(), career, signature, firstF1Signature, contracts, showKrw, live, lastRecord, interviewAuto });
+      },
+      peekSave: (json) => {
+        try {
+          const d = JSON.parse(json);
+          const bad = validSave(d);
+          if (bad) return { ok: false, reason: bad };
+          return { ok: true, name: d.career.driver.name, year: d.career.year, retired: !!d.career.retired };
+        } catch {
+          return { ok: false, reason: 'JSON 파일을 읽을 수 없습니다.' };
+        }
       },
       importSave: (json) => {
         try {
           const d = JSON.parse(json);
-          if (d?.app !== 'kart-to-champion' || !d.career?.schemaVersion) return false;
+          if (validSave(d)) return false;
+          const live: LiveSeason | null = d.live && d.live.year === d.career.year ? d.live : null;
           set({
             career: d.career, signature: d.signature ?? null, firstF1Signature: d.firstF1Signature ?? null,
-            contracts: d.contracts ?? [], showKrw: d.showKrw ?? true, lastRecord: null,
-            screen: d.career.retired ? 'retired' : 'dashboard',
+            contracts: d.contracts ?? [], showKrw: d.showKrw ?? true, lastRecord: d.lastRecord ?? null, live,
+            interviewAuto: d.interviewAuto ?? get().interviewAuto,
+            screen: d.career.retired ? 'retired' : live ? 'weekend' : 'dashboard',
           });
           return true;
         } catch {
@@ -185,6 +223,7 @@ export const useGame = create<State>()(
       partialize: (s) => ({
         screen: s.screen === 'create' ? 'home' : s.screen, career: s.career, signature: s.signature,
         firstF1Signature: s.firstF1Signature, contracts: s.contracts, lastRecord: s.lastRecord, showKrw: s.showKrw, live: s.live,
+        interviewAuto: s.interviewAuto,
       }),
     },
   ),

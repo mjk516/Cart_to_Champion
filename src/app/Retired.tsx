@@ -324,7 +324,7 @@ export function Retired() {
         )}
       </Card>
 
-      <div className="flex justify-center"><Button onClick={() => { reset(); go('create'); }}>새 커리어 시작</Button></div>
+      <div className="flex justify-center gap-2"><Button variant="ghost" onClick={() => go('records')}>업적·기록</Button><Button onClick={() => { reset(); go('create'); }}>새 커리어 시작</Button></div>
     </div>
   );
 }

@@ -114,6 +114,8 @@ export interface SeasonRecord {
   statsEnd?: Stats;
   /** 언론·팬 반응(SPEC §6.1) */
   feed?: FeedItem[];
+  /** F1 홈 그랑프리 우승 수(업적용). 이전 저장 파일에는 없을 수 있다 */
+  homeWins?: number;
 }
 
 export interface F1Driver {
@@ -343,11 +345,13 @@ interface SeasonSim {
   teammateBeat: number;
   raceXp: Partial<Stats>;
   prize: number;
+  /** 홈 그랑프리(F1 레이스) 우승 수 */
+  homeWins: number;
 }
 
 const emptySim = (fieldSize: number): SeasonSim => ({
   races: 0, wins: 0, podiums: 0, poles: 0, points: 0, position: null, fieldSize, champion: false,
-  expectedAvg: 0, actualAvg: 0, teammateBeat: 0, raceXp: {}, prize: 0,
+  expectedAvg: 0, actualAvg: 0, teammateBeat: 0, raceXp: {}, prize: 0, homeWins: 0,
 });
 
 function perfOf(stats: Stats, teamQ: number, w: number): number {
@@ -632,7 +636,7 @@ function simulateF1(c: Career, stats: Stats, seed: number, radio: Record<string,
         if (me.status === 'finished') {
           finishSum += me.position;
           finished++;
-          if (me.position === 1) sim.wins++;
+          if (me.position === 1) { sim.wins++; if (circuit.country === c.driver.nationality) sim.homeWins++; }
           if (me.position <= 3) sim.podiums++;
         }
         const mate = mateId ? out.classification.find((x) => x.id === mateId) : undefined;
@@ -841,7 +845,7 @@ export function runSeason(input: Career, plan: TrainingId[], radio: Record<strin
   if (Object.keys(aging).length) notes.push('나이가 들며 반응 속도가 떨어지기 시작했다');
 
   const record: SeasonRecord = {
-    year: c.year, age: c.age, series, team: contract?.team ?? null, seat, races: sim.races, wins: sim.wins,
+    year: c.year, age: c.age, series, team: contract?.team ?? null, seat, races: sim.races, wins: sim.wins, homeWins: sim.homeWins,
     podiums: sim.podiums, poles: sim.poles, points: sim.points, position: sim.position, fieldSize: sim.fieldSize,
     champion: sim.champion, ovrStart: Math.round(ovrStart * 10) / 10, ovrEnd: Math.round(ovr(c.driver.stats) * 10) / 10,
     growth: {
@@ -1161,6 +1165,9 @@ export function applyOffseason(input: Career, choice: OffseasonChoice): Career {
   if (choice.joinAcademy && off.academyOffer) c.academy = off.academyOffer;
   if (off.released) {
     c.totals.releases += 1;
+    // 업적(다시 일어서다)과 커리어 기록용으로 그 시즌 기록에 남긴다
+    const lastRec = c.history[c.history.length - 1];
+    if (lastRec) lastRec.notes = [...lastRec.notes, '시즌 뒤 팀에서 방출'];
     c.media.pressure = Math.min(100, c.media.pressure + 15);
     c.media.reputation = Math.max(0, c.media.reputation - 5);
   }

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import {
-  EVENT_CATEGORY_LABEL, LADDER, MANAGER_STYLE_LABEL, managerAdvice, pendingEventCards, seriesLabel, VERDICT_LABEL,
+  EVENT_CATEGORY_LABEL, LADDER, MANAGER_STYLE_LABEL, managerAdvice, newAchievements, pendingEventCards, seriesLabel, VERDICT_LABEL,
   type ManagerAdvice, type Offer, type OfferAdvice, type SeasonRecord,
 } from '../engine';
 import { FeedList } from './FeedList';
@@ -25,11 +25,18 @@ function effectTone(s: string): 'green' | 'amber' | 'zinc' {
 }
 
 function SeasonSummary({ r }: { r: SeasonRecord }) {
-  const { showKrw } = useGame();
+  const { showKrw, career, go } = useGame();
   const g = r.growth;
+  const unlocked = career ? newAchievements(career, r.year) : [];
   return (
     <Card title={`${r.year} 시즌 결과 · ${seriesLabel(r.series)}`}>
       <p className="mb-3 text-base font-bold">{r.headline}</p>
+      {unlocked.length > 0 && (
+        <button onClick={() => go('records')} className="mb-3 flex w-full flex-wrap items-center gap-1 rounded-xl border border-amber-400/40 bg-amber-400/5 p-2 text-left text-sm">
+          <span className="font-bold text-amber-300">새 업적</span>
+          {unlocked.map((a) => <Pill key={a.id} tone="amber">🏅 {a.title}</Pill>)}
+        </button>
+      )}
       <div className="grid grid-cols-3 gap-2 text-center sm:grid-cols-6">
         {[
           ['종합', r.position ? `${r.champion ? '🏆 ' : ''}P${r.position}` : '—'],
