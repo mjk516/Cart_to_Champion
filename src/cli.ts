@@ -37,6 +37,7 @@ function describe(inc: Incident): string | null {
     case 'rain_stop': return `L${inc.lap} · 비 그침`;
     case 'radio': return `L${inc.lap} · 📻 무전 ${inc.decisionId} → ${inc.choice}`;
     case 'pit': return null;
+    case 'neutral_update': return `L${inc.lap} · ${inc.phase.toUpperCase()} ${inc.delta > 0 ? `${inc.delta}랩 연장` : '예상보다 빨리 정리'}`;
   }
 }
 

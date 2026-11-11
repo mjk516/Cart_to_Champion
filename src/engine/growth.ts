@@ -64,17 +64,19 @@ export interface TrainingProgram {
   cost: number;
   fatigue: number;
   pressureRelief?: number;
+  /** 화면 설명: 어떤 훈련이고 어디에 좋은가 */
+  desc: string;
 }
 
 export const TRAINING: Record<TrainingId, TrainingProgram> = {
-  sim: { id: 'sim', label: '시뮬레이터 세션', xp: { pace: 70, feedback: 50 }, cost: 20_000, fatigue: 1 },
-  longrun: { id: 'longrun', label: '레이스 시뮬레이션(롱런)', xp: { tyre: 60, consistency: 50 }, cost: 0, fatigue: 1 },
-  physical: { id: 'physical', label: '피지컬 트레이닝', xp: { consistency: 70 }, cost: 10_000, fatigue: 1.5 },
-  wet: { id: 'wet', label: '우천 테스트', xp: { wet: 110 }, cost: 40_000, fatigue: 1 },
-  kart: { id: 'kart', label: '카트 복귀 훈련', xp: { racecraft: 100 }, cost: 15_000, fatigue: 1 },
-  data: { id: 'data', label: '엔지니어 데이터 분석', xp: { feedback: 100 }, cost: 0, fatigue: 0.5 },
-  mental: { id: 'mental', label: '멘탈 코칭', xp: {}, cost: 30_000, fatigue: 0, pressureRelief: 15 },
-  rest: { id: 'rest', label: '휴식', xp: {}, cost: 0, fatigue: -3 },
+  sim: { id: 'sim', label: '시뮬레이터 세션', xp: { pace: 70, feedback: 50 }, cost: 20_000, fatigue: 1, desc: '가상 주행으로 한계 속도를 다듬는다. 피드백도 함께 는다' },
+  longrun: { id: 'longrun', label: '레이스 시뮬레이션(롱런)', xp: { tyre: 60, consistency: 50 }, cost: 0, fatigue: 1, desc: '레이스 거리를 그대로 달려 타이어를 아끼는 법과 꾸준함을 익힌다' },
+  physical: { id: 'physical', label: '피지컬 트레이닝', xp: { consistency: 70 }, cost: 10_000, fatigue: 1.5, desc: '체력이 받쳐 줘야 끝까지 실수 없이 달린다' },
+  wet: { id: 'wet', label: '우천 테스트', xp: { wet: 110 }, cost: 40_000, fatigue: 1, desc: '젖은 트랙만 골라 달린다. 비 오는 레이스에서 차이가 난다' },
+  kart: { id: 'kart', label: '카트 복귀 훈련', xp: { racecraft: 100 }, cost: 15_000, fatigue: 1, desc: '바퀴를 맞대는 카트로 돌아가 추월·방어 감각을 되살린다' },
+  data: { id: 'data', label: '엔지니어 데이터 분석', xp: { feedback: 100 }, cost: 0, fatigue: 0.5, desc: '엔지니어와 데이터를 보며 차 세팅을 말로 설명하는 힘을 기른다' },
+  mental: { id: 'mental', label: '멘탈 코칭', xp: {}, cost: 30_000, fatigue: 0, pressureRelief: 15, desc: '능력치는 오르지 않지만 언론 압박을 크게 줄인다' },
+  rest: { id: 'rest', label: '휴식', xp: {}, cost: 0, fatigue: -3, desc: '능력치는 오르지 않지만 컨디션을 되찾고 부상 위험을 낮춘다' },
 };
 
 export const TRAINING_SLOTS = 6;

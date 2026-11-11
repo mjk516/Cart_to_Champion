@@ -24,7 +24,7 @@ export function Settings() {
       <Card title="기자회견 자동 응답">
         <p className="mb-2 text-xs text-zinc-400">켜 두면 시즌 결산 기자회견을 고른 톤으로 바로 처리하고 결과만 보여 줍니다. 다른 전환점 이벤트는 그대로 직접 고릅니다.</p>
         <div className="flex flex-wrap gap-2">
-          {([[null, '직접 고르기'], ['humble', '항상 겸손'], ['confident', '항상 자신감'], ['bold', '항상 도발']] as const).map(([v, label]) => (
+          {([[null, '직접 고르기'], ['humble', '항상 겸손'], ['confident', '항상 자신감'], ['bold', '항상 도발'], ['joke', '항상 농담']] as const).map(([v, label]) => (
             <button key={label} onClick={() => setInterviewAuto(v)} className={`rounded-full px-3 py-1.5 text-sm font-bold ${interviewAuto === v ? 'bg-racing text-white' : 'bg-white/5 text-zinc-300 hover:bg-white/10'}`}>{label}</button>
           ))}
         </div>

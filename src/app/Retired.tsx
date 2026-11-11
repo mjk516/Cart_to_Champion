@@ -235,7 +235,7 @@ function SeasonTable({ c }: { c: Career }) {
                   <tr onClick={() => setOpen(isOpen ? null : h.year)} className="cursor-pointer border-t border-white/5 text-center hover:bg-white/5" aria-expanded={isOpen}>
                     <td className="py-1.5 text-left">{h.year}</td><td className="text-left">{h.age}</td>
                     <td className="text-left">{seriesLabel(h.series)}</td>
-                    <td className="max-w-[11rem] truncate text-left">{h.team ?? '—'}{h.seat !== 'race' && <span className="text-zinc-500"> ({SEAT_LABELS[h.seat]})</span>}</td>
+                    <td className="max-w-[11rem] truncate text-left">{h.military ? '🎖 군 복무' : h.team ?? '—'}{h.seat !== 'race' && !h.military && <span className="text-zinc-500"> ({SEAT_LABELS[h.seat]})</span>}</td>
                     <td>{h.position ? `${h.champion ? '🏆 ' : ''}P${h.position}` : '—'}</td>
                     <td>{h.races}</td><td>{h.wins}</td><td>{h.podiums}</td><td>{h.poles}</td><td>{h.points}</td>
                     <td>{h.ovrEnd.toFixed(1)} <span className={delta >= 0 ? 'text-emerald-300' : 'text-red-300'}>{delta >= 0 ? '+' : ''}{delta.toFixed(1)}</span></td>

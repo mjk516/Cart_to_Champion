@@ -4,8 +4,9 @@ import { useMemo, useState } from 'react';
 import {
   EVENT_CATEGORY_LABEL, LADDER, MANAGER_STYLE_LABEL, managerAdvice, newAchievements, pendingEventCards, seriesLabel, VERDICT_LABEL,
   type ManagerAdvice, type Offer, type OfferAdvice, type SeasonRecord,
+  draftedNext, seasonChatter,
 } from '../engine';
-import { FeedList } from './FeedList';
+import { FeedList, RollingComments } from './FeedList';
 import { formatMoney } from './format';
 import { SignaturePad } from './SignaturePad';
 import { SignatureView } from './SignatureView';
@@ -63,7 +64,7 @@ function SeasonSummary({ r }: { r: SeasonRecord }) {
         수입 {formatMoney(r.income, showKrw)} · 지출 {formatMoney(r.expenses, showKrw)} · 슈퍼 라이선스 +{r.superLicence}
       </div>
       {r.notes.length > 0 && <ul className="mt-2 list-disc pl-5 text-sm text-zinc-400">{r.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>}
-      {r.feed && r.feed.length > 0 && <div className="mt-4"><FeedList items={r.feed} /></div>}
+      {r.feed && r.feed.length > 0 && <div className="mt-4"><FeedList items={r.feed} />{career && <RollingComments comments={seasonChatter(career, r)} />}</div>}
     </Card>
   );
 }
@@ -287,7 +288,7 @@ export function Offseason() {
           ))}
         </div>
         <div className="mt-4 flex flex-wrap justify-between gap-2">
-          <Button variant="ghost" onClick={() => skipSeat(joinAcademy)}>시트 없이 1년 보내기</Button>
+          <Button variant="ghost" onClick={() => skipSeat(joinAcademy)}>{draftedNext(c) ? '입대하기' : c.military && c.year < c.military.end ? '복무 이어 가기' : '시트 없이 1년 보내기'}</Button>
           <Button variant="danger" onClick={() => confirmBox.ask(<>은퇴를 선언할까요? <b>되돌릴 수 없습니다.</b> 지금까지의 커리어가 은퇴 화면에 기록됩니다.</>, retire, { confirmLabel: '은퇴 선언', danger: true })}>은퇴 선언</Button>
         </div>
       </Card>

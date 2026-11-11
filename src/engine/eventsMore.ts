@@ -1,5 +1,5 @@
-// M3 이벤트 확장(SPEC §6 v0.20): 시즌 뒤 기자회견 12개 + 일반 이벤트 28개.
-// 기자회견은 질문 1개에 답변 톤 3개(겸손·자신감·도발). 결과 확률은 기질(tempMul)에 따라 달라진다.
+// M3 이벤트 확장(SPEC §6 v0.20, v0.30): 시즌 뒤 기자회견 20개 + 일반 이벤트 28개.
+// 기자회견은 질문 1개에 답변 톤 4개(겸손·자신감·도발·농담). 결과 확률은 기질(tempMul)에 따라 달라진다.
 // 실존 인물의 말을 지어내거나 실존 인물·팀을 깎아내리는 내용은 넣지 않는다(SPEC §11).
 
 import type { EventCtx, EventDef, EventOption } from './events';
@@ -12,10 +12,13 @@ function tones(t: {
   humble: [string, string];
   confident: [string, string];
   bold: [string, string];
+  /** 농담으로 넘기기. 없으면 공통 문구 */
+  joke?: [string, string];
   /** 자신감 답변이 역풍을 맞기 쉬운 상황(성적 부진 등) */
   riskyConfidence?: boolean;
 }): EventOption[] {
   const rc = t.riskyConfidence ? 0.55 : 0.25;
+  const joke = t.joke ?? ['농담 한마디에 회견장이 웃음바다가 됐다. 짧은 클립이 하루 종일 돌았다.', '농담이 전혀 먹히지 않았다. 어색한 침묵이 그대로 영상에 남았다.'];
   return [
     { id: 'humble', label: '겸손하게 답한다', hint: '팬 여론 +, 압박 −', outcomes: [
       { p: 0.8, text: t.humble[0], effect: { sentiment: 6, pressure: -6, reputation: 1 } },
@@ -28,6 +31,10 @@ function tones(t: {
     { id: 'bold', label: '도발적으로 답한다', hint: '팬 수 크게 +, 여론 갈림, 팀 내 입지 −', outcomes: [
       { p: 0.5, text: t.bold[0], effect: { followersMul: 1.15, sentiment: 6, reputation: 2, flags: { releaseRisk: 0.02 } }, tempMul: { bad: 1.4, good: 0.7 } },
       { p: 0.5, text: t.bold[1], effect: { followersMul: 1.08, sentiment: -10, reputation: -4, pressure: 6, flags: { releaseRisk: 0.05 } }, tempMul: { bad: 0.8, good: 1.3 } },
+    ] },
+    { id: 'joke', label: '농담으로 넘긴다', hint: '잘 먹히면 팬 여론·팔로워 +, 아니면 평판 −', outcomes: [
+      { p: 0.55, text: joke[0], effect: { sentiment: 5, followersMul: 1.06, pressure: -4 }, tempMul: { good: 1.2, bad: 0.9 } },
+      { p: 0.45, text: joke[1], effect: { reputation: -3, sentiment: -2, pressure: 2 } },
     ] },
   ];
 }
@@ -153,6 +160,94 @@ export const INTERVIEWS: EventDef[] = [
       humble: ['"팀과 충분히 이야기했습니다." 불씨가 꺼졌다.', '그래도 불화설이 완전히 가라앉지는 않았다.'],
       confident: ['"제 판단이 맞았다고 봅니다." 데이터가 뒷받침해 줬다.', '팀 수뇌부가 불편해했다.'],
       bold: ['"다음엔 제 뜻대로 하겠습니다." 팬들은 박수를 쳤다.', '팀 오더를 무시하겠다는 선언으로 받아들여졌다.'],
+    }),
+  },  {
+    id: 'iv_dnf', category: 'interview', title: '리타이어 질문',
+    text: '"올 시즌 리타이어가 잦았습니다. 차 문제인가요, 운전 문제인가요?"',
+    when: (x) => x.seat === 'race' && x.perf <= -0.5, weight: () => 2,
+    options: tones({
+      humble: ['"둘 다 제가 더 잘했어야 합니다." 팀 정비사들이 고마워했다.', '"결국 본인 실수라는 거냐"는 제목이 붙었다.'],
+      confident: ['"끝까지 달린 레이스만 보세요." 완주 레이스 기록이 재조명됐다.', '리타이어 영상이 다시 돌면서 말이 무색해졌다.'],
+      bold: ['"차가 버텨 주면 제가 끝까지 갑니다." 팬들은 고개를 끄덕였다.', '정비팀을 겨냥한 말로 들려 차고 분위기가 무거워졌다.'],
+      joke: ['"올해는 집에 일찍 가는 게 취미였나 봐요." 자조 섞인 농담에 다들 웃었다.', '자기 리타이어를 농담으로 넘기자 "진지함이 없다"는 비판이 나왔다.'],
+      riskyConfidence: true,
+    }),
+  },
+  {
+    id: 'iv_rain', category: 'interview', title: '빗속의 레이스',
+    text: '"비가 오면 유독 강해 보입니다. 비법이 있나요?"',
+    when: (x) => x.seat === 'race' && x.pct >= 0.5, weight: () => 1,
+    options: tones({
+      humble: ['"카트 시절부터 비를 좋아했어요." 소박한 답이 호감을 샀다.', '비법을 숨긴다는 농담 섞인 기사가 나왔다.'],
+      confident: ['"빗속에선 제가 제일 빠릅니다." 레인 마스터라는 별명이 붙었다.', '다음 우천 레이스에서 증명하라는 압박이 생겼다.'],
+      bold: ['"매 레이스 비가 왔으면 좋겠네요." 팬들이 기우제 밈을 만들었다.', '다른 드라이버들이 "두고 보자"고 받아쳤다.'],
+      joke: ['"우산을 안 들고 다녀서요." 회견장이 웃음으로 가득 찼다.', '아무도 웃지 않았다. 기자가 다음 질문으로 넘어갔다.'],
+    }),
+  },
+  {
+    id: 'iv_social', category: 'interview', title: 'SNS 논란 질문',
+    text: '"SNS에 올린 영상이 화제가 됐습니다. 레이스에 집중하고 있는 건가요?"',
+    when: (x) => x.followers >= 200_000, weight: () => 1.5,
+    options: tones({
+      humble: ['"앞으로는 트랙에 더 집중하겠습니다." 논란이 금방 잦아들었다.', '사과처럼 들려 오히려 영상이 더 퍼졌다.'],
+      confident: ['"트랙에서도, 밖에서도 제 모습입니다." 팬들이 지지했다.', '"성적부터 내라"는 댓글이 쏟아졌다.'],
+      bold: ['"다음 영상도 기대하세요." 조회수가 두 배가 됐다.', '팀 홍보 담당자가 머리를 감쌌다.'],
+      joke: ['"편집은 제가 안 했어요." 영상 편집자까지 유명해졌다.', '농담이 또 다른 짤이 되어 놀림감이 됐다.'],
+    }),
+  },
+  {
+    id: 'iv_contract', category: 'interview', title: '이적설 질문',
+    text: '"다른 팀과 접촉했다는 보도가 있습니다. 사실인가요?"',
+    when: (x) => x.seat === 'race' && x.pct >= 0.55, weight: () => 1.5,
+    options: tones({
+      humble: ['"지금 팀에 집중하고 있습니다." 팀이 안도했다.', '부인하지 않았다는 해석이 나왔다.'],
+      confident: ['"좋은 드라이버에게는 연락이 오기 마련이죠." 몸값이 올랐다는 기사가 나왔다.', '팀이 협상 테이블에서 불쾌해했다.'],
+      bold: ['"더 좋은 제안이 오면 생각해 보겠습니다." 이적 시장이 술렁였다.', '지금 팀과의 관계가 차갑게 식었다.'],
+      joke: ['"제 전화기는 늘 무음이에요." 기자들이 웃으며 받아 적었다.', '답을 피한 농담이 오히려 이적설에 불을 붙였다.'],
+    }),
+  },
+  {
+    id: 'iv_young_star', category: 'interview', title: '최연소 기록 질문',
+    text: '"이 나이에 이 정도 성적은 드뭅니다. 부담은 없나요?"',
+    when: (x) => x.age <= 19 && x.pct >= 0.7 && x.seat === 'race', weight: () => 2,
+    options: tones({
+      humble: ['"아직 학생이에요. 숙제가 더 무섭습니다." 귀엽다는 반응이 많았다.', '너무 어려 보인다는 스카우트 메모가 남았다.'],
+      confident: ['"나이는 숫자일 뿐입니다." 차세대 스타라는 기사가 쏟아졌다.', '기대가 지나치게 커졌다.'],
+      bold: ['"기록은 깨라고 있는 거죠." 패독 전체가 이름을 기억하게 됐다.', '어린 나이에 건방지다는 평이 따라붙었다.'],
+    }),
+  },
+  {
+    id: 'iv_family', category: 'interview', title: '가족 질문',
+    text: '"가정을 꾸린 뒤 레이스 스타일이 달라졌다는 말이 있습니다."',
+    when: (x) => x.family && x.seat === 'race', weight: () => 2,
+    options: tones({
+      humble: ['"가족이 저를 더 단단하게 해 줍니다." 따뜻한 기사가 나왔다.', '"승부욕이 줄었다"는 해석이 붙었다.'],
+      confident: ['"여전히 빠릅니다. 더 똑똑해졌을 뿐이죠." 베테랑다운 답이라는 평가를 받았다.', '기록이 받쳐 주지 않아 설득력이 떨어졌다.'],
+      bold: ['"아이에게 우승 트로피를 보여 줄 겁니다." 팬들이 응원을 보냈다.', '사생활 질문에 날을 세웠다는 기사가 나왔다.'],
+      joke: ['"요즘 제일 무서운 건 기저귀 갈기예요." 회견장이 웃음바다가 됐다.', '가족 얘기를 농담거리로 삼았다는 지적이 나왔다.'],
+    }),
+  },
+  {
+    id: 'iv_team_car', category: 'interview', title: '차 성능 질문',
+    text: '"차가 경쟁 팀보다 느리다는 평가가 많습니다. 드라이버로서 어떤가요?"',
+    when: (x) => x.f1 && x.seat === 'race' && x.teamRank >= 6 && x.teamRank < 99, weight: () => 2.5,
+    options: tones({
+      humble: ['"팀이 열심히 개발하고 있습니다." 팀 공장에서 박수가 나왔다.', '"그래서 언제 빨라지냐"는 질문이 이어졌다.'],
+      confident: ['"이 차에서 뽑을 건 다 뽑았습니다." 상위 팀들이 관심을 보였다.', '팀이 들으면 서운할 말이라는 반응이 나왔다.'],
+      bold: ['"좋은 차 주시면 바로 보여 드리죠." 영입 루머가 돌았다.', '팀 대표가 공개적으로 불쾌감을 드러냈다.'],
+      joke: ['"직선에서 경치 구경할 시간은 충분합니다." 밈이 됐다.', '팀 엔지니어들이 웃지 않았다.'],
+      riskyConfidence: true,
+    }),
+  },
+  {
+    id: 'iv_fan_question', category: 'interview', title: '팬 질문 코너',
+    text: '"팬 질문입니다. 레이스 전날 밤에는 뭘 하세요?"',
+    when: (x) => x.seat === 'race', weight: () => 0.8,
+    options: tones({
+      humble: ['"일찍 자요. 그게 전부입니다." 성실하다는 반응이 나왔다.', '너무 재미없는 답이라는 댓글이 달렸다.'],
+      confident: ['"온보드 영상을 백 번 봅니다." 프로답다는 평이 나왔다.', '"그런데 왜 실수하냐"는 반응도 있었다.'],
+      bold: ['"우승 세리머니를 연습합니다." 팬들이 열광했다.', '다음 레이스에서 못 이기자 놀림감이 됐다.'],
+      joke: ['"게임에서 제 팀으로 우승합니다." 팬들이 따라 하기 시작했다.', '농담인지 진심인지 헷갈린다는 반응이었다.'],
     }),
   },
 ];

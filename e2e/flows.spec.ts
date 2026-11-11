@@ -163,3 +163,34 @@ test('게임 방법의 실제 화면 그림이 모두 열린다', async ({ page 
   await imgs.evaluateAll((els) => els.forEach((e) => ((e as HTMLImageElement).loading = 'eager')));
   await expect.poll(() => imgs.evaluateAll((els) => els.filter((e) => !(e as HTMLImageElement).complete || (e as HTMLImageElement).naturalWidth === 0).length)).toBe(0);
 });
+
+test('F1 레이스: 첫 랩부터 트랙 뷰가 계속 보이고, 결과·댓글이 아래에 붙는다. 챔피언십 표는 주말 시작에만', async ({ page }) => {
+  const c = f1Career();
+  await loadSave(page, c);
+  await page.getByRole('button', { name: /시즌 라이브로 시작/ }).click();
+  await expect(page.getByRole('heading', { name: '챔피언십 순위' })).toBeVisible();
+  const track = page.locator('svg[aria-label^="트랙 뷰"]');
+  // 프랙티스·퀄리파잉을 넘기고 첫 레이스(스프린트 또는 결승)까지
+  for (let i = 0; i < 4 && !(await track.isVisible().catch(() => false)); i++) await page.getByRole('button', { name: '다음 세션' }).click();
+  await expect(track).toBeVisible();
+  await expect(page.getByRole('heading', { name: '챔피언십 순위' })).toHaveCount(0);
+  await expect(page.getByRole('group', { name: '트랙 뷰 배속' })).toBeVisible();
+  // 결과까지 넘기면(무전은 추천) 트랙 뷰는 체커기 장면으로 남는다
+  for (let i = 0; i < 12; i++) {
+    const radio = page.getByRole('dialog', { name: '엔지니어 무전' });
+    if (await radio.isVisible().catch(() => false)) await radio.getByRole('button').filter({ hasText: '추천' }).first().click();
+    const skip = page.getByRole('button', { name: '다음 결정·결과까지' });
+    if (!(await skip.isVisible().catch(() => false))) break;
+    await skip.click();
+  }
+  await expect(track).toHaveAttribute('aria-label', /체커기/);
+  await expect(page.getByText('결과', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('실시간 댓글').locator('li')).not.toHaveCount(0);
+});
+
+test('훈련 계획: 칸마다 오르는 능력치가 보이고, 프로그램 설명을 펼칠 수 있다', async ({ page }) => {
+  await loadSave(page, createCareer({ seed: 7, name: 'E2E', nationality: 'GB', wealthTier: 3, personality: 'calm', candidateIndex: 0, focus: ['pace'] }));
+  await page.getByText('훈련 프로그램별로 오르는 능력치').click();
+  await expect(page.getByText('가상 주행으로 한계 속도를 다듬는다')).toBeVisible();
+  await expect(page.getByText(/순간 속도 ▲/).first()).toBeVisible();
+});

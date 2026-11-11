@@ -1,6 +1,6 @@
 // 시즌 진행(SPEC §4·§5): 카트·하부 리그·F1 시즌 계산, F1 그랑프리 주말(라이브용), runSeason.
 
-import { type Career, type F1Driver, PLAYER_ID, type SeasonRecord, f1Calendar, homeGpEffect, playerBehavior, withHomeGp } from './careerCore';
+import { type Career, type F1Driver, PLAYER_ID, type SeasonRecord, f1Calendar, homeGpEffect, inMilitary, playerBehavior, withHomeGp } from './careerCore';
 import { clamp, juniorTeams, lerp, statsAround } from './careerInternal';
 import { WEALTH_TIERS } from './creation';
 import { pickEvents } from './events';
@@ -414,7 +414,9 @@ export function runSeason(input: Career, plan: TrainingId[], radio: Record<strin
   const series: SeriesId = contract?.series ?? (c.history[c.history.length - 1]?.series ?? 'kart');
   const seat = contract?.seat ?? 'none';
   const slots = seat === 'race' ? TRAINING_SLOTS : TRAINING_SLOTS_RESERVE;
-  const cleanPlan = plan.slice(0, slots);
+  // 군 복무 중에는 레이싱 훈련을 할 수 없다
+  const serving = inMilitary(c);
+  const cleanPlan = serving ? [] : plan.slice(0, slots);
   c.choiceLog.push(Object.keys(radio).length ? { year: c.year, kind: 'training', plan: cleanPlan, radio } : { year: c.year, kind: 'training', plan: cleanPlan });
 
   const notes: string[] = [];
@@ -484,6 +486,13 @@ export function runSeason(input: Career, plan: TrainingId[], radio: Record<strin
   const envShare = (envMult - 1) / envMult;
   const trainShare = tSum / Math.max(1, tSum + rSum);
   const aging = applyAging(c.driver.stats, c.age, c.driver.hidden, rngFor(seed, 'aging'));
+  if (serving) {
+    // 차를 못 타니 감각이 무뎌진다. 대신 규칙적인 생활로 체력·멘탈은 단단해진다
+    for (const k of ['pace', 'racecraft', 'wet', 'tyre'] as const) c.driver.stats[k] = Math.max(20, c.driver.stats[k] - 1);
+    c.driver.stats.consistency = Math.min(99, c.driver.stats.consistency + 1);
+    c.media.pressure = Math.max(0, c.media.pressure - 15);
+    notes.push('군 복무 중: 레이스 감각은 무뎌졌지만 체력과 멘탈은 단단해졌다');
+  }
   const agingOvr = ovr(c.driver.stats) - ovr(before) - grownOvr;
 
   // 돈
@@ -541,13 +550,14 @@ export function runSeason(input: Career, plan: TrainingId[], radio: Record<strin
     },
     superLicence: sl, income, expenses, fundsEnd: c.funds, expectedAvg: Math.round(sim.expectedAvg * 10) / 10,
     actualAvg: Math.round(sim.actualAvg * 10) / 10, teammateBeat: Math.round(sim.teammateBeat * 100) / 100,
-    headline: mediaOut.headline, notes, statsEnd: { ...c.driver.stats },
+    headline: serving ? `${c.driver.name}, 군 복무 중` : mediaOut.headline, notes, statsEnd: { ...c.driver.stats },
+    ...(serving ? { military: true } : {}),
   };
   record.feed = seasonFeed(c, record);
   c.history.push(record);
   // 이번 오프시즌 전환점 이벤트(0~2개). 오프시즌 제안을 받기 전에 처리한다
-  c.pendingEvents = pickEvents(c, record);
+  c.pendingEvents = serving ? [] : pickEvents(c, record);
   if (seat === 'race') c.noSeatSeasons = 0;
-  else c.noSeatSeasons += 1;
+  else if (!serving) c.noSeatSeasons += 1;
   return { career: c, record };
 }

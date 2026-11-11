@@ -1,6 +1,6 @@
 // 오프시즌(SPEC §7·§2.1): 제안 만들기, 선택 반영, 팀·캘린더·AI 드라이버 세계 진행.
 
-import { CALENDAR_2026_SLOTS, type Career, HOME_MARKET_BONUS, type Offer, type Offseason, type OffseasonChoice, PRINCIPAL_CHANGE_CHANCE, ROOKIE_GUARANTEE_POS, ROOKIE_GUARANTEE_POS_HOME, hasHomeGp } from './careerCore';
+import { CALENDAR_2026_SLOTS, type Career, HOME_MARKET_BONUS, type Offer, type Offseason, type OffseasonChoice, PRINCIPAL_CHANGE_CHANCE, draftedNext, MILITARY_SEASONS, ROOKIE_GUARANTEE_POS, ROOKIE_GUARANTEE_POS_HOME, hasHomeGp } from './careerCore';
 import { MAJOR_FLOOR, OTHERS_CAP, newRookie, superLicencePoints } from './season';
 import { clamp, juniorTeams, lerp } from './careerInternal';
 import { WEALTH_TIERS } from './creation';
@@ -76,6 +76,13 @@ function maxYears(age: number): number {
 export function getOffseason(c: Career): Offseason {
   const last = c.history[c.history.length - 1];
   if (!last || last.year !== c.year) throw new Error('run the season before the offseason');
+  // 군 복무: 입대를 앞뒀거나 복무 중이면 제안이 없다(복무 마지막 해 오프시즌에는 다시 제안이 온다)
+  if (draftedNext(c)) {
+    return { year: c.year, offers: [], released: false, academyOffer: null, notes: [`입영 통지서가 나왔다. ${c.year + 1}년부터 ${MILITARY_SEASONS}시즌 동안 군 복무로 커리어가 멈춘다`] };
+  }
+  if (c.military && c.year >= c.military.start && c.year < c.military.end) {
+    return { year: c.year, offers: [], released: false, academyOffer: null, notes: [`군 복무 중이다. ${c.military.end}시즌을 마치면 전역한다`] };
+  }
   const r = rngFor(c.seed, 'offers', c.year);
   const nextYear = c.year + 1;
   const nextAge = c.age + 1;
@@ -352,6 +359,16 @@ export function applyOffseason(input: Career, choice: OffseasonChoice): Career {
     }
   } else {
     c.contract = null;
+  }
+
+  // 입대: 계약·아카데미가 끝나고 2시즌 동안 레이스를 하지 않는다
+  if (draftedNext(input)) {
+    c.military = { start: nextYear, end: nextYear + MILITARY_SEASONS - 1 };
+    c.contract = null;
+    c.academy = null;
+    const lastRec = c.history[c.history.length - 1];
+    if (lastRec) lastRec.notes = [...lastRec.notes, `시즌 뒤 입대(${nextYear}~${nextYear + MILITARY_SEASONS - 1})`];
+    c.world.news.push({ season: nextYear, kind: 'military', team: c.driver.name, text: `${c.driver.name}, 군 입대로 ${MILITARY_SEASONS}시즌 동안 레이스를 떠난다` });
   }
 
   // 팀 진입·철수

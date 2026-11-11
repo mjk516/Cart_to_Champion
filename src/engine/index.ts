@@ -15,3 +15,4 @@ export * from './feed';
 export * from './manager';
 export * from './calendar';
 export * from './achievements';
+export * from './chatter';

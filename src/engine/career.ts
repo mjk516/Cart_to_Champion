@@ -9,7 +9,7 @@ export * from './careerCreate';
 export * from './season';
 export * from './offseason';
 
-import { type Career, type CareerSetup, type ChoiceLogEntry, type EventLogEntry, type Offseason, type OffseasonChoice } from './careerCore';
+import { draftedNext, type Career, type CareerSetup, type ChoiceLogEntry, type EventLogEntry, type Offseason, type OffseasonChoice } from './careerCore';
 import { applyOffseason, getOffseason } from './offseason';
 import { createCareer } from './careerCreate';
 import { runSeason } from './season';
@@ -51,6 +51,8 @@ export const DEFAULT_POLICY: Policy = {
     return recommendedPlan(c.driver.stats, 'weakness', slots, c.driver.focus);
   },
   offseason: (c, o) => {
+    // 입대 직전이나 복무 중에는 기다린다
+    if (draftedNext(c) || (c.military && c.year < c.military.end)) return { offerId: null };
     const joinAcademy = !!o.academyOffer;
     if (c.age + 1 >= 42) return { offerId: null, retire: true };
     const ok = o.offers.filter((x) => x.affordable);

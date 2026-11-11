@@ -340,7 +340,7 @@ const BASE_EVENTS: EventDef[] = [
   },
 ];
 
-/** 이벤트 62개: M2 20개 + M3 일반 28개 + 기자회견 12개 + v0.25 2개(내구레이스, 가정) */
+/** 이벤트 70개: M2 20개 + M3 일반 28개 + 기자회견 20개 + v0.25 2개(내구레이스, 가정) */
 export const EVENTS: EventDef[] = [...BASE_EVENTS, ...MORE_EVENTS, ...INTERVIEWS];
 
 export const EVENT_BY_ID = new Map(EVENTS.map((e) => [e.id, e]));
@@ -412,6 +412,29 @@ export function fillText(t: string, c: Career, amount?: number): string {
   return t.replaceAll('{name}', c.driver.name).replaceAll('{team}', team).replaceAll('{amount}', amount !== undefined ? eurText(amount) : '');
 }
 
+// ── 기자회견 변수(SPEC §6 v0.30): 어느 매체가, 어떤 분위기에서 묻느냐에 따라 같은 답도 결과가 달라진다 ──
+export const IV_OUTLETS = [
+  { id: 'tv', label: '현지 방송', note: '팬 여론이 크게 움직인다', rep: 0.8, sent: 1.4, fol: 1, press: 1 },
+  { id: 'pro', label: '해외 전문지', note: '언론 평판이 크게 움직인다', rep: 1.6, sent: 0.7, fol: 0.8, press: 1 },
+  { id: 'yt', label: '모터스포츠 유튜브', note: '팔로워가 크게 움직인다', rep: 0.7, sent: 1, fol: 1.8, press: 0.8 },
+  { id: 'tabloid', label: '가십 매체', note: '말 한마디가 부풀려진다', rep: 1.2, sent: 1.3, fol: 1.4, press: 1.5 },
+] as const;
+export const IV_MOODS = [
+  { id: 'friendly', label: '우호적인 분위기', badMul: 0.65 },
+  { id: 'calm', label: '평범한 분위기', badMul: 1 },
+  { id: 'tense', label: '날 선 분위기', badMul: 1.6 },
+] as const;
+
+export function interviewVars(c: Career, eventId: string): { outlet: (typeof IV_OUTLETS)[number]; mood: (typeof IV_MOODS)[number] } {
+  const r = rngFor(c.seed, 'iv-vars', c.year, eventId);
+  const outlet = IV_OUTLETS[Math.floor(r() * IV_OUTLETS.length)]!;
+  // 성적이 나쁘거나 압박이 높으면 날 선 분위기가 잦다
+  const tenseBias = c.media.pressure / 200;
+  const m = r();
+  const mood = m < 0.3 - tenseBias / 2 ? IV_MOODS[0] : m < 0.75 - tenseBias ? IV_MOODS[1] : IV_MOODS[2];
+  return { outlet, mood };
+}
+
 export interface EventCard {
   id: string;
   category: EventCategory;
@@ -424,12 +447,26 @@ export function eventCard(c: Career, id: string): EventCard {
   const e = EVENT_BY_ID.get(id);
   if (!e) throw new Error(`unknown event ${id}`);
   const amount = e.amountUnits !== undefined ? unitsToEur(c, e.amountUnits) : undefined;
-  return { id, category: e.category, title: e.title, text: fillText(e.text, c, amount), options: e.options.map(({ id: oid, label, hint }) => ({ id: oid, label, hint })) };
+  let text = fillText(e.text, c, amount);
+  if (e.category === 'interview') {
+    const v = interviewVars(c, id);
+    text = `[${v.outlet.label} · ${v.mood.label}] ${text} (${v.outlet.note})`;
+  }
+  return { id, category: e.category, title: e.title, text, options: e.options.map(({ id: oid, label, hint }) => ({ id: oid, label, hint })) };
 }
 
 const clampStat = (v: number) => Math.max(20, Math.min(99, v));
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const STAT_NAME: Record<string, string> = { pace: '순간 속도', racecraft: '레이스크래프트', tyre: '타이어 관리', consistency: '일관성', wet: '우천', feedback: '기술 피드백' };
+
+function scaleForOutlet(fx: EventEffect, o: (typeof IV_OUTLETS)[number]): EventEffect {
+  const out: EventEffect = { ...fx };
+  if (fx.reputation) out.reputation = Math.round(fx.reputation * o.rep);
+  if (fx.sentiment) out.sentiment = Math.round(fx.sentiment * o.sent);
+  if (fx.pressure) out.pressure = Math.round(fx.pressure * o.press);
+  if (fx.followersMul) out.followersMul = 1 + (fx.followersMul - 1) * o.fol;
+  return out;
+}
 
 /** 결과를 career에 반영하고, 화면에 보여 줄 문구와 변화 요약을 돌려준다. c를 직접 바꾼다 */
 export function applyEventChoice(c: Career, eventId: string, optionId: string): { text: string; summary: string[] } {
@@ -439,8 +476,10 @@ export function applyEventChoice(c: Career, eventId: string, optionId: string): 
   if (!opt) throw new Error(`unknown option ${optionId} for ${eventId}`);
   const r: Rng = rngFor(c.seed, 'event-outcome', c.year, eventId, optionId);
   const temperament = PERSONALITIES[c.driver.personality].temperament;
-  const outcome = weightedPick(r, opt.outcomes, (o) => o.p * (o.tempMul?.[temperament] ?? 1));
-  const fx = outcome.effect;
+  const iv = e.category === 'interview' ? interviewVars(c, eventId) : null;
+  // 기자회견: 두 번째부터의 결과(역풍)는 분위기에 따라 잦아지거나 드물어진다
+  const outcome = weightedPick(r, opt.outcomes, (o) => o.p * (o.tempMul?.[temperament] ?? 1) * (iv && opt.outcomes.indexOf(o) > 0 ? iv.mood.badMul : 1));
+  const fx: EventEffect = iv ? scaleForOutlet(outcome.effect, iv.outlet) : outcome.effect;
   const summary: string[] = [];
   for (const k of STAT_KEYS) {
     const want = fx.stats?.[k];
