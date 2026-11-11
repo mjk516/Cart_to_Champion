@@ -1,7 +1,10 @@
 // 시즌 결과 + 오프시즌(SPEC §5.2, §7, §3.3): 결과 요약, 제안 비교, 계약서 서명, 무소속, 은퇴
 
 import { useMemo, useState } from 'react';
-import { EVENT_CATEGORY_LABEL, LADDER, pendingEventCards, seriesLabel, type Offer, type SeasonRecord } from '../engine';
+import {
+  EVENT_CATEGORY_LABEL, LADDER, MANAGER_STYLE_LABEL, managerAdvice, pendingEventCards, seriesLabel, VERDICT_LABEL,
+  type ManagerAdvice, type Offer, type OfferAdvice, type SeasonRecord,
+} from '../engine';
 import { FeedList } from './FeedList';
 import { formatMoney } from './format';
 import { SignaturePad } from './SignaturePad';
@@ -125,7 +128,26 @@ function ContractModal({ offer, name, firstF1, signature, onCancel, onSigned }: 
   );
 }
 
-function OfferCard({ o, onPick }: { o: Offer; onPick: () => void }) {
+function ManagerCard({ a }: { a: ManagerAdvice }) {
+  const m = a.manager;
+  return (
+    <div className="mb-4 rounded-xl border border-sky-500/30 bg-sky-500/5 p-3">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-500/20 text-sm font-black text-sky-200" aria-hidden>{m.name.slice(0, 1)}</div>
+        <div className="min-w-0">
+          <div className="text-sm font-bold">매니저 {m.name}</div>
+          <div className="text-xs text-zinc-400">{MANAGER_STYLE_LABEL[m.style]} · 능력 {'★'.repeat(m.skill)}{'☆'.repeat(5 - m.skill)}</div>
+        </div>
+      </div>
+      <p className="mt-2 text-sm text-zinc-100">“{a.headline}”</p>
+      {a.release && <p className="mt-1 text-sm text-red-200">“{a.release}”</p>}
+      {a.academy && <p className="mt-1 text-sm text-sky-200">“{a.academy}”</p>}
+      {a.retire && <p className="mt-1 text-sm text-amber-200">“{a.retire}”</p>}
+    </div>
+  );
+}
+
+function OfferCard({ o, onPick, advice }: { o: Offer; onPick: () => void; advice?: OfferAdvice }) {
   const { showKrw } = useGame();
   return (
     <div className={`rounded-xl border p-3 ${o.series === 'f1' && o.seat === 'race' ? 'border-racing/60 bg-racing/5' : 'border-white/10'}`}>
@@ -136,6 +158,12 @@ function OfferCard({ o, onPick }: { o: Offer; onPick: () => void }) {
         {o.management && <Pill tone="amber">매니지먼트 후원</Pill>}
       </div>
       <p className="mt-1 text-sm text-zinc-400">{o.note}</p>
+      {advice && (
+        <div className="mt-2 rounded-lg bg-white/5 p-2 text-xs">
+          <span className="mr-2"><Pill tone={advice.verdict === 'recommend' ? 'green' : advice.verdict === 'ok' ? 'blue' : 'amber'}>매니저 {VERDICT_LABEL[advice.verdict]}</Pill></span>
+          <span className="text-zinc-300">{advice.reasons.slice(0, 3).join(' · ')}</span>
+        </div>
+      )}
       <div className="mt-2 grid grid-cols-2 gap-3 text-xs text-zinc-400">
         <div>팀 성능<Bar value={o.teamQuality} max={1} color="bg-sky-400" /></div>
         <div>시설(훈련 효율)<Bar value={o.facility} max={1} color="bg-emerald-400" /></div>
@@ -155,6 +183,7 @@ export function Offseason() {
   const off = useMemo(() => (c ? currentOffseason(c) : null), [c]);
   const pending = useMemo(() => (c ? pendingEventCards(c) : []), [c]);
   const resolvedThisYear = (c?.eventLog ?? []).filter((e) => e.year === c?.year);
+  const advice = useMemo(() => (c && off && !pending.length ? managerAdvice(c, off) : null), [c, off, pending.length]);
   const [joinAcademy, setJoinAcademy] = useState(true);
   const [picked, setPicked] = useState<Offer | null>(null);
   if (!c) return null;
@@ -201,6 +230,7 @@ export function Offseason() {
         <Card><p className="text-sm text-zinc-400">전환점을 먼저 결정하면 다음 시즌 제안이 열립니다.</p></Card>
       ) : (
       <Card title={`${c.year} 오프시즌 · ${c.year + 1} 시즌 제안`}>
+        {advice && <ManagerCard a={advice} />}
         {off.released && <div className="mb-3 rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm font-bold text-red-200">방출 통보를 받았습니다.</div>}
         {off.notes.length > 0 && <ul className="mb-3 list-disc pl-5 text-sm text-zinc-300">{off.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>}
         {off.academyOffer && (
@@ -212,7 +242,7 @@ export function Offseason() {
         <div className="space-y-2">
           {offers.length === 0 && <p className="text-sm text-zinc-400">들어온 제안이 없습니다.</p>}
           {offers.map((o) => (
-            <OfferCard key={o.id} o={o} onPick={() => (o.id === 'stay' ? acceptOffer(o, joinAcademy, null) : setPicked(o))} />
+            <OfferCard key={o.id} o={o} advice={advice?.perOffer[o.id]} onPick={() => (o.id === 'stay' ? acceptOffer(o, joinAcademy, null) : setPicked(o))} />
           ))}
         </div>
         <div className="mt-4 flex flex-wrap justify-between gap-2">

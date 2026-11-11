@@ -5,6 +5,7 @@
 import type { Career, SeasonRecord } from './career';
 import { PERSONALITIES } from './creation';
 import { rngFor, weightedPick, type Rng } from './rng';
+import { generateManager } from './manager';
 import { ACADEMIES, type SeriesId } from './series';
 import { STAT_KEYS, type Personality, type Stats, type WealthTier } from './types';
 
@@ -25,6 +26,8 @@ export interface EventEffect {
   /** 다음 오프시즌까지 유지되는 플래그(scoutBonus, releaseRisk) */
   flags?: Record<string, number>;
   joinAcademy?: boolean;
+  /** 더 유능한 매니저로 교체 */
+  newManager?: boolean;
 }
 
 export interface EventOutcome { p: number; text: string; effect: EventEffect }
@@ -202,7 +205,7 @@ export const EVENTS: EventDef[] = [
     when: (x) => x.age >= 15 && x.funds > 0,
     options: [
       { id: 'sign', label: '새 에이전트와 계약한다', hint: '다음 오프시즌 제안 증가, 자금 10%', outcomes: [
-        { p: 0.75, text: '전화가 바빠졌다. 팀들이 {name}을 다시 보기 시작했다.', effect: { fundsFraction: -0.1, flags: { scoutBonus: 0.08 } } },
+        { p: 0.75, text: '전화가 바빠졌다. 팀들이 {name}을 다시 보기 시작했다.', effect: { fundsFraction: -0.1, flags: { scoutBonus: 0.08 }, newManager: true } },
         { p: 0.25, text: '말만 번지르르했다. 수수료만 나갔다.', effect: { fundsFraction: -0.1 } },
       ] },
       { id: 'stay', label: '지금 사람과 간다', outcomes: [{ p: 1, text: '의리를 지켰다.', effect: { sentiment: 2 } }] },
@@ -430,6 +433,10 @@ export function applyEventChoice(c: Career, eventId: string, optionId: string): 
   if (fx.joinAcademy && !c.academy) {
     c.academy = ACADEMIES[Math.floor(r() * ACADEMIES.length)]?.name ?? ACADEMIES[0]!.name;
     summary.push(`${c.academy} 합류`);
+  }
+  if (fx.newManager) {
+    c.manager = generateManager(c.seed, `agent-${c.year}`, c.driver.nationality, 4);
+    summary.push(`새 매니저 ${c.manager.name}`);
   }
   const amount = e.amountUnits !== undefined ? unitsToEur(c, e.amountUnits) : undefined;
   return { text: fillText(outcome.text, c, amount), summary };

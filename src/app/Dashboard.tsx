@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ovr, PERSONALITIES, recommendedPlan, seriesLabel, STAT_KEYS, superLicencePoints, TRAINING, TRAINING_SLOTS,
+  managerOf, MANAGER_STYLE_LABEL, ovr, PERSONALITIES, recommendedPlan, seriesLabel, STAT_KEYS, superLicencePoints, TRAINING, TRAINING_SLOTS,
   TRAINING_SLOTS_RESERVE, xpNeeded, type TrainingId,
 } from '../engine';
 import { formatMoney } from './format';
@@ -49,6 +49,7 @@ export function Dashboard() {
             <Pill>{pdef.label}</Pill>
             <Pill tone={temper.tone}>{temper.label}</Pill>
             {c.academy && <Pill tone="blue">{c.academy}</Pill>}
+            <Pill tone="blue">매니저 {managerOf(c).name} · {MANAGER_STYLE_LABEL[managerOf(c).style]}</Pill>
             {c.management && <Pill tone="amber">매니지먼트 후원(F1 연봉 {Math.round(c.management.share * 100)}%)</Pill>}
           </div>
         </div>

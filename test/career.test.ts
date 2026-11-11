@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyOffseason, autoplayCareer, createCareer, DEFAULT_POLICY, getOffseason, MAX_TEAMS, MIN_TEAMS, replayCareer,
-  EVENTS, MAJOR_FLOOR, OTHERS_CAP, feedTemplateCount, pendingEventCards, resolveEvent, F1_WINNER_TEAMS, f1Rules, generateHidden, initialWorld, NEW_TEAM_START, PERSONALITIES, runOffseason, TEAMS_2026, runSeason, STAT_KEYS, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, superLicencePoints, type CareerSetup,
+  EVENTS, managerAdvice, MAJOR_FLOOR, OTHERS_CAP, feedTemplateCount, pendingEventCards, resolveEvent, F1_WINNER_TEAMS, f1Rules, generateHidden, initialWorld, NEW_TEAM_START, PERSONALITIES, runOffseason, TEAMS_2026, runSeason, STAT_KEYS, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, superLicencePoints, type CareerSetup,
 } from '../src/engine';
 
 const setup = (seed: number, extra: Partial<CareerSetup> = {}): CareerSetup => ({
@@ -231,6 +231,44 @@ describe('전환점 이벤트와 언론·팬 피드(SPEC §6, §6.1)', () => {
         expect(f.text).not.toMatch(/\{\w+\}/);
       }
     }
+  });
+});
+
+describe('선수 매니저 조언(SPEC §7 v0.15)', () => {
+  it('커리어 시작 때 매니저가 배정된다', () => {
+    const c = createCareer(setup(31));
+    expect(c.manager?.name.length).toBeGreaterThan(0);
+    expect(['growth', 'money', 'stable']).toContain(c.manager?.style);
+  });
+
+  it('오프시즌마다: 추천은 감당 가능한 실제 제안, F1 레이스 시트가 있으면 리저브를 추천하지 않는다, 메이저 팀엔 8위 안 근거', () => {
+    let checkedMajor = false;
+    for (const seed of [32, 33, 34, 35]) {
+      let c = createCareer(setup(seed, { wealthTier: 4, personality: 'instinctive' }));
+      for (let y = 0; y < 30 && !c.retired; y++) {
+        c = runSeason(c, DEFAULT_POLICY.training(c)).career;
+        for (const card of pendingEventCards(c)) c = resolveEvent(c, card.id, card.options[0]!.id).career;
+        const off = getOffseason(c);
+        const adv = managerAdvice(c, off);
+        expect(adv.headline.length).toBeGreaterThan(0);
+        expect(Object.keys(adv.perOffer).sort()).toEqual(off.offers.map((o) => o.id).sort());
+        if (adv.recommendedOfferId) {
+          const rec = off.offers.find((o) => o.id === adv.recommendedOfferId)!;
+          expect(rec.affordable).toBe(true);
+          const f1Race = off.offers.some((o) => o.series === 'f1' && o.seat === 'race' && o.affordable);
+          if (f1Race) expect(rec.seat === 'reserve' && rec.series === 'f1').toBe(false);
+        }
+        for (const o of off.offers) {
+          if (o.series === 'f1' && o.seat === 'race' && o.teamId && (F1_WINNER_TEAMS as readonly string[]).includes(o.teamId)) {
+            expect(adv.perOffer[o.id]!.reasons.join(' ')).toContain('8위');
+            checkedMajor = true;
+          }
+          if (!o.affordable) expect(adv.perOffer[o.id]!.verdict).toBe('avoid');
+        }
+        c = applyOffseason(c, DEFAULT_POLICY.offseason(c, off));
+      }
+    }
+    expect(checkedMajor).toBe(true);
   });
 });
 

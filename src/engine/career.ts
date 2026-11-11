@@ -6,6 +6,7 @@ import { generateCandidates, WEALTH_TIERS } from './creation';
 import { PERSONALITIES } from './creation';
 import { applyEventChoice, EVENT_BY_ID, eventCard, pickEvents, type EventCard } from './events';
 import { seasonFeed, type FeedItem } from './feed';
+import { generateManager, type Manager } from './manager';
 import { CALENDAR_2026, CAR_WEIGHT, DRIVERS_2026, F1_WINNER_TEAMS, ovr, POINTS_RACE, TEAMS_2026 } from './data';
 import { teamForm } from './form';
 import {
@@ -188,6 +189,8 @@ export interface Career {
   eventLog?: EventLogEntry[];
   /** 다음 오프시즌까지 유지되는 플래그(scoutBonus, releaseRisk) */
   flags?: Record<string, number>;
+  /** 선수 매니저(오프시즌 조언). 이전 저장 파일에는 없을 수 있다 */
+  manager?: Manager;
   totals: {
     f1Titles: number;
     f1Starts: number;
@@ -279,6 +282,7 @@ export function createCareer(setup: CareerSetup): Career {
     pendingEvents: [],
     eventLog: [],
     flags: {},
+    manager: generateManager(setup.seed, 'first', setup.nationality),
     totals: { f1Titles: 0, f1Starts: 0, f1Wins: 0, f1Podiums: 0, f1Poles: 0, juniorTitles: [], earnings: 0, releases: 0, bestOvr: Math.round(ovr(cand.stats)) },
   };
 }
