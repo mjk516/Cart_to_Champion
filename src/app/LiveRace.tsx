@@ -68,6 +68,16 @@ function TrackView({ circuitId, realLayout, prev, cur, baseLap, banner, focus, x
 }) {
   const W = 640, H = 300;
   const pathRef = useRef<SVGPathElement>(null);
+  // 휴대폰처럼 좁은 화면에서는 SVG가 줄어들어 차가 점처럼 보이므로, 그린 폭에 맞춰 동그라미·글자를 키운다(최대 2.2배)
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [k, setK] = useState(1);
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(([e]) => { const w = e?.contentRect.width ?? W; setK(Math.min(2.2, Math.max(1, 520 / Math.max(1, w)))); });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   // 실제 레이아웃은 F1 그랑프리에서만 쓴다. 하부 리그는 같은 서킷이라도 일반 레이아웃
   const d = useMemo(() => (realLayout && CIRCUIT_PATHS[circuitId]) || genericTrackPath(circuitId, W, H), [circuitId, realLayout]);
   const [tau, setTau] = useState(0);
@@ -93,9 +103,9 @@ function TrackView({ circuitId, realLayout, prev, cur, baseLap, banner, focus, x
     return pathRef.current.getPointAtLength(p * L);
   };
   return (
-    <div className="relative rounded-xl border border-white/10 bg-zinc-950 p-2">
+    <div ref={boxRef} className="relative rounded-xl border border-white/10 bg-zinc-950 p-2">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label={`트랙 뷰: ${banner}`}>
-        <path d={d} fill="none" stroke="#3f3f46" strokeWidth={18} strokeLinejoin="round" />
+        <path d={d} fill="none" stroke="#3f3f46" strokeWidth={18 * Math.min(k, 1.6)} strokeLinejoin="round" />
         <path ref={pathRef} d={d} fill="none" stroke="#52525b" strokeWidth={2} strokeDasharray="6 8" />
         {[...cur.order].reverse().map((e) => {
           const pt = pos(e.id, e.gap);
@@ -103,8 +113,8 @@ function TrackView({ circuitId, realLayout, prev, cur, baseLap, banner, focus, x
           const mine = e.id === ME;
           return (
             <g key={e.id}>
-              <circle cx={pt.x} cy={pt.y} r={mine ? 9 : 7} fill={x.colorOf(e.id)} stroke={mine ? '#ffffff' : '#18181b'} strokeWidth={mine ? 3 : 2} />
-              {(mine || focus.includes(e.id)) && <text x={pt.x} y={pt.y - 13} textAnchor="middle" fontSize={12} fontWeight={700} fill="#fafafa">{x.codeOf(e.id)}</text>}
+              <circle cx={pt.x} cy={pt.y} r={(mine ? 9 : 7) * k} fill={x.colorOf(e.id)} stroke={mine ? '#ffffff' : '#18181b'} strokeWidth={(mine ? 3 : 2) * k} />
+              {(mine || focus.includes(e.id)) && <text x={pt.x} y={pt.y - 13 * k} textAnchor="middle" fontSize={12 * k} fontWeight={700} fill="#fafafa">{x.codeOf(e.id)}</text>}
             </g>
           );
         })}
