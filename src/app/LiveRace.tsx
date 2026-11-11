@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  forecastDecision, raceChat, rngFor, runRace, type Chat, type RaceChatKey,
+  raceChat, rngFor, runRace, type Chat, type RaceChatKey,
   type Classified, type Incident, type LapRecord, type Neutralization, type RaceCar, type RaceInput, type RadioDecision, type RadioOptionId,
 } from '../engine';
 import { CIRCUIT_PATHS } from './circuitPaths';
@@ -40,7 +40,7 @@ function describe(inc: Incident, x: Ctx): string | null {
     case 'restart': return '재출발';
     case 'rain_start': return '🌧 비 시작';
     case 'rain_stop': return '비 그침';
-    case 'radio': return `📻 무전: ${RADIO_LABEL[inc.choice] ?? inc.choice}`;
+    case 'radio': return inc.forced ? `📻 팀 판단: ${RADIO_LABEL[inc.choice] ?? inc.choice} (${inc.forced.split('.')[0]})` : `📻 무전: ${RADIO_LABEL[inc.choice] ?? inc.choice}`;
     case 'pit': return inc.car === ME ? `내 피트스톱 → ${inc.compound}` : null;
   }
 }
@@ -154,19 +154,7 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
   );
 }
 
-function RadioModal({ input, decision, onPick }: { input: RaceInput; decision: RadioDecision; onPick: (o: RadioOptionId) => void }) {
-  const [forecasts, setForecasts] = useState<Record<string, string>>({});
-  useEffect(() => {
-    const id = setTimeout(() => {
-      const out: Record<string, string> = {};
-      for (const o of decision.options) {
-        const f = forecastDecision({ ...input, autoRadio: true }, decision, o.id, 40);
-        out[o.id] = Number.isFinite(f.p50) ? `예상 P${f.p10}~P${f.p90} (중앙 P${f.p50})` : '예상하기 어려움';
-      }
-      setForecasts(out);
-    }, 30);
-    return () => clearTimeout(id);
-  }, [decision.id]); // eslint-disable-line react-hooks/exhaustive-deps
+function RadioModal({ decision, onPick }: { decision: RadioDecision; onPick: (o: RadioOptionId) => void }) {
   const title = { sc: '세이프티카 출동!', vsc: 'VSC 발령!', rain_start: '비가 오기 시작했다.', rain_stop: '트랙이 마르고 있다.' }[decision.trigger];
   const n = decision.neutral;
   return (
@@ -181,15 +169,20 @@ function RadioModal({ input, decision, onPick }: { input: RaceInput; decision: R
           <div className="rounded-lg bg-black/30 p-2"><div className="text-zinc-400">더 짧게 · 더 길게</div><b className="text-sm">{Math.round(n.shorter * 100)}% · {Math.round(n.longer * 100)}%</b></div>
         </div>
       )}
-      {n && <p className="mt-2 text-xs leading-relaxed text-zinc-400">예상보다 짧게 끝나면 지금 피트에 들어간 차가 손해를 보고, 길게 끌면 거의 공짜 피트스톱이 됩니다.</p>}
+      {decision.advice && (
+        <p className="mt-3 rounded-lg border border-emerald-400/30 bg-emerald-400/5 p-3 text-sm leading-relaxed text-zinc-100" aria-label="엔지니어 조언">
+          <span className="mr-1 font-bold text-emerald-300">엔지니어:</span>“{decision.advice}”
+        </p>
+      )}
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
         {decision.options.map((o) => (
           <button key={o.id} onClick={() => onPick(o.id)} className={`rounded-xl border p-3 text-left hover:bg-white/5 ${o.recommended ? 'border-emerald-400/60' : 'border-white/15'}`}>
             <div className="font-bold">{o.label}{o.recommended && <span className="ml-1 text-xs text-emerald-300">★ 엔지니어 추천</span>}</div>
-            <div className="mt-1 text-xs text-zinc-400">{forecasts[o.id] ?? '계산 중…'}</div>
+            {o.note && <div className="mt-1 text-xs leading-relaxed text-zinc-400">{o.note}</div>}
           </button>
         ))}
       </div>
+      <p className="mt-2 text-[11px] text-zinc-500">결정은 드라이버 몫입니다. 의무 피트스톱이 코앞이거나, 타이어 수명이 다했거나, 원래 계획한 피트 타이밍이면 팀이 묻지 않고 바로 부릅니다.</p>
     </div>
   );
 }
@@ -361,7 +354,7 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
       )}
 
       {pending && outcome.status === 'pending' && (
-        <RadioModal input={input} decision={outcome.decision} onPick={(o) => { onRadio(outcome.decision.id, o); setPlaying(true); }} />
+        <RadioModal decision={outcome.decision} onPick={(o) => { onRadio(outcome.decision.id, o); setPlaying(true); }} />
       )}
 
       {finished && outcome.status === 'finished' && (

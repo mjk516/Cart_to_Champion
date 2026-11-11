@@ -194,3 +194,11 @@ test('훈련 계획: 칸마다 오르는 능력치가 보이고, 프로그램 �
   await expect(page.getByText('가상 주행으로 한계 속도를 다듬는다')).toBeVisible();
   await expect(page.getByText(/순간 속도 ▲/).first()).toBeVisible();
 });
+
+test('주말 시작에서 퀄리파잉으로 바로 갈 수 있다(프랙티스 건너뛰기)', async ({ page }) => {
+  await loadSave(page, f1Career());
+  await page.getByRole('button', { name: /시즌 라이브로 시작/ }).click();
+  await page.getByRole('button', { name: /퀄리파잉으로 바로 가기/ }).click();
+  await expect(page.getByText(/퀄리파잉 결과/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /퀄리파잉으로 바로 가기/ })).toHaveCount(0);
+});
