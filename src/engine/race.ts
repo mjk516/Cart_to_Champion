@@ -15,7 +15,11 @@ export type RadioOptionId =
   | 'inters_now' | 'one_more_lap' | 'stay_slicks'
   | 'slicks_now' | 'stay_inters';
 
-export interface RadioOption { id: RadioOptionId; label: string; recommended: boolean }
+export interface RadioOption {
+  id: RadioOptionId; label: string; recommended: boolean;
+  /** 엔지니어가 짚어 주는 이 선택의 장단점(숫자 예상 대신, SPEC §5.5 v0.31) */
+  note?: string;
+}
 /**
  * 세이프티카·VSC·레드 플래그 상황 정보(SPEC §5.5 v0.30): 사고 지점, 크기, 예상 시간.
  * 실제 시간은 발령 다음 랩에 정해져서, 예상보다 짧거나 길게 끝날 수 있다(무전 선택 뒤의 운).
@@ -34,7 +38,13 @@ export interface Neutralization {
   /** 사고 차(잔해면 없음) */
   car?: string;
 }
-export interface RadioDecision { id: string; lap: number; trigger: RadioTrigger; options: RadioOption[]; neutral?: Neutralization }
+export interface RadioDecision {
+  id: string; lap: number; trigger: RadioTrigger; options: RadioOption[]; neutral?: Neutralization;
+  /** 엔지니어 한마디: 지금 상황과 추천 이유 */
+  advice?: string;
+  /** 급박한 상황: 드라이버에게 묻지 않고 팀이 바로 정한다(그 이유) */
+  urgent?: string;
+}
 
 export interface RaceCar {
   id: string;
@@ -117,7 +127,7 @@ export type Incident =
   | { type: 'neutral_update'; lap: number; delta: number; phase: Exclude<Phase, 'green'> }
   | { type: 'pit'; lap: number; car: string; compound: Compound; under: Phase }
   | { type: 'rain_start' | 'rain_stop'; lap: number }
-  | { type: 'radio'; lap: number; decisionId: string; choice: RadioOptionId };
+  | { type: 'radio'; lap: number; decisionId: string; choice: RadioOptionId; /** 팀이 급박해서 바로 정했다 */ forced?: string };
 
 export interface LapEntry { id: string; gap: number; compound: Compound; stops: number }
 export interface LapRecord { lap: number; phase: Phase; wet: boolean; order: LapEntry[] }
@@ -409,15 +419,16 @@ export function runRace(input: RaceInput): RaceOutcome {
         deployedNow === 'sc' ? 'sc' : deployedNow === 'vsc' ? 'vsc'
           : rainStartNow ? 'rain_start' : rainStopNow && my.compound === 'I' ? 'rain_stop' : null;
       if (trigger) {
-        const decision = buildDecision(trigger, lap, my, L, mandatoryStop);
-        if ((trigger === 'sc' || trigger === 'vsc') && neutral) decision.neutral = neutral;
+        const pos = Math.max(1, order.filter((x) => !x.out).indexOf(my) + 1);
+        const decision = buildDecision(trigger, lap, my, L, mandatoryStop, circuit, pos, (trigger === 'sc' || trigger === 'vsc') ? neutral ?? undefined : undefined);
         const recommended = decision.options.find((o) => o.recommended)?.id;
-        const choice = input.radio?.[decision.id] ?? (input.autoRadio ? recommended : undefined);
+        // 급박한 상황(의무 피트스톱이 코앞, 타이어가 한계를 넘음)이면 팀이 바로 부른다
+        const choice = decision.urgent ? recommended : input.radio?.[decision.id] ?? (input.autoRadio ? recommended : undefined);
         if (!choice) {
           return { status: 'pending', totalLaps: L, decision, laps, incidents };
         }
         applyRadio(my, choice, lap, L, mandatoryStop);
-        incidents.push({ type: 'radio', lap, decisionId: decision.id, choice });
+        incidents.push(decision.urgent ? { type: 'radio', lap, decisionId: decision.id, choice, forced: decision.urgent } : { type: 'radio', lap, decisionId: decision.id, choice });
       }
     }
 
@@ -675,13 +686,73 @@ function recommend(trigger: RadioTrigger, s: CarState, lap: number, L: number, m
   }
 }
 
-function buildDecision(trigger: RadioTrigger, lap: number, s: CarState, L: number, mandatoryStop: boolean): RadioDecision {
+/** 급박한 상황이면 그 이유. 이때는 드라이버에게 묻지 않고 팀이 바로 정한다 */
+function urgency(trigger: RadioTrigger, s: CarState, lap: number, L: number, mandatoryStop: boolean, circuit: Circuit): string | undefined {
+  if (trigger !== 'sc' && trigger !== 'vsc') return undefined;
+  const remaining = L - lap;
+  const needsCompound = mandatoryStop && s.dryUsed.size < 2;
+  const life = LIFE[s.compound] / circuit.deg;
+  if (needsCompound && remaining <= 20 && remaining > 2) return `의무 피트스톱이 남았는데 ${remaining}랩밖에 안 남았다. 팀이 바로 불러들였다`;
+  if (s.compound !== 'I' && s.tyreAge >= life * 0.95 && remaining > 4) return `타이어가 ${s.tyreAge}랩째로 수명이 다했다. 팀이 바로 불러들였다`;
+  const planned = s.planned[0];
+  if (planned !== undefined && planned - lap <= 2 && remaining > 4) return `원래 ${planned}랩에 들어올 계획이었다. 팀이 바로 불러들였다`;
+  return undefined;
+}
+
+const TYRE_NAME: Record<Compound, string> = { S: '소프트', M: '미디엄', H: '하드', I: '인터' };
+
+function buildDecision(trigger: RadioTrigger, lap: number, s: CarState, L: number, mandatoryStop: boolean, circuit?: Circuit, pos = 0, neutral?: Neutralization): RadioDecision {
   const rec = recommend(trigger, s, lap, L, mandatoryStop);
+  const remaining = L - lap;
+  const needsCompound = mandatoryStop && s.dryUsed.size < 2;
+  const deg = circuit?.deg ?? 1;
+  const life = Math.round(LIFE[s.compound] / deg);
+  const lifeOf = (c: Compound) => Math.round(LIFE[c] / deg);
+  const tyre = `${TYRE_NAME[s.compound]} ${s.tyreAge}랩째(수명 약 ${life}랩)`;
+  const where = pos ? `지금 P${pos}, ` : '';
+  const notes: Partial<Record<RadioOptionId, string>> = {};
+  let advice = '';
+  switch (trigger) {
+    case 'sc':
+    case 'vsc': {
+      const cheap = trigger === 'sc' ? '세이프티카 중엔 피트 손실이 절반쯤이야' : 'VSC 중엔 피트 손실이 40%쯤 줄어';
+      const odds = neutral ? [neutral.longer ? `길어질 확률 ${Math.round(neutral.longer * 100)}%` : '', neutral.shorter ? `짧아질 확률 ${Math.round(neutral.shorter * 100)}%` : ''].filter(Boolean).join(', ') : '';
+      const len = neutral ? ` 예상 ${neutral.expectedLaps}랩${odds ? `, ${odds}` : ''}.` : '';
+      advice = rec === 'stay_out'
+        ? `${where}${tyre}. 타이어가 아직 괜찮아. 자리를 지키는 게 낫다고 봐.${len}`
+        : `${where}${tyre}, 남은 ${remaining}랩. ${cheap}. 지금 들어가면 싸게 갈아 끼울 수 있어.${len}`;
+      const fresh = (c: Compound) => (lifeOf(c) >= remaining ? `끝까지 버틴다(수명 약 ${lifeOf(c)}랩)` : `약 ${lifeOf(c)}랩이면 한 번 더 들어와야 한다`);
+      const lose = pos > 1 ? `P${pos}에서 몇 자리 내려가고 다시 추월해야 한다` : '선두를 내줄 수 있다';
+      notes.pit_hard = `하드: ${fresh('H')}. 느리지만 안정적. ${lose}`;
+      notes.pit_medium = `미디엄: ${fresh('M')}. 하드보다 빠르다. ${lose}`;
+      notes.pit = `새 타이어(${TYRE_NAME[pickDry(remaining, s, mandatoryStop)]}). ${lose}`;
+      notes.stay_out = needsCompound
+        ? `자리는 지키지만 의무 피트스톱이 아직 남아 있다. 나중에 그린 플래그에서 들어가면 손해가 크다`
+        : s.tyreAge + remaining > life
+          ? `자리는 지키지만 이 타이어로 ${s.tyreAge + remaining}랩을 버텨야 한다. 막판에 밀릴 수 있다`
+          : `자리를 지킨다. 이 타이어로 끝까지 갈 수 있다`;
+      break;
+    }
+    case 'rain_start':
+      advice = `${where}비가 시작됐다. 굵어지면 슬릭으론 못 버텨. 언제 바꿀지는 네가 정해.`;
+      notes.inters_now = '가장 안전하다. 비가 금방 그치면 다시 들어와야 한다';
+      notes.one_more_lap = '한 랩 더 버티며 상황을 본다. 비가 굵어지면 그 랩에 크게 잃는다';
+      notes.stay_slicks = '비가 금방 그친다는 데 거는 도박. 맞으면 크게 번다';
+      break;
+    case 'rain_stop':
+      advice = `${where}트랙이 마르고 있어. 라인이 생기면 슬릭이 훨씬 빠르다.`;
+      notes.slicks_now = '먼저 바꾸면 크게 벌 수 있다. 다시 젖으면 위험';
+      notes.stay_inters = '몇 랩 더 지켜본다. 마르는 게 빠르면 손해';
+      break;
+  }
   return {
     id: `${trigger}@${lap}`,
     lap,
     trigger,
-    options: RADIO_OPTIONS[trigger].map((o) => ({ ...o, recommended: o.id === rec })),
+    options: RADIO_OPTIONS[trigger].map((o) => ({ ...o, recommended: o.id === rec, note: notes[o.id] })),
+    ...(neutral ? { neutral } : {}),
+    advice,
+    ...(circuit ? (() => { const u = urgency(trigger, s, lap, L, mandatoryStop, circuit); return u && rec !== 'stay_out' ? { urgent: u } : {}; })() : {}),
   };
 }
 

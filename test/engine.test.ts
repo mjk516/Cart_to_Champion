@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CALENDAR_2026, carFromDriver, circuitById, DRIVERS_2026, forecastFinish, generateCandidates, initialWorld,
   isValidCandidate, MAX_TEAMS, MIN_TEAMS, ovr, PERSONALITIES, rngFor, runOffseason, runRace, simulateQualifying,
-  enforceOrder, F1_UPSET_CHANCE, F1_WINNER_TEAMS, STAT_SUM, teamById, teamForm, TEAMS_2026, type Personality, type RaceCar, type RaceInput,
+  enforceOrder, F1_UPSET_CHANCE, F1_WINNER_TEAMS, STAT_SUM, teamById, teamForm, TEAMS_2026, type Personality, type RaceCar, type RaceInput, type RadioOptionId,
 } from '../src/engine';
 
 const cars: RaceCar[] = DRIVERS_2026.map((d) => carFromDriver(d, teamById(d.teamId)));
@@ -272,5 +272,27 @@ describe('F1 팀 진입·철수', () => {
     const snapshot = JSON.stringify(world);
     runOffseason(world, 2027, 1);
     expect(JSON.stringify(world)).toBe(snapshot);
+  });
+});
+
+describe('엔지니어 무전(SPEC §5.5 v0.31)', () => {
+  it('무전에는 엔지니어 한마디와 선택지별 장단점이 붙고, 급박한 상황은 팀이 바로 정한다', () => {
+    let pending = 0, forced = 0;
+    for (let seed = 0; seed < 400; seed++) {
+      const input = { ...raceInput(seed, 'austria'), myCarId: cars[10]!.id, autoRadio: false };
+      let out = runRace(input);
+      const radio: Record<string, RadioOptionId> = {};
+      for (let k = 0; k < 6 && out.status === 'pending'; k++) {
+        pending++;
+        expect(out.decision.advice).toBeTruthy();
+        expect(out.decision.urgent).toBeUndefined();
+        for (const o of out.decision.options) expect(o.note).toBeTruthy();
+        radio[out.decision.id] = out.decision.options[0]!.id;
+        out = runRace({ ...input, radio });
+      }
+      forced += out.incidents.filter((i) => i.type === 'radio' && i.forced).length;
+    }
+    expect(pending).toBeGreaterThan(50);
+    expect(forced).toBeGreaterThan(0);
   });
 });

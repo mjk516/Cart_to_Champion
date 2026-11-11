@@ -59,6 +59,8 @@ export function Weekend() {
   const home = homeGpEffect(c, wk.circuit);
   const lastRound = live.round >= rounds - 1;
   const lastStep = live.step >= wk.sessions.length;
+  // 프랙티스는 결과에 영향이 없으므로 첫 퀄리파잉으로 건너뛸 수 있다(step은 세션 번호 + 1)
+  const qualiStep = wk.sessions.findIndex((x) => x.type === 'quali' && !x.display) + 1;
 
   const addPoints = (rows: Classified[] | null, pts: Record<string, number>) => {
     if (rows) for (const r of rows) pts[r.id] = (pts[r.id] ?? 0) + r.points;
@@ -190,6 +192,7 @@ export function Weekend() {
             <Button onClick={next} disabled={!canNext}>
               {lastStep ? (lastRound ? '시즌 마치기' : '다음 그랑프리') : '다음 세션'}
             </Button>
+            {qualiStep > live.step && <Button variant="ghost" onClick={() => updateLive({ step: qualiStep })}>{wk.circuit.sprint ? '스프린트 퀄리파잉으로 바로 가기' : '퀄리파잉으로 바로 가기'}</Button>}
             {!lastStep && <Button variant="ghost" onClick={skipToResult}>레이스 결과로 바로 가기</Button>}
             <Button variant="ghost" className="ml-auto" onClick={() => confirmBox.ask(<>남은 {rounds - live.round}개 라운드를 자동으로 진행하고 시즌을 마칠까요? 지금까지 고른 무전은 그대로 반영되고, 남은 무전은 엔지니어 추천을 따릅니다.</>, finishLive, { confirmLabel: '남은 시즌 자동 진행' })}>남은 시즌 자동 진행</Button>
           </div>
