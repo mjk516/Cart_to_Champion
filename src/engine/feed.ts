@@ -11,12 +11,23 @@ export interface FeedItem {
   author: string;
   text: string;
   likes?: number;
+  /** 팬 게시물이 올라온 커뮤니티(SPEC §6.1 v0.19) */
+  platform?: FanPlatform;
+  /** 영어권 커뮤니티 글을 한국어로 옮긴 것 */
+  translated?: boolean;
 }
+
+/** 팬 반응이 올라오는 실제 커뮤니티. 게시물 내용과 작성자는 모두 가상이다 */
+export type FanPlatform = 'reddit' | 'dcinside' | 'x';
+export const PLATFORM_LABEL: Record<FanPlatform, string> = { reddit: 'r/formula1', dcinside: 'F1 갤러리', x: 'X' };
+/** 반응 수 표시: 레딧 업보트, 갤러리 추천, X 좋아요 */
+export const PLATFORM_LIKE: Record<FanPlatform, string> = { reddit: '▲', dcinside: '추천', x: '♥' };
 
 type Situation = 'champion' | 'winner' | 'podium' | 'over' | 'under' | 'steady' | 'noSeat' | 'reserve';
 
 const EXPERTS = ['해설가 한도윤', '전 드라이버 마르코 벨리니', '데이터 기자 서지아'];
 const PRESS = ['패독 데일리', '그리드 위클리', '레이싱 코리아 뉴스'];
+const REDDIT_NAMES = ['DRS_Train', 'Undercut_Enjoyer', 'BoxBoxBox', 'SafetyCarSimp', 'TyreWhisperer', 'Chequered_Flag', 'GravelTrapGuy', 'PurpleSector', 'HalfwayHairpin', 'PitWallPundit'];
 const FAN_NAMES = ['피트레인지기', '체커기수집가', 'DRS열림', '언더컷장인', '세이프티카타고싶다', '새벽레이스러', '타이어휘파람', '헤어핀코너', '그리드걸음마', '랩타임중독'];
 
 // ── 템플릿(약 80개) ──────────────────────────────────────────────
@@ -167,6 +178,21 @@ function likes(rng: Rng, c: Career, big = false): number {
   return Math.round(base * (0.5 + rng()));
 }
 
+/** 커뮤니티를 고르고 그곳 말투의 작성자 이름을 붙인다. 한국 국적이면 F1 갤러리, 아니면 레딧 비중이 크다 */
+function fanPost(rng: Rng, c: Career, text: string): FeedItem {
+  const roll = rng();
+  const kr = c.driver.nationality === 'KR';
+  const platform: FanPlatform = kr ? (roll < 0.5 ? 'dcinside' : roll < 0.8 ? 'x' : 'reddit') : (roll < 0.5 ? 'reddit' : roll < 0.9 ? 'x' : 'dcinside');
+  const n = likes(rng, c);
+  if (platform === 'reddit') return { kind: 'fan', platform, author: `u/${pick(rng, REDDIT_NAMES)}_${int(rng, 1, 999)}`, text, likes: n, translated: true };
+  if (platform === 'dcinside') {
+    // 갤러리는 유동(ㅇㅇ + IP 앞자리)이 많고 가끔 고정닉
+    const author = rng() < 0.7 ? `ㅇㅇ(${int(rng, 1, 223)}.${int(rng, 0, 255)})` : pick(rng, FAN_NAMES);
+    return { kind: 'fan', platform, author, text, likes: Math.max(1, Math.round(n / 8)) };
+  }
+  return { kind: 'fan', platform, author: `@${pick(rng, FAN_NAMES)}${int(rng, 1, 99)}`, text, likes: n };
+}
+
 /** 시즌 피드: 해설가 1 + 팀 계정 1(레이스 시트) + 팬 2 + 특별 기사(데뷔·루키·노장·자산) 0~1 */
 export function seasonFeed(c: Career, r: SeasonRecord): FeedItem[] {
   const rng = rngFor(c.seed, 'feed', r.year);
@@ -190,10 +216,10 @@ export function seasonFeed(c: Career, r: SeasonRecord): FeedItem[] {
 
   // 팬 2명: 여론에 따라 긍정/부정, 그리고 밈 또는 라이벌 팬
   const positive = c.media.sentiment >= 0 && s !== 'under';
-  items.push({ kind: 'fan', author: `@${pick(rng, FAN_NAMES)}${int(rng, 1, 99)}`, text: fill(pick(rng, positive ? FAN_POS : FAN_NEG), c, r), likes: likes(rng, c) });
+  items.push(fanPost(rng, c, fill(pick(rng, positive ? FAN_POS : FAN_NEG), c, r)));
   const showman = PERSONALITIES[c.driver.personality].id === 'showman' || PERSONALITIES[c.driver.personality].temperament === 'bad';
   const second = r.wins > 0 && rng() < 0.5 ? FAN_RIVAL : showman || rng() < 0.6 ? FAN_MEME : FAN_RIVAL;
-  items.push({ kind: 'fan', author: `@${pick(rng, FAN_NAMES)}${int(rng, 1, 99)}`, text: fill(pick(rng, second), c, r), likes: likes(rng, c) });
+  items.push(fanPost(rng, c, fill(pick(rng, second), c, r)));
 
   return items;
 }

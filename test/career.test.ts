@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   applyOffseason, autoplayCareer, createCareer, DEFAULT_POLICY, getOffseason, MAX_TEAMS, MIN_TEAMS, replayCareer,
   CALENDAR_2026, f1WeekendFor, isF1RaceSeason, radioKey, type RadioOptionId, EVENTS, managerAdvice, MAJOR_FLOOR, OTHERS_CAP, feedTemplateCount, pendingEventCards, resolveEvent, F1_WINNER_TEAMS, f1Rules, generateHidden, initialWorld, NEW_TEAM_START, PERSONALITIES, runOffseason, TEAMS_2026, runSeason, STAT_KEYS, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, superLicencePoints, type CareerSetup,
+  evolveCalendar, RETURNING_CIRCUITS, CALENDAR_CHANGE_FROM, CALENDAR_COOLDOWN, f1Calendar, type CalendarChange, hasHomeGp, homeGpEffect, type Personality,
 } from '../src/engine';
+import { CIRCUIT_PATHS } from '../src/app/circuitPaths';
 
 const setup = (seed: number, extra: Partial<CareerSetup> = {}): CareerSetup => ({
   seed, name: '테스트', nationality: 'KR', wealthTier: 3, personality: 'fighter', candidateIndex: 0, focus: ['pace'], ...extra,
@@ -335,5 +337,71 @@ describe('결정성과 재생(랭킹 검증 SPEC §9)', () => {
     const off = tampered.find((e) => e.kind === 'offseason');
     if (off && off.kind === 'offseason') off.choice = { offerId: 'f1:mclaren' };
     expect(() => replayCareer(c.setup, tampered)).toThrow();
+  });
+});
+
+describe('F1 캘린더 변화 (SPEC §2.1 v0.17)', () => {
+  const known = [...CALENDAR_2026.map((x) => x.id), ...RETURNING_CIRCUITS.map((x) => x.id)];
+  const start = CALENDAR_2026.map((x) => ({ id: x.id, sprint: x.sprint }));
+
+  it('낮은 확률로 바뀌고, 라운드·스프린트 수와 개막전·최종전은 그대로, 서킷은 겹치지 않는다', () => {
+    let changes = 0, years = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      let slots = start;
+      const past: CalendarChange[] = [];
+      for (let season = 2027; season <= 2056; season++) {
+        const out = evolveCalendar(slots, season, seed, known, past);
+        years++;
+        if (out.change) {
+          changes++;
+          expect(season).toBeGreaterThanOrEqual(CALENDAR_CHANGE_FROM);
+          expect(known).toContain(out.change.in);
+          expect(past.every((p) => season - p.season >= CALENDAR_COOLDOWN)).toBe(true);
+          expect(past.filter((p) => season - p.season < 8).map((p) => p.out)).not.toContain(out.change.in);
+          past.push(out.change);
+        }
+        slots = out.slots;
+        expect(slots).toHaveLength(24);
+        expect(new Set(slots.map((s) => s.id)).size).toBe(24);
+        expect(slots.filter((s) => s.sprint)).toHaveLength(6);
+        expect(slots[0]!.id).toBe('australia');
+        expect(slots[23]!.id).toBe('abu_dhabi');
+      }
+    }
+    const rate = changes / years;
+    expect(rate).toBeGreaterThan(0.04);
+    expect(rate).toBeLessThan(0.15);
+  });
+
+  it('복귀 후보는 모두 실제 레이아웃이 있다', () => {
+    for (const x of RETURNING_CIRCUITS) expect(CIRCUIT_PATHS[x.id]).toBeTruthy();
+    for (const x of CALENDAR_2026) expect(CIRCUIT_PATHS[x.id]).toBeTruthy();
+  });
+
+  it('커리어 중 캘린더가 바뀌어도 리플레이가 같은 결과를 낸다', () => {
+    const c = autoplayCareer(setup(77), DEFAULT_POLICY, 40);
+    const r = replayCareer(c.setup, c.choiceLog);
+    expect(r.world.calendar).toEqual(c.world.calendar);
+    expect(f1Calendar(c)).toHaveLength(24);
+  });
+});
+
+describe('홈 그랑프리 (SPEC §3.1, §5.6 v0.18)', () => {
+  it('캘린더에 자기 나라 그랑프리가 있는지 안다', () => {
+    expect(hasHomeGp(createCareer(setup(3, { nationality: 'GB' })))).toBe(true);
+    expect(hasHomeGp(createCareer(setup(3, { nationality: 'KR' })))).toBe(false);
+  });
+
+  it('홈 그랑프리에서만 능력치가 오르고, 일관성은 기질이 좋으면 오르고 나쁘면 내린다', () => {
+    const silverstone = CALENDAR_2026.find((x) => x.id === 'britain')!;
+    const monza = CALENDAR_2026.find((x) => x.id === 'italy')!;
+    const gb = (personality: Personality) => createCareer(setup(3, { nationality: 'GB', personality }));
+    expect(homeGpEffect(gb('calm'), monza)).toBeNull();
+    for (const p of Object.values(PERSONALITIES)) {
+      const e = homeGpEffect(gb(p.id), silverstone)!;
+      expect(e.boost).toBeGreaterThan(0);
+      if (p.temperament === 'good') expect(e.mental).toBeGreaterThan(0);
+      if (p.temperament === 'bad') expect(e.mental).toBeLessThan(0);
+    }
   });
 });

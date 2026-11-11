@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from 'react';
 import {
-  CALENDAR_2026, circuitType, f1WeekendFor, forecastFinish, ovr, radioKey, runRace,
+  circuitType, f1Calendar, f1WeekendFor, homeGpEffect, forecastFinish, ovr, radioKey, runRace,
   type Classified, type F1Weekend, type F1WeekendSession,
 } from '../engine';
 import { LiveRace } from './LiveRace';
+import { F1TeamBadge } from './TeamBadge';
 import { useGame } from './store';
 import { Bar, Button, Card, Pill } from './ui';
 
@@ -52,7 +53,9 @@ export function Weekend() {
   const raceKey = session?.type === 'race' ? `${live.round}:${session.kind}` : null;
   const raceDone = raceKey !== null && (doneKey === raceKey || skipped);
   const canNext = !session || session.type === 'quali' || raceDone;
-  const lastRound = live.round >= CALENDAR_2026.length - 1;
+  const rounds = f1Calendar(c).length;
+  const home = homeGpEffect(c, wk.circuit);
+  const lastRound = live.round >= rounds - 1;
   const lastStep = live.step >= wk.sessions.length;
 
   const addPoints = (rows: Classified[] | null, pts: Record<string, number>) => {
@@ -83,12 +86,13 @@ export function Weekend() {
     <div className="mx-auto max-w-6xl space-y-4 px-4 py-6">
       <header className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <div className="text-xs text-zinc-400">{c.year} F1 · 라운드 {live.round + 1}/{CALENDAR_2026.length}</div>
+          <div className="text-xs text-zinc-400">{c.year} F1 · 라운드 {live.round + 1}/{rounds}</div>
           <h1 className="text-2xl font-black">{wk.circuit.name}</h1>
           <div className="mt-1 flex flex-wrap gap-1">
             <Pill>{TYPE_LABEL[circuitType(wk.circuit)]}</Pill>
             {wk.circuit.sprint && <Pill tone="amber">스프린트 주말</Pill>}
             <Pill tone="blue">비 확률 {Math.round(wk.circuit.rainChance * 100)}%</Pill>
+            {home && <Pill tone="green">홈 그랑프리</Pill>}
           </div>
         </div>
         <div className="flex flex-wrap gap-1 text-xs">
@@ -114,6 +118,13 @@ export function Weekend() {
                 <div><div className="flex justify-between text-sm"><span>차 성능</span><b>{carRank}위 / {teams.length}팀</b></div><Bar value={teams.length - carRank + 1} max={teams.length} color="bg-sky-400" /></div>
                 <div><div className="flex justify-between text-sm"><span>드라이버 실력</span><b>{driverRank}위 / {wk.cars.length}명</b></div><Bar value={wk.cars.length - driverRank + 1} max={wk.cars.length} color="bg-emerald-400" /></div>
               </div>
+              {home && (
+                <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/5 p-3 text-sm">
+                  <div className="font-bold">홈 그랑프리</div>
+                  <div className="text-zinc-300">{home.line}</div>
+                  <div className="mt-1 text-xs text-zinc-400">이번 주말 능력치 +{home.boost} · 일관성 {home.mental >= 0 ? '+' : ''}{home.mental}</div>
+                </div>
+              )}
               <p className="text-xs text-zinc-500">예상 순위는 이번 주말을 80번 미리 돌린 결과의 80% 구간입니다.</p>
             </div>
           )}
@@ -128,7 +139,7 @@ export function Weekend() {
                   return (
                     <li key={id} className={`flex items-center gap-2 border-b border-white/5 py-1 ${id === ME ? 'font-bold text-racing' : ''}`}>
                       <span className="w-6 text-right text-zinc-400">{i + 1}</span>
-                      <span className="h-4 w-1 rounded" style={{ background: teamColor(wk.cars.find((x) => x.id === id)?.teamId ?? '') }} />
+                      <F1TeamBadge teamId={wk.cars.find((x) => x.id === id)?.teamId} size={18} />
                       <span className="w-12">{codeOf(id)}</span>
                       <span className="flex-1 text-right tabular-nums text-zinc-400">{i === 0 ? '최고 기록' : `+${((session.result.times[id] ?? 0) - t0).toFixed(3)}`}</span>
                       {elim && <span className="text-xs text-zinc-500">{elim}</span>}
@@ -168,7 +179,7 @@ export function Weekend() {
           {standings.length === 0 ? <p className="text-sm text-zinc-400">아직 치른 레이스가 없습니다.</p> : (
             <ol className="space-y-1 text-sm">
               {standings.slice(0, 10).map(([id, p], i) => (
-                <li key={id} className={`flex gap-2 ${id === ME ? 'font-bold text-racing' : ''}`}><span className="w-5 text-right text-zinc-500">{i + 1}</span><span className="flex-1">{codeOf(id)}</span><span>{p}</span></li>
+                <li key={id} className={`flex items-center gap-2 ${id === ME ? 'font-bold text-racing' : ''}`}><span className="w-5 text-right text-zinc-500">{i + 1}</span><F1TeamBadge teamId={wk.cars.find((x) => x.id === id)?.teamId} size={16} /><span className="flex-1">{codeOf(id)}</span><span>{p}</span></li>
               ))}
               {myPos > 10 && <li className="flex gap-2 font-bold text-racing"><span className="w-5 text-right">{myPos}</span><span className="flex-1">{codeOf(ME)}</span><span>{live.points[ME] ?? 0}</span></li>}
             </ol>

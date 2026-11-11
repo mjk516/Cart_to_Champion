@@ -5,7 +5,7 @@
 // SVG path로 저장한다. 결과: src/app/circuitPaths.ts
 
 import { readFileSync, writeFileSync } from 'node:fs';
-import { CALENDAR_2026 } from '../src/engine/data';
+import { ALL_F1_CIRCUITS } from '../src/engine/data';
 
 const W = 640, H = 300, PAD = 16;
 
@@ -16,6 +16,9 @@ const MAP: Record<string, string> = {
   britain: 'gb-1948', belgium: 'be-1925', hungary: 'hu-1986', netherlands: 'nl-1948', italy: 'it-1922',
   madrid: 'es-2026', azerbaijan: 'az-2016', singapore: 'sg-2008', usa: 'us-2012', mexico: 'mx-1962',
   brazil: 'br-1940', las_vegas: 'us-2023', qatar: 'qa-2004', abu_dhabi: 'ae-2009',
+  // 캘린더 복귀 후보(21세기 F1 개최 서킷)
+  imola: 'it-1953', portimao: 'pt-2008', istanbul: 'tr-2005', sepang: 'my-1999', hockenheim: 'de-1932',
+  nurburgring: 'de-1927', paul_ricard: 'fr-1969', magny_cours: 'fr-1960', mugello: 'it-1914', indianapolis: 'us-1909',
 };
 
 interface Feature { properties: { id: string }; geometry: { type: string; coordinates: number[][] } }
@@ -48,7 +51,7 @@ function toPath(coords: number[][]): string {
 }
 
 const out: Record<string, string> = {};
-for (const c of CALENDAR_2026) {
+for (const c of ALL_F1_CIRCUITS) {
   const id = MAP[c.id];
   const f = geo.features.find((x) => x.properties.id === id);
   if (!f || f.geometry.type !== 'LineString') throw new Error(`레이아웃 없음: ${c.id} (${id})`);

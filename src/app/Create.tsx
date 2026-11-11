@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import {
-  generateCandidates, ovr, PERSONALITIES, recommendedFocus, STAT_KEYS, WEALTH_TIERS,
+  CALENDAR_2026, generateCandidates, RETURNING_CIRCUITS, ovr, PERSONALITIES, recommendedFocus, STAT_KEYS, WEALTH_TIERS,
   type Personality, type StatKey, type WealthTier,
 } from '../engine';
 import { formatMoney, pct } from './format';
@@ -10,10 +10,34 @@ import { SignaturePad } from './SignaturePad';
 import { randomSeed, useGame } from './store';
 import { Bar, Button, Card, Pill, STAT_LABELS, TEMPERAMENT_LABELS } from './ui';
 
-const NATIONS: Array<[string, string]> = [
-  ['KR', '대한민국'], ['JP', '일본'], ['GB', '영국'], ['IT', '이탈리아'], ['DE', '독일'], ['FR', '프랑스'],
-  ['ES', '스페인'], ['NL', '네덜란드'], ['US', '미국'], ['BR', '브라질'], ['AU', '호주'], ['MX', '멕시코'],
+/** 국적 목록(지역별). 국가 코드는 ISO 3166-1 alpha-2 */
+const NATION_GROUPS: Array<[string, Array<[string, string]>]> = [
+  ['아시아', [
+    ['KR', '대한민국'], ['JP', '일본'], ['CN', '중국'], ['TW', '대만'], ['HK', '홍콩'], ['SG', '싱가포르'], ['MY', '말레이시아'],
+    ['TH', '태국'], ['ID', '인도네시아'], ['PH', '필리핀'], ['VN', '베트남'], ['IN', '인도'], ['KZ', '카자흐스탄'], ['AZ', '아제르바이잔'],
+  ]],
+  ['유럽', [
+    ['GB', '영국'], ['IE', '아일랜드'], ['FR', '프랑스'], ['DE', '독일'], ['IT', '이탈리아'], ['ES', '스페인'], ['PT', '포르투갈'],
+    ['NL', '네덜란드'], ['BE', '벨기에'], ['LU', '룩셈부르크'], ['MC', '모나코'], ['CH', '스위스'], ['AT', '오스트리아'], ['HU', '헝가리'],
+    ['CZ', '체코'], ['PL', '폴란드'], ['SK', '슬로바키아'], ['SI', '슬로베니아'], ['HR', '크로아티아'], ['RO', '루마니아'], ['GR', '그리스'],
+    ['TR', '튀르키예'], ['DK', '덴마크'], ['SE', '스웨덴'], ['NO', '노르웨이'], ['FI', '핀란드'], ['EE', '에스토니아'], ['UA', '우크라이나'],
+  ]],
+  ['아메리카', [
+    ['US', '미국'], ['CA', '캐나다'], ['MX', '멕시코'], ['BR', '브라질'], ['AR', '아르헨티나'], ['CL', '칠레'], ['CO', '콜롬비아'],
+    ['VE', '베네수엘라'], ['PE', '페루'], ['UY', '우루과이'],
+  ]],
+  ['중동·아프리카', [
+    ['AE', '아랍에미리트'], ['SA', '사우디아라비아'], ['QA', '카타르'], ['BH', '바레인'], ['IL', '이스라엘'], ['ZA', '남아프리카공화국'], ['MA', '모로코'],
+    ['EG', '이집트'], ['KE', '케냐'], ['NG', '나이지리아'],
+  ]],
+  ['오세아니아', [['AU', '호주'], ['NZ', '뉴질랜드']]],
 ];
+/** 국가 코드 → 국기 이모지 */
+const flag = (code: string) => String.fromCodePoint(...[...code].map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65));
+/** 2026 캘린더에 그랑프리가 있는 나라(SPEC §3.1 홈 그랑프리) */
+const HOME_GP = new Set(CALENDAR_2026.map((x) => x.country));
+/** 지금은 없지만 캘린더가 바뀌면 그랑프리가 돌아올 수 있는 나라 */
+const MAYBE_HOME_GP = new Set(RETURNING_CIRCUITS.map((x) => x.country).filter((x) => !HOME_GP.has(x)));
 const STEPS = ['기본 정보', '자산 규모', '성격', '후보 선택', '서명'];
 
 export function Create() {
@@ -59,8 +83,19 @@ export function Create() {
             <label className="space-y-1">
               <span className="text-xs text-zinc-400">국적</span>
               <select aria-label="국적" value={nationality} onChange={(e) => setNationality(e.target.value)} className="w-full rounded-xl border border-white/15 bg-zinc-950 px-3 py-2.5">
-                {NATIONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
+                {NATION_GROUPS.map(([region, list]) => (
+                  <optgroup key={region} label={region}>
+                    {list.map(([code, label]) => <option key={code} value={code}>{flag(code)} {label}{HOME_GP.has(code) ? ' · 홈 그랑프리' : ''}</option>)}
+                  </optgroup>
+                ))}
               </select>
+              <span className="block text-xs text-zinc-500">
+                {HOME_GP.has(nationality)
+                  ? '캘린더에 홈 그랑프리가 있어 F1 팀들이 홈 시장을 보고 더 쳐줍니다(F1 데뷔 전). 홈 그랑프리 주말에는 능력치가 조금 오르고, 멘탈은 성격에 따라 오르거나 내립니다.'
+                  : MAYBE_HOME_GP.has(nationality)
+                    ? '지금 캘린더에는 홈 그랑프리가 없지만, 캘린더가 바뀌면 이 나라 서킷이 돌아올 수 있습니다.'
+                    : '캘린더에 홈 그랑프리가 없는 나라입니다.'}
+              </span>
             </label>
           </div>
           <p className="mt-4 text-sm text-zinc-400">12세, 첫 카트 시즌부터 시작합니다.</p>

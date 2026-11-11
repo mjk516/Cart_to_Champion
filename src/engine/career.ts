@@ -7,7 +7,8 @@ import { PERSONALITIES } from './creation';
 import { applyEventChoice, EVENT_BY_ID, eventCard, pickEvents, type EventCard } from './events';
 import { seasonFeed, type FeedItem } from './feed';
 import { generateManager, type Manager } from './manager';
-import { CALENDAR_2026, CAR_WEIGHT, DRIVERS_2026, F1_WINNER_TEAMS, ovr, POINTS_RACE, TEAMS_2026 } from './data';
+import { evolveCalendar, type CalendarChange, type CalendarSlot } from './calendar';
+import { ALL_F1_CIRCUITS, CALENDAR_2026, CAR_WEIGHT, circuitById, DRIVERS_2026, F1_WINNER_TEAMS, ovr, POINTS_RACE, TEAMS_2026 } from './data';
 import { teamForm } from './form';
 import {
   addXp, ageCurve, applyAging, applyXp, generateHidden, recommendedPlan, SESSION_XP, TRAINING, trainingOutcome,
@@ -21,7 +22,7 @@ import {
   ACADEMIES, LADDER, nextSeries, SERIES, seriesLabel, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, type SeriesId,
 } from './series';
 import { initialWorld, runOffseason, type TeamNews, type TeamWorld } from './teams';
-import { STAT_KEYS, type Personality, type StatKey, type Stats, type WealthTier } from './types';
+import { STAT_KEYS, type Circuit, type Personality, type StatKey, type Stats, type WealthTier } from './types';
 
 export const ENGINE_VERSION = '0.2.0';
 export const PLAYER_ID = 'player';
@@ -136,6 +137,45 @@ export interface F1World {
   drivers: F1Driver[];
   champions: Array<{ year: number; driverId: string; name: string; teamId: string }>;
   news: TeamNews[];
+  /** 이번 시즌 F1 캘린더(라운드 순서). 이전 저장 파일에는 없을 수 있다(그때는 2026 캘린더) */
+  calendar?: CalendarSlot[];
+  /** 지금까지의 캘린더 변화 */
+  calendarLog?: CalendarChange[];
+}
+
+const CALENDAR_2026_SLOTS: CalendarSlot[] = CALENDAR_2026.map((x) => ({ id: x.id, sprint: x.sprint }));
+
+/** 홈 그랑프리 시장 보너스(SPEC §3.1 v0.18): 캘린더에 자기 나라 그랑프리가 있으면 F1 팀의 평가에 더한다 */
+export const HOME_MARKET_BONUS = 5;
+/** 신인 보장 기준: F2 이 순위 안(홈 시장이 있으면 더 넓다) */
+export const ROOKIE_GUARANTEE_POS = 5;
+export const ROOKIE_GUARANTEE_POS_HOME = 10;
+/** 홈 그랑프리 능력치 상승(일관성 제외) */
+export const HOME_GP_BOOST = 2;
+
+/** 이번 시즌 캘린더에 이 나라의 그랑프리가 있는가 */
+export function hasHomeGp(c: Career, nationality = c.driver.nationality): boolean {
+  return f1Calendar(c).some((x) => x.country === nationality);
+}
+
+export interface HomeGpEffect { boost: number; mental: number; line: string }
+
+/** 이 서킷이 플레이어의 홈 그랑프리면 그 효과(SPEC §5.6). 능력치는 조금 오르고, 일관성은 성격에 따라 오르거나 내린다 */
+export function homeGpEffect(c: Career, circuit: Circuit): HomeGpEffect | null {
+  if (circuit.country !== c.driver.nationality) return null;
+  const p = PERSONALITIES[c.driver.personality];
+  return { boost: HOME_GP_BOOST, mental: p.homeMental, line: p.homeLine };
+}
+
+function withHomeGp(stats: Stats, e: HomeGpEffect): Stats {
+  const out = { ...stats };
+  for (const k of STAT_KEYS) out[k] = Math.min(99, Math.max(1, out[k] + (k === 'consistency' ? e.mental : e.boost)));
+  return out;
+}
+
+/** 이번 시즌 F1 캘린더(SPEC §2.1 v0.17) */
+export function f1Calendar(c: Career): Circuit[] {
+  return (c.world.calendar ?? CALENDAR_2026_SLOTS).map((s) => ({ ...circuitById(s.id), sprint: s.sprint }));
 }
 
 export type ChoiceLogEntry =
@@ -244,6 +284,7 @@ export function createCareer(setup: CareerSetup): Career {
     })),
     champions: [],
     news: [],
+    calendar: CALENDAR_2026_SLOTS.map((s) => ({ ...s })),
   };
 
   return {
@@ -498,7 +539,7 @@ export type F1WeekendSession = F1WeekendQuali | F1WeekendRace;
 
 export interface F1Weekend {
   round: number;
-  circuit: (typeof CALENDAR_2026)[number];
+  circuit: Circuit;
   cars: RaceCar[];
   sessions: F1WeekendSession[];
 }
@@ -511,8 +552,14 @@ export interface F1Weekend {
 function f1Weekend(c: Career, cars: RaceCar[], seed: number, round: number, radio: Record<string, RadioOptionId>, racing: boolean, autoRadio = true): F1Weekend {
   const rules = f1Rules(c);
   const w = CAR_WEIGHT.f1;
-  const circuit = CALENDAR_2026[round]!;
-  const roundCars = cars.map((car) => ({ ...car, teamQuality: car.teamQuality + teamForm(c.seed, c.year, car.teamId, circuit, round, CALENDAR_2026.length) }));
+  const calendar = f1Calendar(c);
+  const circuit = calendar[round]!;
+  const home = homeGpEffect(c, circuit);
+  const roundCars = cars.map((car) => ({
+    ...car,
+    stats: home && car.id === PLAYER_ID ? withHomeGp(car.stats, home) : car.stats,
+    teamQuality: car.teamQuality + teamForm(c.seed, c.year, car.teamId, circuit, round, calendar.length),
+  }));
   const sessions: F1WeekendSession[] = [];
   const fps: Array<'FP1' | 'FP2' | 'FP3'> = circuit.sprint ? ['FP1'] : ['FP1', 'FP2', 'FP3'];
   for (const fp of fps) {
@@ -560,7 +607,7 @@ function simulateF1(c: Career, stats: Stats, seed: number, radio: Record<string,
   let finished = 0;
   let beat = 0;
   let duels = 0;
-  CALENDAR_2026.forEach((circuit, round) => {
+  f1Calendar(c).forEach((circuit, round) => {
     addXp(sim.raceXp, SESSION_XP.practice, (circuit.sprint ? 1 : 3) * (racing ? 1 : 0.4));
     const wk = f1Weekend(c, cars, seed, round, radio, racing);
     for (const sess of wk.sessions) {
@@ -631,9 +678,10 @@ function quickF1World(c: Career, seed: number): void {
   const pts = new Map<string, number>();
   const teamPts = new Map<string, number>();
   const w = CAR_WEIGHT.f1;
-  CALENDAR_2026.forEach((circuit, round) => {
+  const calendar = f1Calendar(c);
+  calendar.forEach((circuit, round) => {
     const raw = entries
-      .map((e) => ({ e, s: w * (e.q + teamForm(c.seed, c.year, e.teamId, circuit, round, CALENDAR_2026.length)) + (1 - w) * (ovr(e.d.stats) / 100) + normal(r) * 0.008, dnf: r() < 0.08 }))
+      .map((e) => ({ e, s: w * (e.q + teamForm(c.seed, c.year, e.teamId, circuit, round, calendar.length)) + (1 - w) * (ovr(e.d.stats) / 100) + normal(r) * 0.008, dnf: r() < 0.08 }))
       .filter((x) => !x.dnf)
       .sort((a, b) => b.s - a.s);
     const order = enforceOrder(raw, (x) => x.e.teamId, rules, r());
@@ -955,7 +1003,9 @@ export function getOffseason(c: Career): Offseason {
     // F2 상위권 졸업생 보너스, 36세 이후 나이 감점(전성기는 37세까지)
     const graduate = current === 'f2' && last.seat === 'race' ? (last.champion ? 4 : (last.position ?? 99) <= 3 ? 2 : 0) : 0;
     const agePenalty = Math.max(0, nextAge - 36) * 1.0;
-    const rating = ovr(c.driver.stats) + f1Perf + c.media.reputation / 40 + graduate - agePenalty;
+    // F1 데뷔 전에는 캘린더에 자기 나라 그랑프리가 있으면 팀들이 홈 시장을 보고 더 쳐준다(데뷔 뒤에는 성적으로만 평가)
+    const homeMarket = c.f1Debut === null && hasHomeGp(c) ? HOME_MARKET_BONUS : 0;
+    const rating = ovr(c.driver.stats) + f1Perf + c.media.reputation / 40 + graduate - agePenalty + homeMarket;
     const sortedTeams = [...c.world.teams.teams].sort((a, b) => b.quality - a.quality);
     for (const t of sortedTeams) {
       const openSeats = plan.open.get(t.id) ?? 0;
@@ -997,7 +1047,7 @@ export function getOffseason(c: Career): Offseason {
     const hasRaceOffer = offers.some((o) => o.series === 'f1' && o.seat === 'race' && o.id !== 'stay');
     const rookieGuarantee =
       f1Eligible && !inF1Race && nextAge <= 25 &&
-      ((current === 'f2' && last.seat === 'race' && (last.position ?? 99) <= 5) || (current === 'f1' && last.seat === 'reserve'));
+      ((current === 'f2' && last.seat === 'race' && (last.position ?? 99) <= (homeMarket ? ROOKIE_GUARANTEE_POS_HOME : ROOKIE_GUARANTEE_POS)) || (current === 'f1' && last.seat === 'reserve'));
     if (rookieGuarantee && !hasRaceOffer) {
       const bottom = sortedTeams.slice(-4);
       const target = bottom
@@ -1149,6 +1199,15 @@ export function applyOffseason(input: Career, choice: OffseasonChoice): Career {
   c.world.news.push(...teamOut.news);
   for (const d of c.world.drivers) if (d.teamId && removed.includes(d.teamId)) d.teamId = null;
   if (c.contract?.teamId && removed.includes(c.contract.teamId)) c.contract = null;
+
+  // F1 캘린더 변화(낮은 확률, 21세기 개최 서킷만 복귀)
+  const cal = evolveCalendar(c.world.calendar ?? CALENDAR_2026_SLOTS, nextYear, c.seed, ALL_F1_CIRCUITS.map((x) => x.id), c.world.calendarLog ?? []);
+  c.world.calendar = cal.slots.map((s) => ({ ...s }));
+  if (cal.change) {
+    c.world.calendarLog = [...(c.world.calendarLog ?? []), cal.change];
+    const outName = circuitById(cal.change.out).name, inName = circuitById(cal.change.in).name;
+    c.world.news.push({ season: nextYear, kind: 'calendar', team: inName, text: `${nextYear} F1 캘린더: ${inName} 복귀, ${outName} 제외` });
+  }
 
   ageWorldDrivers(c, r, nextYear);
   fillOpenSeats(c, r, nextYear);
