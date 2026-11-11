@@ -16,7 +16,25 @@ export type RadioOptionId =
   | 'slicks_now' | 'stay_inters';
 
 export interface RadioOption { id: RadioOptionId; label: string; recommended: boolean }
-export interface RadioDecision { id: string; lap: number; trigger: RadioTrigger; options: RadioOption[] }
+/**
+ * 세이프티카·VSC·레드 플래그 상황 정보(SPEC §5.5 v0.30): 사고 지점, 크기, 예상 시간.
+ * 실제 시간은 발령 다음 랩에 정해져서, 예상보다 짧거나 길게 끝날 수 있다(무전 선택 뒤의 운).
+ */
+export interface Neutralization {
+  phase: Exclude<Phase, 'green'>;
+  /** 사고 지점(랩 비율 0~1, 출발선 기준) */
+  at: number;
+  severity: 'S' | 'M' | 'L';
+  /** 예상 랩 수 */
+  expectedLaps: number;
+  /** 예상보다 짧게(1랩 덜) 끝날 확률 */
+  shorter: number;
+  /** 예상보다 길게(1~2랩 더) 끝날 확률 */
+  longer: number;
+  /** 사고 차(잔해면 없음) */
+  car?: string;
+}
+export interface RadioDecision { id: string; lap: number; trigger: RadioTrigger; options: RadioOption[]; neutral?: Neutralization }
 
 export interface RaceCar {
   id: string;
@@ -93,7 +111,10 @@ export type Incident =
   | { type: 'lead_change'; lap: number; leader: string }
   | { type: 'crash' | 'mech_dnf'; lap: number; car: string; neutralization: Phase | 'none' }
   | { type: 'debris'; lap: number }
-  | { type: 'sc_deploy' | 'vsc_deploy' | 'red_flag' | 'sc_end' | 'vsc_end' | 'restart'; lap: number }
+  | { type: 'sc_deploy' | 'vsc_deploy' | 'red_flag'; lap: number; info?: Neutralization }
+  | { type: 'sc_end' | 'vsc_end'; lap: number; /** 실제 − 예상 랩 수 */ vsExpected?: number }
+  | { type: 'restart'; lap: number }
+  | { type: 'neutral_update'; lap: number; delta: number; phase: Exclude<Phase, 'green'> }
   | { type: 'pit'; lap: number; car: string; compound: Compound; under: Phase }
   | { type: 'rain_start' | 'rain_stop'; lap: number }
   | { type: 'radio'; lap: number; decisionId: string; choice: RadioOptionId };
@@ -126,6 +147,14 @@ const LIFE: Record<Compound, number> = { S: 18, M: 28, H: 40, I: 35 };
 /** 레이스당 기대 발생 횟수 λ (SPEC §5.5: SC 45%, VSC 30%, 레드 8% 안팎이 목표) */
 const HAZARD = { red: 0.1, sc: 0.5, vsc: 0.3, crash: 0.3, mech: 0.45 };
 const PACE_SPREAD = 0.11;
+/** 사고 크기별 예상 랩 수와 짧게/길게 끝날 확률 */
+const NEUTRAL_PLAN: Record<'sc' | 'vsc', Record<'S' | 'M' | 'L', { laps: number; shorter: number; longer: number }>> = {
+  sc: { S: { laps: 3, shorter: 0.3, longer: 0.15 }, M: { laps: 4, shorter: 0.22, longer: 0.3 }, L: { laps: 5, shorter: 0.15, longer: 0.4 } },
+  vsc: { S: { laps: 1, shorter: 0, longer: 0.25 }, M: { laps: 2, shorter: 0.3, longer: 0.3 }, L: { laps: 2, shorter: 0.15, longer: 0.45 } },
+};
+/** 예상보다 짧게 끝나면 그 사이 피트에 들어간 차가 잃는 시간, 길게 끝나면 버는 시간(초) */
+const NEUTRAL_SHORT_PENALTY = 2.2;
+const NEUTRAL_LONG_BONUS = 1.6;
 
 export interface Behavior { overtakeAttempt: number; contactRisk: number; mistake: number; lapVariance: number; fightback: number }
 
@@ -262,10 +291,38 @@ export function runRace(input: RaceInput): RaceOutcome {
   const crashWeight = (s: CarState) => (1.35 - s.car.stats.consistency / 100) * s.beh.mistake;
   const mechWeight = (s: CarState) => 1.05 - s.car.reliability;
 
-  const startPhase = (p: Phase, lap: number, rng: Rng) => {
+  // 지금 상황(사고 지점·크기·예상 시간)과, 다음 랩에 정할 실제 시간
+  let neutral = null as Neutralization | null;
+  let neutralRollLap = 0;
+  let neutralExpected = 0;
+  let neutralDelta = 0;
+  const lastIncidentCar = () => {
+    const last = incidents[incidents.length - 1];
+    return last && last.lap === laps.length + 1 && (last.type === 'crash' || last.type === 'mech_dnf') ? last : null;
+  };
+  const startPhase = (p: Exclude<Phase, 'green'>, lap: number, _rng: Rng) => {
     phase = p;
-    phaseLapsLeft = p === 'sc' ? int(rng, 3, 5) : p === 'vsc' ? int(rng, 1, 3) : 1;
-    incidents.push({ type: p === 'sc' ? 'sc_deploy' : p === 'vsc' ? 'vsc_deploy' : 'red_flag', lap });
+    const nr = rngFor(input.seed, 'neutral', lap);
+    const cause = lastIncidentCar();
+    let info: Neutralization;
+    if (p === 'red') {
+      phaseLapsLeft = 1;
+      info = { phase: 'red', at: nr(), severity: 'L', expectedLaps: 1, shorter: 0, longer: 0, car: cause?.car };
+    } else {
+      // 사고는 크기가 크고, 기계 결함·잔해는 작은 편
+      const roll = nr();
+      const severity: 'S' | 'M' | 'L' = cause?.type === 'crash'
+        ? (roll < 0.35 ? 'L' : roll < 0.8 ? 'M' : 'S')
+        : (roll < 0.1 ? 'L' : roll < 0.45 ? 'M' : 'S');
+      const plan = NEUTRAL_PLAN[p][severity];
+      phaseLapsLeft = plan.laps;
+      info = { phase: p, at: nr(), severity, expectedLaps: plan.laps, shorter: plan.shorter, longer: plan.longer, car: cause?.car };
+      neutralRollLap = lap + 1;
+      neutralExpected = plan.laps;
+      neutralDelta = 0;
+    }
+    neutral = info;
+    incidents.push({ type: p === 'sc' ? 'sc_deploy' : p === 'vsc' ? 'vsc_deploy' : 'red_flag', lap, info });
   };
 
   for (let lap = 1; lap <= L; lap++) {
@@ -282,6 +339,30 @@ export function runRace(input: RaceInput): RaceOutcome {
       for (const s of states) s.holdRain = false;
     }
     for (const s of states) s.pitThisLap = null;
+
+    // 세이프티카·VSC 실제 시간: 발령 다음 랩에 정한다(무전을 고른 뒤라 선택만으로는 피할 수 없는 운)
+    if (neutral && neutral.phase !== 'red' && lap === neutralRollLap && phase === neutral.phase) {
+      const dr = input.postSeed && lap >= input.postSeed.fromLap ? rngFor(input.postSeed.seed, 'neutral-len', lap) : rngFor(input.seed, 'neutral-len', lap);
+      const x = dr();
+      const delta = x < neutral.shorter ? -1 : x < neutral.shorter + neutral.longer ? (neutral.severity === 'L' && dr() < 0.4 ? 2 : 1) : 0;
+      if (delta) {
+        phaseLapsLeft = Math.max(0, phaseLapsLeft + delta);
+        neutralDelta = delta;
+        incidents.push({ type: 'neutral_update', lap, delta, phase: neutral.phase });
+        // 피트에 들어간 차: 짧게 끝나면 줄 뒤에서 손해, 길게 끝나면 거의 공짜 스톱
+        const deploy = lap - 1;
+        for (const s of states) {
+          if (s.out || s.lastPitLap < deploy) continue;
+          s.time += delta < 0 ? NEUTRAL_SHORT_PENALTY * (neutral.phase === 'vsc' ? 1.3 : 1) : -NEUTRAL_LONG_BONUS * Math.min(delta, 2) * (neutral.phase === 'vsc' ? 1.3 : 1);
+        }
+      }
+      if (phaseLapsLeft <= 0) {
+        incidents.push({ type: phase === 'sc' ? 'sc_end' : 'vsc_end', lap: lap - 1, vsExpected: neutralDelta });
+        if (phase === 'sc') incidents.push({ type: 'restart', lap });
+        phase = 'green';
+        neutral = null;
+      }
+    }
 
     // ── 1. 레이스 통제 / 리타이어 판정 ──
     let deployedNow: Phase | null = null;
@@ -329,6 +410,7 @@ export function runRace(input: RaceInput): RaceOutcome {
           : rainStartNow ? 'rain_start' : rainStopNow && my.compound === 'I' ? 'rain_stop' : null;
       if (trigger) {
         const decision = buildDecision(trigger, lap, my, L, mandatoryStop);
+        if ((trigger === 'sc' || trigger === 'vsc') && neutral) decision.neutral = neutral;
         const recommended = decision.options.find((o) => o.recommended)?.id;
         const choice = input.radio?.[decision.id] ?? (input.autoRadio ? recommended : undefined);
         if (!choice) {
@@ -457,9 +539,11 @@ export function runRace(input: RaceInput): RaceOutcome {
           phase = 'sc';
           phaseLapsLeft = 1;
         } else {
-          incidents.push({ type: phase === 'sc' ? 'sc_end' : 'vsc_end', lap });
+          incidents.push({ type: phase === 'sc' ? 'sc_end' : 'vsc_end', lap, vsExpected: neutralExpected ? neutralDelta : undefined });
           if (phase === 'sc') incidents.push({ type: 'restart', lap: lap + 1 });
           phase = 'green';
+          neutral = null;
+          neutralExpected = 0;
         }
       }
     }

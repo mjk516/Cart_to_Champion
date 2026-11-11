@@ -138,6 +138,26 @@ describe('레이스 엔진', () => {
     expect(red / n).toBeLessThan(0.15);
   });
 
+  it('세이프티카·VSC는 사고 지점·크기·예상 시간을 알려 주고, 실제 시간은 예상보다 짧거나 길 수 있다', () => {
+    let shorter = 0, longer = 0, total = 0;
+    for (let seed = 0; seed < 400; seed++) {
+      const out = runRace(raceInput(seed, 'austria'));
+      for (const inc of out.incidents) {
+        if (inc.type !== 'sc_deploy' && inc.type !== 'vsc_deploy') continue;
+        const info = inc.info!;
+        expect(info.at).toBeGreaterThanOrEqual(0);
+        expect(info.at).toBeLessThan(1);
+        expect(['S', 'M', 'L']).toContain(info.severity);
+        expect(info.expectedLaps).toBeGreaterThan(0);
+        total++;
+      }
+      for (const inc of out.incidents) if (inc.type === 'neutral_update') (inc.delta < 0 ? shorter++ : longer++);
+    }
+    expect(total).toBeGreaterThan(100);
+    expect(shorter).toBeGreaterThan(5);
+    expect(longer).toBeGreaterThan(5);
+  });
+
   it('차의 한계: 가장 느린 차의 OVR 99 드라이버는 맑은 날 포디움이 드물다', () => {
     const dry = { ...circuitById('bahrain'), rainChance: 0 };
     const ace: RaceCar = { ...cars.find((c) => c.id === 'bot')!, stats: { pace: 99, racecraft: 99, tyre: 99, consistency: 99, wet: 99, feedback: 99 } };

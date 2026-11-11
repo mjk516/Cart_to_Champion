@@ -6,6 +6,7 @@ import { type FeedItem } from './feed';
 import { type Manager } from './manager';
 import { type CalendarChange, type CalendarSlot } from './calendar';
 import { CALENDAR_2026, circuitById } from './data';
+import { rngFor } from './rng';
 import { type Hidden, type TrainingId } from './growth';
 import { type Media } from './media';
 import { type RaceCar, type RadioOptionId } from './race';
@@ -107,6 +108,8 @@ export interface SeasonRecord {
   feed?: FeedItem[];
   /** F1 홈 그랑프리 우승 수(업적용). 이전 저장 파일에는 없을 수 있다 */
   homeWins?: number;
+  /** 군 복무로 보낸 시즌(SPEC §2.4 v0.30) */
+  military?: boolean;
 }
 
 export interface F1Driver {
@@ -148,6 +151,29 @@ export const FAMILY_BEHAVIOR = { overtakeAttempt: 0.88, contactRisk: 0.7, mistak
 
 export function playerBehavior(c: Career): RaceCar['behaviorMul'] {
   return c.family ? FAMILY_BEHAVIOR : undefined;
+}
+
+/** 대한민국 국적 드라이버가 커리어 중 군에 입대할 확률(한 번만 정한다) */
+export const MILITARY_CHANCE = 0.01;
+/** 복무 기간(시즌) */
+export const MILITARY_SEASONS = 2;
+
+/** 입대하는 나이. 대한민국 국적이 아니거나 이번 커리어에 입대가 없으면 null(시드로 정해진다) */
+export function militaryDraftAge(c: Career): number | null {
+  if (c.driver.nationality !== 'KR') return null;
+  const r = rngFor(c.seed, 'military');
+  if (r() >= MILITARY_CHANCE) return null;
+  return 20 + Math.floor(r() * 8);
+}
+
+/** 이번 오프시즌이 끝나면 입대한다 */
+export function draftedNext(c: Career): boolean {
+  return !c.military && !c.retired && militaryDraftAge(c) === c.age + 1;
+}
+
+/** 이번 시즌이 복무 중인가 */
+export function inMilitary(c: Career, year = c.year): boolean {
+  return !!c.military && year >= c.military.start && year <= c.military.end;
 }
 
 /** 홈 그랑프리 시장 보너스(SPEC §3.1 v0.18): 캘린더에 자기 나라 그랑프리가 있으면 F1 팀의 평가에 더한다 */
@@ -241,6 +267,8 @@ export interface Career {
   manager?: Manager;
   /** 가정을 꾸린 해(SPEC §6 v0.25): 멘탈은 안정되고 레이스 공격성은 줄어든다 */
   family?: { since: number };
+  /** 군 복무 기간(SPEC §2.4 v0.30): start~end 시즌은 레이스를 하지 않는다 */
+  military?: { start: number; end: number };
   totals: {
     f1Titles: number;
     f1Starts: number;

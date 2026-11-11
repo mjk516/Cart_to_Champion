@@ -105,12 +105,20 @@ export function Weekend() {
         </div>
       </header>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_17rem]">
+      {/* 세션 중에는 챔피언십 순위를 한 줄로 줄이고, 전체 표는 주말 시작 화면에서만 보여 준다 */}
+      {live.step > 0 && standings.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-white/10 bg-zinc-900/60 px-3 py-2 text-xs text-zinc-400" aria-label="챔피언십 요약">
+          <span className="font-bold text-zinc-300">챔피언십</span>
+          {standings.slice(0, 3).map(([id, p], i) => <span key={id} className={id === ME ? 'font-bold text-racing' : ''}>{i + 1}. {codeOf(id)} {p}</span>)}
+          {myPos > 3 && <span className="font-bold text-racing">{myPos}. {codeOf(ME)} {live.points[ME] ?? 0}</span>}
+        </div>
+      )}
+      <div className={`grid gap-4 ${live.step === 0 ? 'lg:grid-cols-[1fr_17rem]' : ''}`}>
         <Card>
           {live.step === 0 && (
             <div className="space-y-4">
               <Tip id="weekend" title="그랑프리 주말">
-                <p>위쪽 단계 표시처럼 <b>다음 세션</b>을 누를 때마다 프랙티스 → 퀄리파잉 → 레이스로 넘어갑니다. 레이스는 라이브로 진행되고, 세이프티카·비가 오면 <b>엔지니어 무전</b>을 고릅니다(★가 추천, 선택지마다 예상 순위 표시).</p>
+                <p>위쪽 단계 표시처럼 <b>다음 세션</b>을 누를 때마다 프랙티스 → 퀄리파잉 → 레이스로 넘어갑니다. 레이스와 스프린트는 첫 랩부터 체커기까지 트랙 뷰로 진행되고(배속 ×1은 실제 속도), 세이프티카·비가 오면 <b>엔지니어 무전</b>을 고릅니다. 세이프티카 때는 사고 지점·크기·예상 시간이 함께 나옵니다.</p>
                 <p>바쁘면 "레이스 결과로 바로 가기"나 "남은 시즌 자동 진행"을 쓰세요.</p>
               </Tip>
               <div className="text-lg font-black">이번 주말 전망</div>
@@ -132,7 +140,6 @@ export function Weekend() {
                   <div className="mt-1 text-xs text-zinc-400">이번 주말 능력치 +{home.boost} · 일관성 {home.mental >= 0 ? '+' : ''}{home.mental}</div>
                 </div>
               )}
-              <p className="text-xs text-zinc-500">예상 순위는 이번 주말을 80번 미리 돌린 결과의 80% 구간입니다.</p>
             </div>
           )}
 
@@ -167,6 +174,12 @@ export function Weekend() {
                 cars={displayCars}
                 colorOfTeam={teamColor}
                 instant={skipped}
+                chat={{
+                  kr: c.driver.nationality === 'KR', name: c.driver.name,
+                  hadPoints: c.history.some((h) => h.series === 'f1' && h.points > 0) || (live.points[ME] ?? 0) > 0,
+                  hadPodium: c.history.some((h) => h.series === 'f1' && h.podiums > 0),
+                  hadWin: c.totals.f1Wins > 0,
+                }}
                 onRadio={(d, o) => updateLive({ radio: { ...live.radio, [radioKey(live.round, session.kind, d)]: o } })}
                 onDone={() => setDoneKey(`${live.round}:${session.kind}`)}
               />
@@ -182,7 +195,7 @@ export function Weekend() {
           </div>
         </Card>
 
-        <Card title="챔피언십 순위">
+        {live.step === 0 && <Card title="챔피언십 순위">
           {standings.length === 0 ? <p className="text-sm text-zinc-400">아직 치른 레이스가 없습니다.</p> : (
             <ol className="space-y-1 text-sm">
               {standings.slice(0, 10).map(([id, p], i) => (
@@ -191,7 +204,7 @@ export function Weekend() {
               {myPos > 10 && <li className="flex gap-2 font-bold text-racing"><span className="w-5 text-right">{myPos}</span><span className="flex-1">{codeOf(ME)}</span><span>{live.points[ME] ?? 0}</span></li>}
             </ol>
           )}
-        </Card>
+        </Card>}
       </div>
     </div>
   );

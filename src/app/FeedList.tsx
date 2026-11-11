@@ -1,5 +1,6 @@
 // 언론·팬 반응 피드(SPEC §6.1): 가상 매체·가상 해설가·팀 공식 계정·팬 게시물
-import { PLATFORM_LABEL, PLATFORM_LIKE, type FeedItem, type FanPlatform } from '../engine';
+import { useEffect, useState } from 'react';
+import { PLATFORM_LABEL, PLATFORM_LIKE, type Chat, type FeedItem, type FanPlatform } from '../engine';
 
 const PLATFORM_STYLE: Record<FanPlatform, string> = {
   reddit: 'bg-orange-500/15 text-orange-300',
@@ -34,5 +35,34 @@ export function FeedList({ items }: { items: FeedItem[] }) {
         );
       })}
     </ul>
+  );
+}
+
+/** 댓글 한 줄 */
+export function ChatLine({ c }: { c: Chat }) {
+  return (
+    <li className="chat-in flex items-start gap-2 text-xs">
+      <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${PLATFORM_STYLE[c.platform]}`}>{PLATFORM_LABEL[c.platform]}</span>
+      <span className="shrink-0 font-bold text-zinc-400">{c.author}</span>
+      <span className="text-zinc-200">{c.text}</span>
+    </li>
+  );
+}
+
+/** 시즌 반응 아래에서 계속 바뀌며 올라오는 댓글(SPEC §6.1 v0.30). 한 번에 3개, 2.6초마다 하나씩 */
+export function RollingComments({ comments, title = '실시간 댓글' }: { comments: Chat[]; title?: string }) {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (comments.length <= 3) return;
+    const id = setInterval(() => setN((v) => v + 1), 2600);
+    return () => clearInterval(id);
+  }, [comments.length]);
+  if (!comments.length) return null;
+  const shown = [0, 1, 2].map((k) => ({ i: n + k, c: comments[(n + k) % comments.length]! })).slice(0, Math.min(3, comments.length)).reverse();
+  return (
+    <div className="mt-3 rounded-xl border border-white/10 bg-zinc-950/60 p-3" aria-label={title}>
+      <div className="mb-2 flex items-center gap-2 text-xs font-bold text-zinc-300"><span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />{title}</div>
+      <ul className="space-y-1.5">{shown.map(({ i, c }) => <ChatLine key={i} c={c} />)}</ul>
+    </div>
   );
 }

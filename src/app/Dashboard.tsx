@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  circuitById, isF1RaceSeason, managerOf, MANAGER_STYLE_LABEL, ovr, PERSONALITIES, recommendedPlan, seriesLabel, STAT_KEYS, superLicencePoints, TRAINING, TRAINING_SLOTS,
+  circuitById, inMilitary, seasonChatter, isF1RaceSeason, managerOf, MANAGER_STYLE_LABEL, ovr, PERSONALITIES, recommendedPlan, seriesLabel, STAT_KEYS, superLicencePoints, TRAINING, TRAINING_SLOTS,
   TRAINING_SLOTS_RESERVE, xpNeeded, type TrainingId,
 } from '../engine';
 import { formatMoney } from './format';
-import { FeedList } from './FeedList';
+import { FeedList, RollingComments } from './FeedList';
 import { useGame } from './store';
 import { F1TeamBadge } from './TeamBadge';
 import { HelmetView } from './Helmet';
@@ -18,6 +18,21 @@ const MODES = [
   { id: 'strength', label: '강점 극대화' },
   { id: 'balanced', label: '균형' },
 ] as const;
+
+/** 훈련 한 칸이 올리는 능력치(▲ 하나가 경험치 50쯤). 멘탈·휴식은 능력치 대신 다른 효과 */
+function TrainingEffect({ id }: { id: TrainingId }) {
+  const p = TRAINING[id];
+  const ups = STAT_KEYS.filter((k) => (p.xp[k] ?? 0) > 0).sort((a, b) => (p.xp[b] ?? 0) - (p.xp[a] ?? 0));
+  return (
+    <span className="flex flex-wrap gap-1 text-[11px]">
+      {ups.map((k) => (
+        <span key={k} className="rounded-full bg-emerald-400/10 px-1.5 py-0.5 font-bold text-emerald-300">{STAT_LABELS[k]} {'▲'.repeat(Math.max(1, Math.round((p.xp[k] ?? 0) / 50)))}</span>
+      ))}
+      {p.pressureRelief && <span className="rounded-full bg-sky-400/10 px-1.5 py-0.5 font-bold text-sky-300">압박 −{p.pressureRelief}</span>}
+      {p.fatigue < 0 && <span className="rounded-full bg-sky-400/10 px-1.5 py-0.5 font-bold text-sky-300">컨디션 회복</span>}
+    </span>
+  );
+}
 
 export function Dashboard() {
   const { career: c, showKrw, playSeason, live, startLive, finishLive, retire, go } = useGame();
@@ -40,7 +55,8 @@ export function Dashboard() {
   const series = contract?.series ?? c.history[c.history.length - 1]?.series ?? 'kart';
   const sl = superLicencePoints(c);
   const lastChamp = c.world.champions[c.world.champions.length - 1];
-  const lastFeed = c.history[c.history.length - 1]?.feed ?? [];
+  const lastRec = c.history[c.history.length - 1];
+  const lastFeed = lastRec?.feed ?? [];
   const recentEvents = (c.eventLog ?? []).filter((e) => e.year === c.year - 1);
 
   return (
@@ -77,7 +93,7 @@ export function Dashboard() {
             </div>
           ) : (
             <div className="space-y-2">
-              <p className="text-sm text-zinc-300">시트가 없습니다. 이번 시즌은 훈련만 합니다.</p>
+              <p className="text-sm text-zinc-300">{inMilitary(c) ? '군 복무 중입니다.' : '시트가 없습니다. 이번 시즌은 훈련만 합니다.'}</p>
               <Button variant="danger" className="!px-3 !py-1.5 text-xs" onClick={() => confirmBox.ask(<>지금 은퇴할까요? <b>되돌릴 수 없습니다.</b> 지금까지의 커리어가 은퇴 화면에 기록됩니다.</>, retire, { confirmLabel: '은퇴 선언', danger: true })}>은퇴 선언</Button>
             </div>
           )}
@@ -119,6 +135,19 @@ export function Dashboard() {
         </div>
       </Card>
 
+      {inMilitary(c) && c.military && (
+        <Card title="군 복무 중">
+          <div className="space-y-2 text-sm">
+            <p className="text-zinc-200">{c.military.start}~{c.military.end}시즌 동안 군 복무로 레이스를 쉽니다. 레이스 감각(속도·레이스크래프트·우천·타이어)은 시즌마다 조금씩 무뎌지고, 일관성은 조금 오르며 압박은 줄어듭니다.</p>
+            <p className="text-xs text-zinc-400">{c.military.end}시즌을 마친 오프시즌부터 다시 팀들의 제안을 받을 수 있습니다.</p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button disabled={running} onClick={() => { setRunning(true); setTimeout(() => playSeason([]), 30); }}>{running ? '시즌 진행 중…' : `${c.year} 시즌 복무하기`}</Button>
+              <Button variant="danger" className="!px-3 !py-1.5 text-xs" onClick={() => confirmBox.ask(<>지금 은퇴할까요? <b>되돌릴 수 없습니다.</b></>, retire, { confirmLabel: '은퇴 선언', danger: true })}>은퇴 선언</Button>
+            </div>
+          </div>
+        </Card>
+      )}
+      {!inMilitary(c) && <>
       <Tip id="dashboard" title="여기가 커리어 본부입니다">
         <p>시즌을 시작하기 전에 <b>훈련 계획</b> 칸을 채우세요. 프로그램마다 오르는 능력치와 비용이 다르고, 휴식을 빼면 컨디션이 떨어집니다. 잘 모르겠으면 "약점 보완"을 누르면 추천 계획이 채워집니다.</p>
         <p>준비가 되면 아래의 시즌 진행 버튼을 누르세요. 시즌이 끝나면 오프시즌으로 넘어가 다음 팀을 고릅니다.</p>
@@ -132,14 +161,28 @@ export function Dashboard() {
       }>
         <div className="grid gap-2 sm:grid-cols-3">
           {plan.map((id, i) => (
-            <select key={i} value={id} onChange={(e) => setPlan(plan.map((x, j) => (j === i ? (e.target.value as TrainingId) : x)))}
-              className="rounded-xl border border-white/15 bg-zinc-950 px-2 py-2 text-sm">
-              {(Object.keys(TRAINING) as TrainingId[]).map((t) => (
-                <option key={t} value={t}>{TRAINING[t].label}{TRAINING[t].cost ? ` · ${formatMoney(TRAINING[t].cost, false)}` : ''}</option>
-              ))}
-            </select>
+            <div key={i} className="flex flex-col gap-1">
+              <select aria-label={`훈련 ${i + 1}칸`} value={id} onChange={(e) => setPlan(plan.map((x, j) => (j === i ? (e.target.value as TrainingId) : x)))}
+                className="rounded-xl border border-white/15 bg-zinc-950 px-2 py-2 text-sm">
+                {(Object.keys(TRAINING) as TrainingId[]).map((t) => (
+                  <option key={t} value={t}>{TRAINING[t].label}{TRAINING[t].cost ? ` · ${formatMoney(TRAINING[t].cost, false)}` : ''}</option>
+                ))}
+              </select>
+              <TrainingEffect id={id} />
+            </div>
           ))}
         </div>
+        <details className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3 text-sm">
+          <summary className="cursor-pointer font-bold text-zinc-200">훈련 프로그램별로 오르는 능력치</summary>
+          <ul className="mt-2 space-y-2">
+            {(Object.keys(TRAINING) as TrainingId[]).map((t) => (
+              <li key={t}>
+                <div className="flex flex-wrap items-center gap-2"><b>{TRAINING[t].label}</b><TrainingEffect id={t} />{TRAINING[t].cost ? <span className="text-xs text-zinc-500">{formatMoney(TRAINING[t].cost, showKrw)}/칸</span> : <span className="text-xs text-zinc-500">무료</span>}</div>
+                <p className="text-xs leading-relaxed text-zinc-400">{TRAINING[t].desc}</p>
+              </li>
+            ))}
+          </ul>
+        </details>
         <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
           <span className="text-zinc-400">훈련 비용 {formatMoney(planCost, showKrw)}</span>
           {!plan.includes('rest') && <Pill tone="amber">휴식이 없으면 컨디션이 떨어지고 부상 위험이 커진다</Pill>}
@@ -166,6 +209,7 @@ export function Dashboard() {
           )}
         </div>
       </Card>
+      </>}
 
       {(lastFeed.length > 0 || recentEvents.length > 0) && (
         <Card title="최근 소식">
@@ -176,6 +220,7 @@ export function Dashboard() {
             </div>
           ))}
           <FeedList items={lastFeed} />
+          {lastRec && <RollingComments comments={seasonChatter(c, lastRec)} />}
         </Card>
       )}
 
@@ -192,7 +237,7 @@ export function Dashboard() {
                 {[...c.history].reverse().map((h) => (
                   <tr key={h.year} className="border-t border-white/5">
                     <td className="py-1.5">{h.year}</td><td>{h.age}</td><td>{seriesLabel(h.series)}</td>
-                    <td className="max-w-[10rem] truncate">{h.team ?? '—'}{h.seat === 'reserve' ? ' (리저브)' : ''}</td>
+                    <td className="max-w-[10rem] truncate">{h.military ? '🎖 군 복무' : h.team ?? '—'}{h.seat === 'reserve' ? ' (리저브)' : ''}</td>
                     <td className="text-center">{h.position ? `${h.champion ? '🏆 ' : ''}P${h.position}` : '—'}</td>
                     <td className="text-center">{h.wins}</td><td className="text-center">{h.podiums}</td>
                     <td className="text-center">{h.ovrStart.toFixed(0)}→{h.ovrEnd.toFixed(0)}</td>

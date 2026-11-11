@@ -145,6 +145,12 @@ const PRESS_SPECIAL = {
   poor: ['빠듯한 살림에서 여기까지, {name}의 언더독 스토리'],
 };
 
+const MILITARY = {
+  press: ['{name}, 군 복무 중에도 체력 훈련은 계속', '{age}세 {name}, 헬멧 대신 군모… "전역하면 바로 돌아간다"'],
+  expert: ['2년 공백은 길다. 하지만 돌아온 드라이버가 더 단단해지는 경우도 많다.', '{name}의 레이스 감각이 얼마나 남아 있을지가 관건이다.'],
+  fan: ['{name} 휴가 나와서 카트장 왔다는 목격담 있음 ㅋㅋ', '전역 D-day 세는 사람 나만 있냐', '돌아오면 바로 시트 주자 제발', '군대 다녀오면 멘탈은 무적이겠지'],
+};
+
 function situation(r: SeasonRecord): Situation {
   if (r.seat === 'none') return 'noSeat';
   if (r.seat === 'reserve') return 'reserve';
@@ -198,6 +204,13 @@ export function seasonFeed(c: Career, r: SeasonRecord): FeedItem[] {
   const rng = rngFor(c.seed, 'feed', r.year);
   const s = situation(r);
   const items: FeedItem[] = [];
+  if (r.military) {
+    items.push({ kind: 'press', author: pick(rng, PRESS), text: fill(pick(rng, MILITARY.press), c, r) });
+    items.push({ kind: 'expert', author: pick(rng, EXPERTS), text: fill(pick(rng, MILITARY.expert), c, r) });
+    items.push(fanPost(rng, c, fill(pick(rng, MILITARY.fan.slice(0, 2)), c, r)));
+    items.push(fanPost(rng, c, fill(pick(rng, MILITARY.fan.slice(2)), c, r)));
+    return items;
+  }
   const first = c.history.filter((h) => h.series === r.series && h.seat === 'race').length === 1;
 
   // 특별 기사

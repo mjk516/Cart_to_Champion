@@ -73,47 +73,30 @@ async function main() {
   await page.getByRole('button', { name: /시즌 라이브로 시작/ }).click();
   await shot(box(page, '이번 주말 전망'), 'weekend-intro');
   let gotRadio = false, gotTrack = false, gotLive = false;
-  for (let round = 0; round < 6 && !(gotRadio && gotTrack); round++) {
+  const track = page.locator('[data-flag]');
+  for (let round = 0; round < 8 && !(gotRadio && gotTrack); round++) {
     console.log('round', round + 1, { gotTrack, gotRadio });
-    for (let i = 0; i < 7; i++) {
-      if (await page.getByRole('button', { name: '×4' }).isVisible().catch(() => false)) break;
+    // 레이스 세션(트랙 뷰가 뜨는 곳)까지 넘긴다
+    for (let i = 0; i < 7 && !(await track.isVisible().catch(() => false)); i++) {
       await page.getByRole('button', { name: /다음 세션|다음 그랑프리/ }).first().click();
     }
-    if (!gotTrack && gotRadio) {
-      await page.getByRole('button', { name: '×4' }).click().catch(() => {});
-      // 차들이 흩어진 8랩 이후의 트랙 뷰를 찍는다(초반은 한곳에 몰려 이름이 겹친다)
-      const track = page.locator('svg[aria-label^="트랙 뷰"]');
-      for (let tries = 0; tries < 10 && !gotTrack; tries++) {
-        if (!(await track.waitFor({ timeout: 12_000 }).then(() => true).catch(() => false))) break;
-        const lap = Number(/L(\d+)/.exec((await track.getAttribute('aria-label')) ?? '')?.[1] ?? 0);
-        if (lap >= 8) {
-          await page.waitForTimeout(1300);
-          await shot(track.locator('xpath=..'), 'race-track');
-          gotTrack = true;
-        } else {
-          await track.waitFor({ state: 'detached', timeout: 12_000 }).catch(() => {});
-        }
-      }
-    }
-    for (let k = 0; k < 8 && !gotRadio; k++) {
+    for (let k = 0; k < 10 && !gotRadio; k++) {
       const radio = page.getByRole('dialog', { name: '엔지니어 무전' });
       if (await radio.isVisible().catch(() => false)) {
+        const sc = (await radio.getByLabel('상황 정보').count()) > 0;
+        if (!sc) { await radio.getByRole('button').filter({ hasText: '추천' }).first().click(); continue; }
+        await page.waitForTimeout(1500); // 선택지별 예상 순위 계산
+        // 세이프티카·VSC: 노란 트랙 위 사고 지점과 무전 창
+        await page.evaluate(() => window.scrollTo(0, 0));
+        await shot(track, 'race-track');
+        gotTrack = true;
         await shot(radio, 'race-radio');
         gotRadio = true;
-        // 추천 선택지로 이어 가고, 무전 창이 닫힌 뒤 타이밍 타워를 찍는다
         await radio.getByRole('button').filter({ hasText: '추천' }).first().click();
-        // 무전 직후 세이프티카·VSC 장면이 트랙 뷰로 뜬다(차들이 이미 흩어진 뒤라 보기 좋다)
-        const scTrack = page.locator('svg[aria-label^="트랙 뷰"]');
-        if (!gotTrack && await scTrack.waitFor({ timeout: 6000 }).then(() => true).catch(() => false)) {
-          await page.waitForTimeout(1300);
-          await shot(scTrack.locator('xpath=..'), 'race-track');
-          gotTrack = true;
-          await scTrack.waitFor({ state: 'detached', timeout: 8000 }).catch(() => {});
-        }
         await page.waitForTimeout(800);
         if (!gotLive) {
           const tower = page.getByRole('list', { name: '타이밍 타워' });
-          // 내 차(김민준) 줄이 보이도록 타워 안에서 스크롤한다
+          await page.addStyleTag({ content: '.sticky{position:static!important}' });
           await tower.evaluate((el) => {
             const me = [...el.querySelectorAll('li')].find((li) => li.textContent?.includes('김민준'));
             if (me) el.scrollTop = Math.max(0, (me as HTMLElement).offsetTop - el.clientHeight / 2);
@@ -126,7 +109,7 @@ async function main() {
       const skip = page.getByRole('button', { name: '다음 결정·결과까지' });
       if (!(await skip.isVisible().catch(() => false))) break;
       await skip.click();
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(400);
     }
     // 이 주말을 끝내고 다음 그랑프리로
     if (!(gotRadio && gotTrack)) {

@@ -32,7 +32,7 @@ export interface SignedContract {
 export type Screen = 'home' | 'create' | 'dashboard' | 'offseason' | 'retired' | 'settings' | 'weekend' | 'records' | 'guide';
 
 /** 기자회견 자동 응답(SPEC §6.1): null이면 매번 직접 고른다 */
-export type InterviewAuto = null | 'humble' | 'confident' | 'bold';
+export type InterviewAuto = null | 'humble' | 'confident' | 'bold' | 'joke';
 
 /** F1 라이브 시즌 진행 상태(SPEC §5.3). 세션 중간에 닫아도 이어진다 */
 export interface LiveSeason {

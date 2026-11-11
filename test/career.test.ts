@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyOffseason, autoplayCareer, createCareer, DEFAULT_POLICY, getOffseason, MAX_TEAMS, MIN_TEAMS, replayCareer,
   CALENDAR_2026, f1WeekendFor, isF1RaceSeason, radioKey, type RadioOptionId, EVENTS, managerAdvice, MAJOR_FLOOR, OTHERS_CAP, feedTemplateCount, pendingEventCards, resolveEvent, F1_WINNER_TEAMS, f1Rules, generateHidden, initialWorld, NEW_TEAM_START, PERSONALITIES, runOffseason, TEAMS_2026, runSeason, STAT_KEYS, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, superLicencePoints, type CareerSetup,
-  evolveCalendar, RETURNING_CIRCUITS, CALENDAR_2027_SLOTS, ALL_F1_CIRCUITS, CALENDAR_CHANGE_FROM, CALENDAR_COOLDOWN, f1Calendar, type CalendarChange, hasHomeGp, homeGpEffect, type Personality, achievements, ACHIEVEMENTS, newAchievements, careerRecords, playerNumber, DRIVERS_2026, carNumberProblem, defaultCarNumber, FAMILY_BEHAVIOR,
+  evolveCalendar, RETURNING_CIRCUITS, CALENDAR_2027_SLOTS, ALL_F1_CIRCUITS, CALENDAR_CHANGE_FROM, CALENDAR_COOLDOWN, f1Calendar, type CalendarChange, hasHomeGp, homeGpEffect, type Personality, achievements, ACHIEVEMENTS, newAchievements, careerRecords, playerNumber, DRIVERS_2026, carNumberProblem, defaultCarNumber, FAMILY_BEHAVIOR, militaryDraftAge,
 } from '../src/engine';
 import { CIRCUIT_PATHS } from '../src/app/circuitPaths';
 
@@ -183,10 +183,10 @@ describe('성격 기질과 잠재력(SPEC §3.4 v0.11)', () => {
 });
 
 describe('전환점 이벤트와 언론·팬 피드(SPEC §6, §6.1)', () => {
-  it('이벤트 62개(기자회견 12개 포함), 반응 문구 80개', () => {
-    expect(EVENTS).toHaveLength(62);
-    expect(new Set(EVENTS.map((e) => e.id)).size).toBe(62);
-    expect(EVENTS.filter((e) => e.category === 'interview')).toHaveLength(12);
+  it('이벤트 70개(기자회견 20개 포함), 반응 문구 80개', () => {
+    expect(EVENTS).toHaveLength(70);
+    expect(new Set(EVENTS.map((e) => e.id)).size).toBe(70);
+    expect(EVENTS.filter((e) => e.category === 'interview')).toHaveLength(20);
     for (const e of EVENTS) for (const o of e.options) {
       expect(o.outcomes.length).toBeGreaterThan(0);
       expect(o.outcomes.reduce((a, x) => a + x.p, 0)).toBeCloseTo(1, 5);
@@ -205,7 +205,7 @@ describe('전환점 이벤트와 언론·팬 피드(SPEC §6, §6.1)', () => {
       if (last.seat === 'race' && last.series !== 'kart') { racedSeasons++; seen += ivs.length; }
       else expect(ivs).toHaveLength(0);
       for (const card of pendingEventCards(c)) {
-        if (card.category === 'interview') expect(card.options.map((o) => o.id)).toEqual(['humble', 'confident', 'bold']);
+        if (card.category === 'interview') expect(card.options.map((o) => o.id)).toEqual(['humble', 'confident', 'bold', 'joke']);
         c = resolveEvent(c, card.id, card.options[card.options.length - 1]!.id).career;
       }
       c = applyOffseason(c, DEFAULT_POLICY.offseason(c, getOffseason(c)));
@@ -545,5 +545,33 @@ describe('v0.25: 차 번호·헬멧, 가정, 내구레이스, 팀 대표 교체'
       if ((F1_WINNER_TEAMS as readonly string[]).includes(t.id)) expect(t.quality).toBeGreaterThanOrEqual(MAJOR_FLOOR);
       else expect(t.quality).toBeLessThanOrEqual(OTHERS_CAP + 1e-9);
     }
+  });
+});
+
+describe('군 복무(SPEC §2.4 v0.30)', () => {
+  const base: CareerSetup = { seed: 0, name: '김민준', nationality: 'KR', wealthTier: 3, personality: 'fighter', candidateIndex: 0, focus: ['pace'] };
+  const drafted = (nat: string) => {
+    let n = 0;
+    for (let seed = 1; seed <= 3000; seed++) if (militaryDraftAge(createCareer({ ...base, seed, nationality: nat })) !== null) n++;
+    return n;
+  };
+  it('대한민국 국적만 약 1% 확률로 입대한다', () => {
+    const kr = drafted('KR');
+    expect(kr).toBeGreaterThan(10);
+    expect(kr).toBeLessThan(60);
+    expect(drafted('GB')).toBe(0);
+  });
+  it('입대하면 2시즌 동안 레이스를 하지 않고, 전역 뒤 커리어가 이어진다', () => {
+    let seed = 1;
+    while (militaryDraftAge(createCareer({ ...base, seed })) === null) seed++;
+    const c = autoplayCareer({ ...base, seed });
+    const age = militaryDraftAge(c)!;
+    const served = c.history.filter((h) => h.military);
+    if (c.history[c.history.length - 1]!.age + 1 >= age) {
+      expect(c.military).toBeDefined();
+      expect(served.length).toBe(Math.min(2, c.history.filter((h) => h.year >= c.military!.start).length));
+      for (const h of served) { expect(h.seat).toBe('none'); expect(h.races).toBe(0); }
+    }
+    expect(replayCareer({ ...base, seed }, c.choiceLog)).toEqual(c);
   });
 });
