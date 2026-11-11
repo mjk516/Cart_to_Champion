@@ -1,37 +1,8 @@
-// 홈 · 설정 화면 (은퇴 화면은 Retired.tsx)
+// 설정 화면 (첫 화면은 Home.tsx, 은퇴 화면은 Retired.tsx)
 
 import { useRef, useState } from 'react';
 import { useGame } from './store';
 import { Button, Card, useConfirm } from './ui';
-
-export function Home() {
-  const { career, go, reset } = useGame();
-  const confirmBox = useConfirm();
-  return (
-    <div className="mx-auto flex min-h-[80vh] max-w-xl flex-col justify-center gap-6 px-4 py-10">
-      {confirmBox.dialog}
-      <div>
-        <div className="text-xs font-bold tracking-[0.4em] text-racing">KART TO CHAMPION</div>
-        <h1 className="mt-2 text-4xl font-black leading-tight">카트에서<br />챔피언까지</h1>
-        <p className="mt-3 text-zinc-400">12세 카트 유망주에서 F1 월드 챔피언까지. 훈련, 이적, 계약 하나하나가 커리어를 만듭니다.</p>
-      </div>
-      <div className="flex flex-col gap-2">
-        {career && !career.retired && <Button onClick={() => go('dashboard')}>이어하기 · {career.driver.name} ({career.year}, {career.age}세)</Button>}
-        {career?.retired && <Button variant="ghost" onClick={() => go('retired')}>지난 커리어 보기 · {career.driver.name}</Button>}
-        <Button variant={career && !career.retired ? 'ghost' : 'primary'} onClick={() => {
-          const start = () => { reset(); go('create'); };
-          if (career && !career.retired) confirmBox.ask('진행 중인 커리어가 사라집니다. 새로 시작할까요? (설정에서 저장 파일을 내보내 두면 나중에 다시 불러올 수 있습니다)', start, { confirmLabel: '새로 시작', danger: true });
-          else start();
-        }}>새 커리어</Button>
-        <Button variant="ghost" onClick={() => go('guide')}>게임 방법</Button>
-        <Button variant="ghost" onClick={() => go('settings')}>설정 · 저장 파일</Button>
-      </div>
-      <p className="text-xs leading-relaxed text-zinc-500">
-        진행 상황은 이 브라우저에만 저장됩니다. 시크릿 모드를 닫거나 브라우저 데이터를 지우면 사라지니, 설정에서 저장 파일을 내보내 두세요.
-      </p>
-    </div>
-  );
-}
 
 export function Settings() {
   const { showKrw, setShowKrw, exportSave, importSave, peekSave, go, career, interviewAuto, setInterviewAuto, seenTips, resetTips } = useGame();

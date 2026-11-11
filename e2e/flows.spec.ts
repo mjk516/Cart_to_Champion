@@ -106,7 +106,7 @@ test('F1 라이브 중 대시보드의 "남은 시즌 한 번에 진행"이 진�
   await page.getByRole('button', { name: /시즌 라이브로 시작/ }).click();
   await page.getByRole('button', { name: '다음 세션' }).click();
   await page.getByRole('button', { name: /카트에서 챔피언까지/ }).first().click(); // 홈
-  await page.getByRole('button', { name: /이어하기/ }).click();
+  await page.getByRole('button', { name: /이어하기/ }).first().click();
   await page.getByRole('button', { name: '남은 시즌 한 번에 진행' }).click();
   await expect(page.getByText(`${c.year} 시즌 결과`)).toBeVisible();
 });
@@ -153,4 +153,13 @@ test('첫 안내: 한 번 닫으면 다시 안 뜨고, 설정에서 다시 볼 �
   await page.getByRole('navigation').getByRole('button', { name: '게임 방법' }).click();
   await expect(page.getByRole('heading', { name: '게임 방법' })).toBeVisible();
   await expect(page.getByText('슈퍼 라이선스 40점')).toBeVisible();
+});
+
+test('게임 방법의 실제 화면 그림이 모두 열린다', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('navigation').getByRole('button', { name: '게임 방법' }).click();
+  const imgs = page.locator('figure img');
+  await expect(imgs).toHaveCount(9);
+  await imgs.evaluateAll((els) => els.forEach((e) => ((e as HTMLImageElement).loading = 'eager')));
+  await expect.poll(() => imgs.evaluateAll((els) => els.filter((e) => !(e as HTMLImageElement).complete || (e as HTMLImageElement).naturalWidth === 0).length)).toBe(0);
 });

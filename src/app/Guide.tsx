@@ -21,10 +21,25 @@ export function Tip({ id, title, children }: { id: string; title: string; childr
   );
 }
 
-const SECTIONS: Array<{ title: string; body: ReactNode }> = [
+/** 실제 게임 화면 캡처(public/guide, scripts/guide-shots.ts로 다시 만든다) */
+interface Shot { src: string; alt: string; caption: string; tall?: boolean }
+const img = (name: string) => `${import.meta.env.BASE_URL}guide/${name}.jpg`;
+
+function Figure({ shot }: { shot: Shot }) {
+  return (
+    <figure className="overflow-hidden rounded-xl border border-white/10 bg-black/30">
+      <img src={img(shot.src)} alt={shot.alt} loading="lazy" decoding="async"
+        className={`block w-full ${shot.tall ? 'max-h-[26rem] object-cover object-top' : ''}`} />
+      <figcaption className="border-t border-white/10 px-3 py-2 text-xs leading-relaxed text-zinc-400">{shot.caption}</figcaption>
+    </figure>
+  );
+}
+
+const SECTIONS: Array<{ title: string; body: ReactNode; shots?: Shot[] }> = [
   {
     title: '목표',
     body: <p>12세 카트 선수로 시작해 F1 월드 챔피언까지 가는 것이 목표입니다. 한 시즌은 훈련 계획 → 시즌 진행 → 오프시즌(사건·기자회견·이적) 순서로 돌아갑니다. 언제든 은퇴를 선언할 수 있고, 은퇴하면 커리어 전체가 기록으로 남습니다.</p>,
+    shots: [{ src: 'create-number', alt: '헬멧과 차 번호를 고르는 생성 화면', caption: '처음 만들 때 헬멧 색·무늬와 차 번호를 고릅니다. 실제 F1 드라이버의 번호를 넣으면 이렇게 경고가 뜨고 다른 번호를 고르게 됩니다.' }],
   },
   {
     title: '커리어 사다리',
@@ -37,10 +52,17 @@ const SECTIONS: Array<{ title: string; body: ReactNode }> = [
   },
   {
     title: '훈련',
+    shots: [{ src: 'dashboard-training', alt: '대시보드의 훈련 계획 칸', caption: '대시보드의 훈련 계획. 칸마다 프로그램을 고르고, 오른쪽 위 버튼으로 추천 계획을 바로 채운 뒤 시즌 진행을 누릅니다.' }],
     body: <p>시즌마다 훈련 {TRAINING_SLOTS}칸(리저브는 더 많음)을 채웁니다. 프로그램마다 오르는 능력치와 비용이 다릅니다. 휴식이 없으면 컨디션이 떨어지고 부상 위험이 커집니다. "약점 보완 / 강점 극대화 / 균형" 버튼으로 추천 계획을 바로 채울 수 있습니다. 능력치는 잠재력(숨은 값) 근처에서 잘 오르지 않고, 38세부터 떨어지기 시작합니다.</p>,
   },
   {
     title: '시즌과 라이브 레이스',
+    shots: [
+      { src: 'weekend-intro', alt: '그랑프리 주말 시작 화면의 전망', caption: '주말 시작 화면. 이번 주말을 미리 80번 돌린 예상 순위와 포인트·포디움·우승 확률, 내 차와 실력의 순위를 보여 줍니다.' },
+      { src: 'race-radio', alt: '엔지니어 무전 선택 창', caption: '레이스 중 VSC가 나오자 뜬 엔지니어 무전. 선택지마다 예상 순위가 붙어 있고 ★가 엔지니어 추천입니다.' },
+      { src: 'race-track', alt: '실제 서킷 모양 위의 트랙 뷰', caption: '트랙 뷰. 실제 서킷 모양 위에 차가 팀 색 동그라미로 보이고, 흰 테두리가 내 차입니다.' },
+      { src: 'race-live', alt: '타이밍 타워', caption: '랩마다 바뀌는 타이밍 타워. 내 줄은 빨갛게 표시되고 선두와의 차이, 타이어, 피트 횟수가 보입니다.' },
+    ],
     body: (
       <>
         <p>하부 리그는 시즌을 한 번에 진행합니다. F1 레이스 시트에 오르면 <b>시즌 라이브로 시작</b>을 눌러 그랑프리마다 프랙티스 → 퀄리파잉 → (스프린트) → 레이스를 직접 볼 수 있습니다.</p>
@@ -51,6 +73,10 @@ const SECTIONS: Array<{ title: string; body: ReactNode }> = [
   },
   {
     title: '오프시즌',
+    shots: [
+      { src: 'offseason-interview', alt: '기자회견 질문과 답변 세 가지', caption: '시즌 결산 기자회견. 겸손·자신감·도발 중 하나로 답하면 언론 평판, 팬 여론, 팀 내 입지가 달라집니다.' },
+      { src: 'offseason-offers', alt: '다음 시즌 제안 목록과 매니저 조언', caption: '다음 시즌 제안. 매니저 한마디와 제안별 추천·비추천, 팀 성능과 시설, 연봉을 비교하고 계약서에 서명합니다.' },
+    ],
     body: (
       <>
         <p>시즌이 끝나면 <b>전환점</b>(훈련 제안, 스폰서, 논란, 가족 등)과 <b>기자회견</b>이 먼저 뜹니다. 기자회견은 겸손·자신감·도발 중 하나로 답하고, 성격에 따라 결과가 달라집니다. 설정에서 자동 응답을 켤 수 있습니다.</p>
@@ -72,6 +98,7 @@ const SECTIONS: Array<{ title: string; body: ReactNode }> = [
   },
   {
     title: '기록과 저장',
+    shots: [{ src: 'records', alt: '업적 목록', caption: '업적·기록 화면. 달성한 업적은 금색 테두리와 연도로, 아직인 업적은 자물쇠로 보입니다.', tall: true }],
     body: <p>상단 메뉴의 <b>업적·기록</b>에서 통산 기록, 리그별 최고 성적, 업적을 볼 수 있습니다. 진행 상황은 이 브라우저에만 저장되니, 설정에서 저장 파일을 내보내 두세요.</p>,
   },
 ];
@@ -87,6 +114,11 @@ export function Guide() {
       {SECTIONS.map((s) => (
         <Card key={s.title} title={s.title}>
           <div className="space-y-2 text-sm leading-relaxed text-zinc-200">{s.body}</div>
+          {s.shots && (
+            <div className={`mt-4 grid gap-3 ${s.shots.length > 1 ? 'sm:grid-cols-2' : ''}`}>
+              {s.shots.map((shot) => <Figure key={shot.src} shot={shot} />)}
+            </div>
+          )}
         </Card>
       ))}
     </div>

@@ -6,7 +6,8 @@ import { Records } from './Records';
 import { Guide } from './Guide';
 import { Retired } from './Retired';
 import { Weekend } from './Weekend';
-import { Home, Settings } from './Screens';
+import { Home } from './Home';
+import { Settings } from './Screens';
 import { useGame } from './store';
 
 export function App() {
@@ -36,7 +37,7 @@ export function App() {
       {effective === 'weekend' && <Weekend />}
       {effective === 'records' && <Records />}
       {effective === 'guide' && <Guide />}
-      <footer className="mx-auto max-w-5xl px-4 pb-8 pt-4 text-[11px] leading-relaxed text-zinc-500">
+      <footer className={`mx-auto max-w-5xl px-4 pt-4 text-[11px] leading-relaxed text-zinc-500 ${effective === 'home' ? 'pb-40' : 'pb-8'}`}>
         비공식 팬 게임입니다. Formula 1, FIA 및 각 팀·드라이버와 아무 관계가 없으며 승인받지 않았습니다. F1, FORMULA 1 및 관련 표장은 Formula One Licensing B.V.의 상표입니다. 경기 결과와 계약은 모두 가상의 시뮬레이션입니다.{' '}
         <button onClick={() => go('settings')} className="underline hover:text-zinc-300">크레딧</button>
       </footer>
