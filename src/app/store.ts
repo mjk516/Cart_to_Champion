@@ -46,6 +46,8 @@ export interface LiveSeason {
   points: Record<string, number>;
   /** 레이스 결과로 바로 간 라운드(라이브 재생 생략) */
   skipped: number[];
+  /** 여름·가을 내구레이스 출전(훈련 계획에서 고름) */
+  endurance?: boolean;
 }
 
 interface State {
@@ -64,12 +66,12 @@ interface State {
   dismissTip: (id: string) => void;
   resetTips: () => void;
   go: (s: Screen) => void;
-  startLive: (plan: TrainingId[]) => void;
+  startLive: (plan: TrainingId[], endurance?: boolean) => void;
   updateLive: (patch: Partial<LiveSeason>) => void;
   /** 라이브 시즌을 마친다(남은 라운드는 엔지니어 추천으로 자동 진행) */
   finishLive: () => void;
   startCareer: (setup: CareerSetup, signature: Signature) => void;
-  playSeason: (plan: TrainingId[]) => void;
+  playSeason: (plan: TrainingId[], endurance?: boolean) => void;
   /** 제안을 받아들인다. 서명은 계약서 화면에서 받는다 */
   acceptOffer: (offer: Offer, joinAcademy: boolean, signature: Signature | null) => void;
   /** 전환점 이벤트 선택(SPEC §6) */
@@ -129,10 +131,10 @@ export const useGame = create<State>()(
     (set, get) => ({
       ...initial,
       go: (screen) => set({ screen }),
-      startLive: (plan) => {
+      startLive: (plan, endurance = false) => {
         const c = get().career;
         if (!c) return;
-        set({ live: { year: c.year, plan, round: 0, step: 0, radio: {}, points: {}, skipped: [] }, screen: 'weekend' });
+        set({ live: { year: c.year, plan, round: 0, step: 0, radio: {}, points: {}, skipped: [], endurance }, screen: 'weekend' });
       },
       updateLive: (patch) => {
         const l = get().live;
@@ -142,15 +144,15 @@ export const useGame = create<State>()(
         const c = get().career;
         const l = get().live;
         if (!c || !l) return;
-        const { career, record } = runSeason(c, l.plan, l.radio);
+        const { career, record } = runSeason(c, l.plan, l.radio, { endurance: l.endurance });
         set({ career: autoInterview(career, get().interviewAuto), lastRecord: record, live: null, screen: 'offseason' });
       },
       startCareer: (setup, signature) =>
         set({ career: createCareer(setup), signature, firstF1Signature: null, contracts: [], lastRecord: null, screen: 'dashboard' }),
-      playSeason: (plan) => {
+      playSeason: (plan, endurance = false) => {
         const c = get().career;
         if (!c) return;
-        const { career, record } = runSeason(c, plan);
+        const { career, record } = runSeason(c, plan, {}, { endurance });
         set({ career: autoInterview(career, get().interviewAuto), lastRecord: record, live: null, screen: 'offseason' });
       },
       acceptOffer: (offer, joinAcademy, signature) => {

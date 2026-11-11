@@ -1,17 +1,17 @@
 // 핵심 화면 흐름 E2E(SPEC §10). 엔진 테스트로는 못 잡는 화면 버그(눌러도 반응 없는 버튼 등)를 막는다.
 import { expect, test, type Page } from '@playwright/test';
 import {
-  applyOffseason, createCareer, DEFAULT_POLICY, getOffseason, isF1RaceSeason, pendingEventCards, resolveEvent, runSeason, type Career,
+  applyOffseason, createCareer, DEFAULT_POLICY, enduranceOffer, getOffseason, isF1RaceSeason, pendingEventCards, previewEndurance, resolveEvent, runSeason, type Career,
 } from '../src/engine';
 
 const KEY = 'kart-to-champion-save';
 
 /** 엔진으로 F1 레이스 시트 직전까지 진행한 커리어(라이브 주말 테스트용) */
-function f1Career(): Career {
+function f1Career(ready: (c: Career) => boolean = isF1RaceSeason, wealthTier: 1 | 2 | 3 | 4 | 5 = 3): Career {
   for (let seed = 1; seed < 300; seed++) {
-    let c = createCareer({ seed, name: 'E2E', nationality: 'GB', wealthTier: 3, personality: 'calm', candidateIndex: 0, focus: ['pace'] });
-    for (let i = 0; i < 25 && !c.retired; i++) {
-      if (isF1RaceSeason(c)) return c;
+    let c = createCareer({ seed, name: 'E2E', nationality: 'GB', wealthTier, personality: 'calm', candidateIndex: 0, focus: ['pace'] });
+    for (let i = 0; i < 30 && !c.retired; i++) {
+      if (ready(c)) return c;
       c = runSeason(c, DEFAULT_POLICY.training(c)).career;
       for (const card of pendingEventCards(c)) c = resolveEvent(c, card.id, card.options[0]!.id).career;
       c = applyOffseason(c, DEFAULT_POLICY.offseason(c, getOffseason(c)));
@@ -201,4 +201,28 @@ test('주말 시작에서 퀄리파잉으로 바로 갈 수 있다(프랙티스 
   await page.getByRole('button', { name: /퀄리파잉으로 바로 가기/ }).click();
   await expect(page.getByText(/퀄리파잉 결과/)).toBeVisible();
   await expect(page.getByRole('button', { name: /퀄리파잉으로 바로 가기/ })).toHaveCount(0);
+});
+
+test('내구레이스: 팀 입지가 단단하면 훈련 계획에서 출전을 고르고, 휴식기 다음 주말에 결과가 나온다', async ({ page }) => {
+  const c = f1Career((x) => !!enduranceOffer(x), 5);
+  const offer = enduranceOffer(c)!;
+  await loadSave(page, c);
+  const box = page.getByRole('checkbox', { name: '내구레이스 출전' });
+  await expect(box).toBeVisible();
+  await expect(page.getByText(offer.name)).toBeVisible();
+  await box.check();
+  await page.getByRole('button', { name: /시즌 라이브로 시작/ }).click();
+  await expect(page.getByLabel('내구레이스')).toHaveCount(0);
+  // 휴식기 다음 라운드로 옮겨 결과 카드를 본다
+  await page.evaluate(([k, r]) => {
+    const s = JSON.parse(localStorage.getItem(k as string)!);
+    s.state.live.round = r; localStorage.setItem(k as string, JSON.stringify(s));
+  }, [KEY, offer.afterRound + 1] as const);
+  await page.reload();
+  await expect(page.getByLabel('내구레이스')).toContainText(previewEndurance(c)!);
+  await page.getByRole('button', { name: '남은 시즌 자동 진행' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '남은 시즌 자동 진행' }).click();
+  await expect(page.getByText(`${c.year} 시즌 결과`)).toBeVisible();
+  const log = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)!).state.career.choiceLog.at(-1), KEY);
+  expect(log.endurance).toBe(true);
 });

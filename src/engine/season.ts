@@ -3,6 +3,7 @@
 import { type Career, type F1Driver, PLAYER_ID, type SeasonRecord, f1Calendar, homeGpEffect, inMilitary, playerBehavior, withHomeGp } from './careerCore';
 import { clamp, juniorTeams, lerp, statsAround } from './careerInternal';
 import { WEALTH_TIERS } from './creation';
+import { applyEndurance, enduranceOffer } from './endurance';
 import { pickEvents } from './events';
 import { seasonFeed } from './feed';
 import { CAR_WEIGHT, F1_WINNER_TEAMS, ovr, POINTS_RACE } from './data';
@@ -14,6 +15,11 @@ import { enforceOrder, runRace, simulateQualifying, type QualiResult, type RaceC
 import { hashSeed, int, normal, rngFor, type Rng } from './rng';
 import { SERIES, seriesLabel, type SeriesId } from './series';
 import { STAT_KEYS, type Circuit, type StatKey, type Stats } from './types';
+
+/** runSeason 추가 선택 */
+export interface SeasonOptions {
+  endurance?: boolean;
+}
 
 // ── 시즌 ─────────────────────────────────────────────────────────────
 interface SeasonSim {
@@ -405,8 +411,9 @@ export function seasonStatsFor(c: Career, plan: TrainingId[]): { stats: Stats; p
 /**
  * 훈련 계획을 받아 한 시즌을 진행한다. 입력 career는 바꾸지 않는다.
  * radio: F1 라이브 주말에서 플레이어가 고른 무전(radioKey). 선택 기록에 함께 남아 재생된다.
+ * opts.endurance: 시즌 중 내구레이스 출전(enduranceOffer가 있을 때만 반영)
  */
-export function runSeason(input: Career, plan: TrainingId[], radio: Record<string, RadioOptionId> = {}): { career: Career; record: SeasonRecord } {
+export function runSeason(input: Career, plan: TrainingId[], radio: Record<string, RadioOptionId> = {}, opts: SeasonOptions = {}): { career: Career; record: SeasonRecord } {
   if (input.retired) throw new Error('career is retired');
   const c: Career = structuredClone(input);
   const seed = hashSeed(c.seed, 'season', c.year);
@@ -417,7 +424,8 @@ export function runSeason(input: Career, plan: TrainingId[], radio: Record<strin
   // 군 복무 중에는 레이싱 훈련을 할 수 없다
   const serving = inMilitary(c);
   const cleanPlan = serving ? [] : plan.slice(0, slots);
-  c.choiceLog.push(Object.keys(radio).length ? { year: c.year, kind: 'training', plan: cleanPlan, radio } : { year: c.year, kind: 'training', plan: cleanPlan });
+  const endurance = !serving && !!opts.endurance && !!enduranceOffer(c);
+  c.choiceLog.push({ year: c.year, kind: 'training', plan: cleanPlan, ...(Object.keys(radio).length ? { radio } : {}), ...(endurance ? { endurance: true } : {}) });
 
   const notes: string[] = [];
   let expenses = 0;
@@ -537,6 +545,8 @@ export function runSeason(input: Career, plan: TrainingId[], radio: Record<strin
   if (series === 'kart') c.kartSeasons += 1;
   c.totals.bestOvr = Math.max(c.totals.bestOvr, Math.round(ovr(c.driver.stats)));
   if (Object.keys(aging).length) notes.push('나이가 들며 반응 속도가 떨어지기 시작했다');
+  // 여름·가을 내구레이스: 시즌 기록을 만들기 전에 적용해 능력치·팬·압박이 이번 시즌에 반영된다
+  if (endurance) applyEndurance(c, notes);
 
   const record: SeasonRecord = {
     year: c.year, age: c.age, series, team: contract?.team ?? null, seat, races: sim.races, wins: sim.wins, homeWins: sim.homeWins,

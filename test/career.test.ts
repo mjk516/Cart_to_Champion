@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyOffseason, autoplayCareer, createCareer, DEFAULT_POLICY, getOffseason, MAX_TEAMS, MIN_TEAMS, replayCareer,
   CALENDAR_2026, f1WeekendFor, isF1RaceSeason, radioKey, type RadioOptionId, EVENTS, managerAdvice, MAJOR_FLOOR, OTHERS_CAP, feedTemplateCount, pendingEventCards, resolveEvent, F1_WINNER_TEAMS, f1Rules, generateHidden, initialWorld, NEW_TEAM_START, PERSONALITIES, runOffseason, TEAMS_2026, runSeason, STAT_KEYS, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, superLicencePoints, type CareerSetup,
-  evolveCalendar, RETURNING_CIRCUITS, CALENDAR_2027_SLOTS, ALL_F1_CIRCUITS, CALENDAR_CHANGE_FROM, CALENDAR_COOLDOWN, f1Calendar, type CalendarChange, hasHomeGp, homeGpEffect, type Personality, achievements, ACHIEVEMENTS, newAchievements, careerRecords, playerNumber, DRIVERS_2026, carNumberProblem, defaultCarNumber, FAMILY_BEHAVIOR, militaryDraftAge,
+  evolveCalendar, RETURNING_CIRCUITS, CALENDAR_2027_SLOTS, ALL_F1_CIRCUITS, CALENDAR_CHANGE_FROM, CALENDAR_COOLDOWN, f1Calendar, type CalendarChange, hasHomeGp, homeGpEffect, type Personality, achievements, ACHIEVEMENTS, newAchievements, careerRecords, playerNumber, DRIVERS_2026, carNumberProblem, defaultCarNumber, FAMILY_BEHAVIOR, militaryDraftAge, enduranceOffer, previewEndurance,
 } from '../src/engine';
 import { CIRCUIT_PATHS } from '../src/app/circuitPaths';
 
@@ -527,13 +527,10 @@ describe('v0.25: 차 번호·헬멧, 가정, 내구레이스, 팀 대표 교체'
     expect(FAMILY_BEHAVIOR.overtakeAttempt).toBeLessThan(1);
   });
 
-  it('내구레이스 제안은 F1 상위 팀에서 팀메이트를 이길 때만 나온다', () => {
+  it('내구레이스는 오프시즌 이벤트로 뜨지 않는다(v0.32부터 시즌 중 훈련 계획에서 고른다)', () => {
     const e = EVENTS.find((x) => x.id === 'endurance_race')!;
     const base = { age: 26, series: 'f1', seat: 'race', f1: true, teammateBeat: 0.6, teamRank: 3 } as never as Parameters<typeof e.when>[0];
-    expect(e.when(base)).toBe(true);
-    expect(e.when({ ...base, teamRank: 8 })).toBe(false);
-    expect(e.when({ ...base, teammateBeat: 0.3 })).toBe(false);
-    expect(e.when({ ...base, f1: false, series: 'f2' })).toBe(false);
+    expect(e.when(base)).toBe(false);
   });
 
   it('팀 대표 교체가 가끔 일어나고, 그래도 메이저·나머지 팀 성능 범위는 지켜진다', () => {
@@ -573,5 +570,61 @@ describe('군 복무(SPEC §2.4 v0.30)', () => {
       for (const h of served) { expect(h.seat).toBe('none'); expect(h.races).toBe(0); }
     }
     expect(replayCareer({ ...base, seed }, c.choiceLog)).toEqual(c);
+  });
+});
+
+describe('여름·가을 내구레이스 (v0.32)', () => {
+  /** 기본 정책으로 진행하다 내구레이스 제안이 처음 뜨는 시즌 직전 커리어 */
+  function firstOffer() {
+    for (let seed = 1; seed <= 300; seed++) {
+      let c = createCareer(setup(seed, { wealthTier: 5 }));
+      for (let i = 0; i < 30 && !c.retired; i++) {
+        if (enduranceOffer(c)) return c;
+        c = runSeason(c, DEFAULT_POLICY.training(c)).career;
+        for (const card of pendingEventCards(c)) c = resolveEvent(c, card.id, card.options[0]!.id).career;
+        c = applyOffseason(c, DEFAULT_POLICY.offseason(c, getOffseason(c)));
+      }
+    }
+    throw new Error('no endurance offer found');
+  }
+
+  it('같은 F1 팀에서 팀메이트를 이긴 다음 시즌에만, 여름 또는 가을 라운드 사이에 열린다', () => {
+    const c = firstOffer();
+    const o = enduranceOffer(c)!;
+    const last = c.history[c.history.length - 1]!;
+    expect(last.series).toBe('f1');
+    expect(last.team).toBe(c.contract!.team);
+    expect(last.teammateBeat).toBeGreaterThanOrEqual(0.5);
+    expect(['summer', 'autumn']).toContain(o.season);
+    const n = f1Calendar(c).length;
+    expect(o.afterRound).toBeGreaterThan(n * 0.4);
+    expect(o.afterRound).toBeLessThan(n - 1);
+    expect(o.when).toMatch(/8월|10월/);
+  });
+
+  it('출전하면 결과가 이벤트 기록·시즌 메모에 남고, 선택 기록으로 똑같이 재현된다', () => {
+    const c = firstOffer();
+    const plan = DEFAULT_POLICY.training(c);
+    const yes = runSeason(c, plan, {}, { endurance: true });
+    const no = runSeason(c, plan);
+    const log = yes.career.eventLog!.filter((e) => e.id === 'endurance_race' && e.year === c.year);
+    expect(log).toHaveLength(1);
+    expect(log[0]!.text).toBe(previewEndurance(c));
+    expect(yes.record.notes.some((n) => n.includes('출전'))).toBe(true);
+    expect(no.career.eventLog?.some((e) => e.id === 'endurance_race' && e.year === c.year) ?? false).toBe(false);
+    expect(yes.career.choiceLog.at(-1)).toMatchObject({ kind: 'training', endurance: true });
+    const replayed = replayCareer(yes.career.setup, yes.career.choiceLog);
+    expect(replayed.eventLog).toEqual(yes.career.eventLog);
+    expect(replayed.driver.stats).toEqual(yes.career.driver.stats);
+  });
+
+  it('제안이 없으면 출전을 골라도 아무 일도 없고, 오프시즌 이벤트로는 더 이상 뜨지 않는다', () => {
+    const c = createCareer(setup(5));
+    const r = runSeason(c, DEFAULT_POLICY.training(c), {}, { endurance: true });
+    expect(r.career.choiceLog.at(-1)).not.toHaveProperty('endurance');
+    for (let seed = 1; seed <= 40; seed++) {
+      const done = autoplayCareer(setup(seed, { wealthTier: 5 }));
+      expect(done.eventLog?.some((e) => e.id === 'endurance_race') ?? false).toBe(false);
+    }
   });
 });

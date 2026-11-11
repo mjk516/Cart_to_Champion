@@ -510,8 +510,9 @@ export const MORE_EVENTS: EventDef[] = [
   },
   {
     id: 'endurance_race', category: 'career', title: '내구레이스 출전 제안',
-    text: '팀 성적도 좋고 팀 안에서 입지도 단단하다. 팀이 겨울 동안 GT3 24시간 내구레이스에 잠깐 나가 보는 것을 허락했다.',
-    when: (x) => x.f1 && x.seat === 'race' && x.teamRank <= 5 && x.teammateBeat >= 0.5 && x.age >= 20 && x.age <= 38,
+    text: '팀 안에서 입지가 단단해졌다. 팀이 그랑프리 사이 빈 주말에 GT 내구레이스에 나가 보는 것을 허락했다.',
+    // v0.32부터 오프시즌 이벤트로는 뜨지 않는다. 훈련 계획의 시즌 중 출전 선택(endurance.ts)이 이 결과표를 쓴다
+    when: () => false,
     weight: () => 1.5,
     options: [
       { id: 'race', label: '출전한다', hint: '레이스크래프트·우천·일관성 성장, 팬 크게 +, 사고 위험', outcomes: [
@@ -519,7 +520,7 @@ export const MORE_EVENTS: EventDef[] = [
         { p: 0.43, text: '팀과 교대로 24시간을 버텨 완주했다. 긴 레이스에서 페이스를 지키는 법을 배웠다.', effect: { stats: { consistency: 1, tyre: 1 }, followersMul: 1.06, reputation: 2 } },
         { p: 0.12, text: '밤사이 다른 차와 얽혀 리타이어했다. F1 팀이 "다음엔 신중하자"고 했다.', effect: { followersMul: 1.03, pressure: 8, flags: { releaseRisk: 0.03 } } },
       ] },
-      { id: 'no', label: 'F1 준비에 집중한다', outcomes: [{ p: 1, text: '겨울 내내 시뮬레이터와 체력 훈련에 집중했다.', effect: { pressure: -3 } }] },
+      { id: 'no', label: 'F1 준비에 집중한다', outcomes: [{ p: 1, text: '빈 주말에 시뮬레이터와 체력 훈련에 집중했다.', effect: { pressure: -3 } }] },
     ],
   },
   // ── 생활 7 ────────────────────────────────────────────────────────

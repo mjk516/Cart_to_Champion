@@ -9,6 +9,7 @@ export * from './names';
 export * from './growth';
 export * from './media';
 export * from './career';
+export * from './endurance';
 export * from './form';
 export * from './events';
 export * from './feed';

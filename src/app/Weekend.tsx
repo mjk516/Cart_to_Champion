@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import {
-  circuitType, f1Calendar, f1WeekendFor, homeGpEffect, forecastFinish, ovr, radioKey, runRace,
+  circuitType, enduranceOffer, f1Calendar, previewEndurance, f1WeekendFor, homeGpEffect, forecastFinish, ovr, radioKey, runRace,
   type Classified, type F1Weekend, type F1WeekendSession,
 } from '../engine';
 import { LiveRace } from './LiveRace';
@@ -61,6 +61,9 @@ export function Weekend() {
   const lastStep = live.step >= wk.sessions.length;
   // 프랙티스는 결과에 영향이 없으므로 첫 퀄리파잉으로 건너뛸 수 있다(step은 세션 번호 + 1)
   const qualiStep = wk.sessions.findIndex((x) => x.type === 'quali' && !x.display) + 1;
+  // 지난 그랑프리와 이번 주말 사이에 내구레이스가 있었다
+  const endur = enduranceOffer(c);
+  const endurHere = endur && live.round === endur.afterRound + 1 ? endur : null;
 
   const addPoints = (rows: Classified[] | null, pts: Record<string, number>) => {
     if (rows) for (const r of rows) pts[r.id] = (pts[r.id] ?? 0) + r.points;
@@ -123,6 +126,13 @@ export function Weekend() {
                 <p>위쪽 단계 표시처럼 <b>다음 세션</b>을 누를 때마다 프랙티스 → 퀄리파잉 → 레이스로 넘어갑니다. 레이스와 스프린트는 첫 랩부터 체커기까지 트랙 뷰로 진행되고(배속 ×1은 실제 속도), 세이프티카·비가 오면 <b>엔지니어 무전</b>을 고릅니다. 세이프티카 때는 사고 지점·크기·예상 시간이 함께 나옵니다.</p>
                 <p>바쁘면 "레이스 결과로 바로 가기"나 "남은 시즌 자동 진행"을 쓰세요.</p>
               </Tip>
+              {endurHere && (
+                <div className={`rounded-xl border p-3 text-sm ${live.endurance ? 'border-amber-400/40 bg-amber-400/5' : 'border-white/10 bg-white/5'}`} aria-label="내구레이스">
+                  <div className="font-bold">🏁 {endurHere.when} · {endurHere.name}</div>
+                  <div className="mt-1 text-zinc-300">{live.endurance ? previewEndurance(c) : '이번에는 나가지 않고 F1 준비에 집중했다.'}</div>
+                  {live.endurance && <div className="mt-1 text-xs text-zinc-500">능력치·팬·압박 변화는 시즌을 마칠 때 반영됩니다.</div>}
+                </div>
+              )}
               <div className="text-lg font-black">이번 주말 전망</div>
               {forecast && (
                 <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
