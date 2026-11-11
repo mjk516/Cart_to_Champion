@@ -13,6 +13,10 @@ const ME = 'player';
 const TYRE_COLOR: Record<string, string> = { S: '#ef4444', M: '#facc15', H: '#e5e7eb', I: '#22c55e' };
 const TRIGGERS = new Set(['sc_deploy', 'vsc_deploy', 'red_flag', 'rain_start']);
 const MAX_TRACK_VIEWS = 8;
+/** 사건이 없어도 트랙 뷰를 보여 주는 오프닝 랩 수 */
+const OPENING_LAPS = 3;
+/** start: 1랩(그리드에서 출발), finish: 마지막 랩(체커기), normal: 그 밖 */
+type TrackMode = 'start' | 'normal' | 'finish';
 
 interface Ctx { codeOf: (id: string) => string; colorOf: (id: string) => string }
 
@@ -76,8 +80,8 @@ const TRACK_WINDOW_SEC = 6;
 /** 트랙 뷰에서 선두가 출발하는 위치(랩 비율) */
 const LEADER_START = 0.25;
 
-function TrackView({ circuitId, realLayout, prev, cur, baseLap, banner, focus, x, speed, onSpeed, onEnd }: {
-  circuitId: string; realLayout: boolean; prev: LapRecord | null; cur: LapRecord; baseLap: number; banner: string; focus: string[]; x: Ctx;
+function TrackView({ circuitId, realLayout, prev, cur, baseLap, banner, focus, mode = 'normal', x, speed, onSpeed, onEnd }: {
+  circuitId: string; realLayout: boolean; prev: LapRecord | null; cur: LapRecord; baseLap: number; banner: string; focus: string[]; mode?: TrackMode; x: Ctx;
   /** 재생 배속. ×1이면 차가 실제 레이스 속도로 움직인다 */
   speed: number;
   onSpeed: (s: number) => void;
@@ -119,13 +123,17 @@ function TrackView({ circuitId, realLayout, prev, cur, baseLap, banner, focus, x
   const tau = raceSec / TRACK_WINDOW_SEC;
   // 깃발 상황: SC·VSC는 노란색, 레드 플래그는 빨간색 트랙. 차도 그만큼 느려진다(레드 플래그는 천천히 피트로 돌아가는 속도)
   const flag = TRACK_FLAG[cur.phase];
+  // 1랩은 출발선에서, 마지막 랩은 장면이 끝날 때 선두가 결승선을 막 지나도록 시작 위치를 정한다
+  const windowLaps = (TRACK_WINDOW_SEC * flag.pace) / baseLap;
+  const leaderStart = mode === 'start' ? 0 : mode === 'finish' ? 1 - windowLaps * 0.8 : LEADER_START;
   const prevGap = new Map((prev?.order ?? []).map((e) => [e.id, e.gap]));
   const L = pathRef.current?.getTotalLength() ?? 0;
+  const finishLine = pathRef.current && L ? pathRef.current.getPointAtLength(0) : null;
   const pos = (id: string, gap: number) => {
     if (!pathRef.current || !L) return null;
     const g = (prevGap.get(id) ?? gap) * (1 - tau) + gap * tau;
     // 선두는 랩의 1/4 지점에서 출발해 실제 속도로 TRACK_WINDOW_SEC초만큼 달린다(예전에는 3초에 한 바퀴를 돌아 너무 빨랐다)
-    const p = (((LEADER_START + (raceSec * flag.pace) / baseLap - g / baseLap) % 1) + 1) % 1;
+    const p = (((leaderStart + (raceSec * flag.pace) / baseLap - g / baseLap) % 1) + 1) % 1;
     return pathRef.current.getPointAtLength(p * L);
   };
   return (
@@ -134,6 +142,14 @@ function TrackView({ circuitId, realLayout, prev, cur, baseLap, banner, focus, x
         {flag.glow && <path d={d} fill="none" stroke={flag.glow} strokeOpacity={0.35} strokeWidth={30 * Math.min(k, 1.6)} strokeLinejoin="round" />}
         <path d={d} fill="none" stroke={flag.track} strokeWidth={18 * Math.min(k, 1.6)} strokeLinejoin="round" style={{ transition: 'stroke 400ms' }} />
         <path ref={pathRef} d={d} fill="none" stroke={flag.dash} strokeWidth={2} strokeDasharray="6 8" />
+        {/* 출발·결승선(체커 무늬) */}
+        {finishLine && (
+          <g transform={`translate(${finishLine.x} ${finishLine.y})`}>
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <rect key={i} x={-6 + (i % 2) * 6} y={-9 + Math.floor(i / 2) * 6} width={6} height={6} fill={(i + Math.floor(i / 2)) % 2 ? '#18181b' : '#fafafa'} />
+            ))}
+          </g>
+        )}
         {[...cur.order].reverse().map((e) => {
           const pt = pos(e.id, e.gap);
           if (!pt) return null;
@@ -203,7 +219,7 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
   const [lap, setLap] = useState(instant ? Number.MAX_SAFE_INTEGER : 0);
   const [playing, setPlaying] = useState(!instant);
   const [speed, setSpeed] = useState(1);
-  const [track, setTrack] = useState<{ lap: number; banner: string; focus: string[] } | null>(null);
+  const [track, setTrack] = useState<{ lap: number; banner: string; focus: string[]; mode: TrackMode } | null>(null);
   const shown = useRef(new Set<number>());
   const done = useRef(false);
   const byId = useMemo(() => new Map(cars.map((c) => [c.id, c])), [cars]);
@@ -219,10 +235,27 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
       const rec = laps[next - 1];
       if (!rec) return;
       const trig = outcome.incidents.filter((i) => i.lap === rec.lap && isTrigger(i));
-      if (trig.length && !shown.current.has(rec.lap) && shown.current.size < MAX_TRACK_VIEWS) {
+      const lapIncidents = outcome.incidents.filter((i) => i.lap === rec.lap);
+      const focusOf = (list: Incident[]) => list.flatMap((i) => (i.type === 'overtake' ? [i.by, i.on] : 'car' in i ? [i.car] : []));
+      // 마지막 랩: 체커기를 받으며 결승선을 통과하는 장면(항상)
+      if (next === laps.length && outcome.status === 'finished') {
+        const winner = outcome.classification[0]!;
+        setTrack({ lap: rec.lap, banner: `🏁 체커기 · ${x.codeOf(winner.id)} 우승`, focus: [winner.id, ME], mode: 'finish' });
+        return;
+      }
+      if (shown.current.has(rec.lap)) return;
+      // 1~3랩: 추월이 가장 많은 오프닝 랩은 사건이 없어도 보여 준다(트랙 뷰 횟수 제한과 별개)
+      if (rec.lap <= OPENING_LAPS) {
         shown.current.add(rec.lap);
-        const focus = trig.flatMap((i) => (i.type === 'overtake' ? [i.by, i.on] : 'car' in i ? [i.car] : []));
-        setTrack({ lap: rec.lap, banner: `L${rec.lap} · ${describe(trig[0]!, x) ?? ''}`, focus });
+        const passes = lapIncidents.filter((i) => i.type === 'overtake').length;
+        const lead = trig[0] ? describe(trig[0], x) : null;
+        const banner = `L${rec.lap} · ${lead ?? (rec.lap === 1 ? '스타트' : '오프닝 랩 배틀')}${passes > 1 ? ` · 추월 ${passes}번` : ''}`;
+        setTrack({ lap: rec.lap, banner, focus: focusOf(lapIncidents), mode: rec.lap === 1 ? 'start' : 'normal' });
+        return;
+      }
+      if (trig.length && shown.current.size - OPENING_LAPS < MAX_TRACK_VIEWS) {
+        shown.current.add(rec.lap);
+        setTrack({ lap: rec.lap, banner: `L${rec.lap} · ${describe(trig[0]!, x) ?? ''}`, focus: focusOf(trig), mode: 'normal' });
       }
     }, 400 / speed);
     return () => clearTimeout(id);
@@ -264,7 +297,7 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
       </div>
 
       {track && rec && (
-        <TrackView circuitId={input.circuit.id} realLayout={realLayout} prev={laps[cur - 2] ?? null} cur={rec} baseLap={input.circuit.baseLap} banner={track.banner} focus={track.focus} x={x} speed={speed} onSpeed={setSpeed} onEnd={() => setTrack(null)} />
+        <TrackView circuitId={input.circuit.id} realLayout={realLayout} prev={laps[cur - 2] ?? null} cur={rec} baseLap={input.circuit.baseLap} banner={track.banner} focus={track.focus} mode={track.mode} x={x} speed={speed} onSpeed={setSpeed} onEnd={() => setTrack(null)} />
       )}
 
       {outcome.status === 'pending' && cur >= laps.length && !track && (
