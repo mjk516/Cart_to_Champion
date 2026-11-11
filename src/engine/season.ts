@@ -1,6 +1,6 @@
 // 시즌 진행(SPEC §4·§5): 카트·하부 리그·F1 시즌 계산, F1 그랑프리 주말(라이브용), runSeason.
 
-import { Career, F1Driver, PLAYER_ID, SeasonRecord, f1Calendar, homeGpEffect, playerBehavior, withHomeGp } from './careerCore';
+import { type Career, type F1Driver, PLAYER_ID, type SeasonRecord, f1Calendar, homeGpEffect, playerBehavior, withHomeGp } from './careerCore';
 import { clamp, juniorTeams, lerp, statsAround } from './careerInternal';
 import { WEALTH_TIERS } from './creation';
 import { pickEvents } from './events';

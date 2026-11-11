@@ -1,6 +1,6 @@
 // 오프시즌(SPEC §7·§2.1): 제안 만들기, 선택 반영, 팀·캘린더·AI 드라이버 세계 진행.
 
-import { CALENDAR_2026_SLOTS, Career, HOME_MARKET_BONUS, Offer, Offseason, OffseasonChoice, PRINCIPAL_CHANGE_CHANCE, ROOKIE_GUARANTEE_POS, ROOKIE_GUARANTEE_POS_HOME, hasHomeGp } from './careerCore';
+import { CALENDAR_2026_SLOTS, type Career, HOME_MARKET_BONUS, type Offer, type Offseason, type OffseasonChoice, PRINCIPAL_CHANGE_CHANCE, ROOKIE_GUARANTEE_POS, ROOKIE_GUARANTEE_POS_HOME, hasHomeGp } from './careerCore';
 import { MAJOR_FLOOR, OTHERS_CAP, newRookie, superLicencePoints } from './season';
 import { clamp, juniorTeams, lerp } from './careerInternal';
 import { WEALTH_TIERS } from './creation';

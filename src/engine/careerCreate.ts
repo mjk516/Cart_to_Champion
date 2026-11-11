@@ -1,6 +1,6 @@
 // 커리어 생성(SPEC §3): 설정에서 12세 카트 선수와 2026 실제 그리드 세계를 만든다.
 
-import { CALENDAR_2026_SLOTS, Career, CareerSetup, ENGINE_VERSION, F1World } from './careerCore';
+import { CALENDAR_2026_SLOTS, type Career, type CareerSetup, ENGINE_VERSION, type F1World } from './careerCore';
 import { juniorTeams, lerp, zeroStats } from './careerInternal';
 import { carNumberProblem, DEFAULT_HELMET, defaultCarNumber, generateCandidates, WEALTH_TIERS } from './creation';
 import { generateManager } from './manager';

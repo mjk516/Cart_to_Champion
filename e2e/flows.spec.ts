@@ -1,0 +1,139 @@
+// 핵심 화면 흐름 E2E(SPEC §10). 엔진 테스트로는 못 잡는 화면 버그(눌러도 반응 없는 버튼 등)를 막는다.
+import { expect, test, type Page } from '@playwright/test';
+import {
+  applyOffseason, createCareer, DEFAULT_POLICY, getOffseason, isF1RaceSeason, pendingEventCards, resolveEvent, runSeason, type Career,
+} from '../src/engine';
+
+const KEY = 'kart-to-champion-save';
+
+/** 엔진으로 F1 레이스 시트 직전까지 진행한 커리어(라이브 주말 테스트용) */
+function f1Career(): Career {
+  for (let seed = 1; seed < 300; seed++) {
+    let c = createCareer({ seed, name: 'E2E', nationality: 'GB', wealthTier: 3, personality: 'calm', candidateIndex: 0, focus: ['pace'] });
+    for (let i = 0; i < 25 && !c.retired; i++) {
+      if (isF1RaceSeason(c)) return c;
+      c = runSeason(c, DEFAULT_POLICY.training(c)).career;
+      for (const card of pendingEventCards(c)) c = resolveEvent(c, card.id, card.options[0]!.id).career;
+      c = applyOffseason(c, DEFAULT_POLICY.offseason(c, getOffseason(c)));
+    }
+  }
+  throw new Error('F1 커리어를 만들지 못함');
+}
+
+async function loadSave(page: Page, career: Career, screen = 'dashboard') {
+  await page.goto('/');
+  await page.evaluate(([k, v]) => { localStorage.setItem(k!, v!); }, [KEY, JSON.stringify({ state: { screen, career, signature: null, firstF1Signature: null, contracts: [], lastRecord: null, showKrw: true, live: null, interviewAuto: null }, version: 1 })]);
+  await page.reload();
+}
+
+/** 오프시즌의 전환점 이벤트를 모두 첫 번째 선택지로 처리한다 */
+async function resolveAllEvents(page: Page) {
+  for (let i = 0; i < 5; i++) {
+    const gate = page.getByText('전환점을 먼저 결정하면');
+    if (!(await gate.isVisible().catch(() => false))) return;
+    const card = page.locator('div.rounded-xl').filter({ has: page.locator('button') }).filter({ hasText: /기자 질문|훈련|패독 밖|커리어|생활/ }).first();
+    await card.locator('button').first().click();
+  }
+}
+
+test.beforeEach(async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => localStorage.clear());
+});
+
+test('새 커리어: 헬멧·번호(실제 F1 번호는 경고) → 대시보드', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '새 커리어' }).click();
+  await page.getByLabel('이름').fill('김테스트');
+  await page.getByRole('button', { name: '다음' }).click();
+
+  const num = page.getByLabel('차 번호');
+  await num.fill('44');
+  await expect(page.getByRole('alert')).toContainText('실제 F1 드라이버');
+  await expect(page.getByRole('button', { name: '다음' })).toBeDisabled();
+  await num.fill('1');
+  await expect(page.getByRole('alert')).toContainText('챔피언');
+  await num.fill('9');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await page.getByRole('button', { name: '바탕색 #2563eb' }).click();
+  await page.getByRole('button', { name: '별' }).click();
+
+  for (let i = 0; i < 4; i++) await page.getByRole('button', { name: '다음' }).click();
+  await page.getByRole('button', { name: '이름으로 서명 만들기' }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('김테스트');
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('#9');
+});
+
+test('시즌 진행 → 오프시즌 → 은퇴 선언(게임 안 확인 창)', async ({ page }) => {
+  await loadSave(page, createCareer({ seed: 5, name: '은퇴테스트', nationality: 'KR', wealthTier: 3, personality: 'fighter', candidateIndex: 0, focus: ['pace'] }));
+  await page.getByRole('button', { name: /2026 시즌 진행/ }).click();
+  await expect(page.getByText('2026 시즌 결과')).toBeVisible();
+  await resolveAllEvents(page);
+  await page.getByRole('button', { name: '은퇴 선언' }).click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog).toContainText('되돌릴 수 없습니다');
+  await dialog.getByRole('button', { name: '취소' }).click();
+  await expect(dialog).toHaveCount(0);
+  await page.getByRole('button', { name: '은퇴 선언' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '은퇴 선언' }).click();
+  await expect(page.getByText('CAREER CARD')).toBeVisible();
+});
+
+test('시트 없는 해에는 대시보드에서도 은퇴할 수 있다', async ({ page }) => {
+  const c = createCareer({ seed: 6, name: '무소속', nationality: 'KR', wealthTier: 3, personality: 'calm', candidateIndex: 0, focus: ['pace'] });
+  await loadSave(page, { ...c, contract: null });
+  await page.getByRole('button', { name: '은퇴 선언' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '은퇴 선언' }).click();
+  await expect(page.getByText('CAREER CARD')).toBeVisible();
+});
+
+test('F1 라이브: 주말 진행 중 남은 시즌 자동 진행 → 오프시즌', async ({ page }) => {
+  const c = f1Career();
+  await loadSave(page, c);
+  await page.getByRole('button', { name: /시즌 라이브로 시작/ }).click();
+  await expect(page.getByText('이번 주말 전망')).toBeVisible();
+  await page.getByRole('button', { name: '다음 세션' }).click();
+  await page.getByRole('button', { name: '남은 시즌 자동 진행' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '남은 시즌 자동 진행' }).click();
+  await expect(page.getByText(`${c.year} 시즌 결과`)).toBeVisible();
+  const races = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)!).state.career.history.at(-1).races, KEY);
+  expect(races).toBeGreaterThanOrEqual(23);
+});
+
+test('F1 라이브 중 대시보드의 "남은 시즌 한 번에 진행"이 진행 상태를 이어받는다', async ({ page }) => {
+  const c = f1Career();
+  await loadSave(page, c);
+  await page.getByRole('button', { name: /시즌 라이브로 시작/ }).click();
+  await page.getByRole('button', { name: '다음 세션' }).click();
+  await page.getByRole('button', { name: /카트에서 챔피언까지/ }).first().click(); // 홈
+  await page.getByRole('button', { name: /이어하기/ }).click();
+  await page.getByRole('button', { name: '남은 시즌 한 번에 진행' }).click();
+  await expect(page.getByText(`${c.year} 시즌 결과`)).toBeVisible();
+});
+
+test('업적·기록과 설정(내보내기 → 가져오기 확인 창)', async ({ page }) => {
+  await loadSave(page, createCareer({ seed: 9, name: '기록', nationality: 'KR', wealthTier: 3, personality: 'calm', candidateIndex: 0, focus: ['pace'] }));
+  await page.getByRole('button', { name: '업적·기록' }).click();
+  await expect(page.getByRole('heading', { name: '업적·기록' })).toBeVisible();
+  await expect(page.getByText(/업적 \d+ \/ \d+/)).toBeVisible();
+
+  await page.getByRole('button', { name: '설정' }).click();
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: '내보내기' }).click();
+  const file = await (await download).path();
+  await page.locator('input[type=file]').setInputFiles(file!);
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog).toContainText('저장 파일로 바꿀까요');
+  await dialog.getByRole('button', { name: '불러오기' }).click();
+  // 불러오면 바로 그 커리어의 대시보드로 넘어간다
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('기록');
+});
+
+test('휴대폰 폭(375px)에서 가로로 넘치지 않는다', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await loadSave(page, f1Career());
+  const overflow = () => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(await overflow()).toBeLessThanOrEqual(0);
+  await page.getByRole('button', { name: /시즌 라이브로 시작/ }).click();
+  expect(await overflow()).toBeLessThanOrEqual(0);
+});

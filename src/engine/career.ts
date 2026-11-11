@@ -9,7 +9,7 @@ export * from './careerCreate';
 export * from './season';
 export * from './offseason';
 
-import { Career, CareerSetup, ChoiceLogEntry, EventLogEntry, Offseason, OffseasonChoice } from './careerCore';
+import { type Career, type CareerSetup, type ChoiceLogEntry, type EventLogEntry, type Offseason, type OffseasonChoice } from './careerCore';
 import { applyOffseason, getOffseason } from './offseason';
 import { createCareer } from './careerCreate';
 import { runSeason } from './season';
