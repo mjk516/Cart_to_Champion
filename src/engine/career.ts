@@ -4,6 +4,8 @@
 
 import { generateCandidates, WEALTH_TIERS } from './creation';
 import { PERSONALITIES } from './creation';
+import { applyEventChoice, EVENT_BY_ID, eventCard, pickEvents, type EventCard } from './events';
+import { seasonFeed, type FeedItem } from './feed';
 import { CALENDAR_2026, CAR_WEIGHT, DRIVERS_2026, F1_WINNER_TEAMS, ovr, POINTS_RACE, TEAMS_2026 } from './data';
 import { teamForm } from './form';
 import {
@@ -108,6 +110,8 @@ export interface SeasonRecord {
   notes: string[];
   /** 시즌을 마친 뒤의 세부 능력치(은퇴 화면 성장 곡선용). 이전 저장 파일에는 없을 수 있다 */
   statsEnd?: Stats;
+  /** 언론·팬 반응(SPEC §6.1) */
+  feed?: FeedItem[];
 }
 
 export interface F1Driver {
@@ -135,7 +139,17 @@ export interface F1World {
 
 export type ChoiceLogEntry =
   | { year: number; kind: 'training'; plan: TrainingId[] }
+  | { year: number; kind: 'event'; eventId: string; optionId: string }
   | { year: number; kind: 'offseason'; choice: OffseasonChoice };
+
+export interface EventLogEntry {
+  year: number;
+  id: string;
+  title: string;
+  option: string;
+  text: string;
+  summary: string[];
+}
 
 export interface Career {
   schemaVersion: 1;
@@ -168,6 +182,12 @@ export interface Career {
   choiceLog: ChoiceLogEntry[];
   world: F1World;
   retired: boolean;
+  /** 이번 오프시즌에 처리해야 할 전환점 이벤트(SPEC §6) */
+  pendingEvents?: string[];
+  /** 지금까지 겪은 이벤트와 결과 */
+  eventLog?: EventLogEntry[];
+  /** 다음 오프시즌까지 유지되는 플래그(scoutBonus, releaseRisk) */
+  flags?: Record<string, number>;
   totals: {
     f1Titles: number;
     f1Starts: number;
@@ -256,6 +276,9 @@ export function createCareer(setup: CareerSetup): Career {
     choiceLog: [],
     world,
     retired: false,
+    pendingEvents: [],
+    eventLog: [],
+    flags: {},
     totals: { f1Titles: 0, f1Starts: 0, f1Wins: 0, f1Podiums: 0, f1Poles: 0, juniorTitles: [], earnings: 0, releases: 0, bestOvr: Math.round(ovr(cand.stats)) },
   };
 }
@@ -708,7 +731,10 @@ export function runSeason(input: Career, plan: TrainingId[]): { career: Career; 
     actualAvg: Math.round(sim.actualAvg * 10) / 10, teammateBeat: Math.round(sim.teammateBeat * 100) / 100,
     headline: mediaOut.headline, notes, statsEnd: { ...c.driver.stats },
   };
+  record.feed = seasonFeed(c, record);
   c.history.push(record);
+  // 이번 오프시즌 전환점 이벤트(0~2개). 오프시즌 제안을 받기 전에 처리한다
+  c.pendingEvents = pickEvents(c, record);
   if (seat === 'race') c.noSeatSeasons = 0;
   else c.noSeatSeasons += 1;
   return { career: c, record };
@@ -786,7 +812,7 @@ export function getOffseason(c: Career): Offseason {
   const offers: Offer[] = [];
   const pct = last.position ? 1 - (last.position - 1) / Math.max(1, last.fieldSize) : 0;
   const perf = last.races ? clamp(last.expectedAvg - last.actualAvg, -10, 10) / 10 : -0.3;
-  const scout = clamp(pct * 0.6 + perf * 0.2 + (c.media.reputation / 100) * 0.2, 0, 1);
+  const scout = clamp(pct * 0.6 + perf * 0.2 + (c.media.reputation / 100) * 0.2 + (c.flags?.scoutBonus ?? 0), 0, 1);
   const budget = c.funds + (nextAge < 21 && c.f1Debut === null ? wealth.familySupport : 0);
   const academyCovers = (s: SeriesId) => !!c.academy && s !== 'f1';
   const affordable = (s: SeriesId, cost: number) => academyCovers(s) || cost <= budget;
@@ -927,7 +953,7 @@ export function getOffseason(c: Career): Offseason {
   const pdef = PERSONALITIES[c.driver.personality];
   if (c.contract && c.contract.seat === 'race' && last.seat === 'race') {
     const conflict = (last.teammateBeat < 0.4 ? 1.5 : 1) * (perf < 0 ? 1.3 : 1);
-    if (rngFor(c.seed, 'release', c.year)() < pdef.releaseRisk * conflict) {
+    if (rngFor(c.seed, 'release', c.year)() < Math.max(0, pdef.releaseRisk * conflict + (c.flags?.releaseRisk ?? 0))) {
       released = true;
       const team = c.contract.team;
       for (let i = offers.length - 1; i >= 0; i--) if (offers[i]!.team === team) offers.splice(i, 1);
@@ -992,6 +1018,7 @@ function ageWorldDrivers(c: Career, r: Rng, nextYear: number): void {
 
 /** 오프시즌 선택을 반영하고 다음 해로 넘어간다 */
 export function applyOffseason(input: Career, choice: OffseasonChoice): Career {
+  if (input.pendingEvents?.length) throw new Error(`resolve events first: ${input.pendingEvents.join(', ')}`);
   const c: Career = structuredClone(input);
   const off = getOffseason(input);
   c.choiceLog.push({ year: c.year, kind: 'offseason', choice });
@@ -1049,6 +1076,7 @@ export function applyOffseason(input: Career, choice: OffseasonChoice): Career {
   ageWorldDrivers(c, r, nextYear);
   fillOpenSeats(c, r, nextYear);
 
+  c.flags = {};
   c.year = nextYear;
   c.age += 1;
   return c;
@@ -1058,6 +1086,26 @@ export function applyOffseason(input: Career, choice: OffseasonChoice): Career {
 export interface Policy {
   training: (c: Career) => TrainingId[];
   offseason: (c: Career, o: Offseason) => OffseasonChoice;
+  /** 전환점 이벤트 선택. 없으면 첫 번째 선택지 */
+  event?: (c: Career, card: EventCard) => string;
+}
+
+/** 이번 오프시즌에 처리할 이벤트 카드 */
+export function pendingEventCards(c: Career): EventCard[] {
+  return (c.pendingEvents ?? []).map((id) => eventCard(c, id));
+}
+
+/** 전환점 이벤트 하나를 처리한다. 입력 career는 바꾸지 않는다 */
+export function resolveEvent(input: Career, eventId: string, optionId: string): { career: Career; result: EventLogEntry } {
+  if (!input.pendingEvents?.includes(eventId)) throw new Error(`event ${eventId} is not pending`);
+  const c: Career = structuredClone(input);
+  const def = EVENT_BY_ID.get(eventId)!;
+  const out = applyEventChoice(c, eventId, optionId);
+  c.pendingEvents = (c.pendingEvents ?? []).filter((id) => id !== eventId);
+  c.choiceLog.push({ year: c.year, kind: 'event', eventId, optionId });
+  const result: EventLogEntry = { year: c.year, id: eventId, title: def.title, option: def.options.find((o) => o.id === optionId)!.label, text: out.text, summary: out.summary };
+  c.eventLog = [...(c.eventLog ?? []), result];
+  return { career: c, result };
 }
 
 const SERIES_RANK = (s: SeriesId) => LADDER.indexOf(s);
@@ -1089,6 +1137,7 @@ export function autoplayCareer(setup: CareerSetup, policy: Policy = DEFAULT_POLI
   let c = createCareer(setup);
   for (let i = 0; i < maxSeasons && !c.retired; i++) {
     c = runSeason(c, policy.training(c)).career;
+    for (const card of pendingEventCards(c)) c = resolveEvent(c, card.id, policy.event?.(c, card) ?? card.options[0]!.id).career;
     c = applyOffseason(c, policy.offseason(c, getOffseason(c)));
   }
   if (!c.retired) c.retired = true;
@@ -1105,6 +1154,7 @@ export function replayCareer(setup: CareerSetup, log: ChoiceLogEntry[]): Career 
     if (c.retired) throw new Error(`log continues after retirement (year ${entry.year})`);
     if (entry.year !== c.year) throw new Error(`log year ${entry.year} does not match career year ${c.year}`);
     if (entry.kind === 'training') c = runSeason(c, entry.plan).career;
+    else if (entry.kind === 'event') c = resolveEvent(c, entry.eventId, entry.optionId).career;
     else c = applyOffseason(c, entry.choice);
   }
   return c;

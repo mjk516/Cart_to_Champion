@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyOffseason, autoplayCareer, createCareer, DEFAULT_POLICY, getOffseason, MAX_TEAMS, MIN_TEAMS, replayCareer,
-  F1_WINNER_TEAMS, f1Rules, generateHidden, initialWorld, NEW_TEAM_START, PERSONALITIES, runOffseason, TEAMS_2026, runSeason, STAT_KEYS, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, superLicencePoints, type CareerSetup,
+  EVENTS, feedTemplateCount, pendingEventCards, resolveEvent, F1_WINNER_TEAMS, f1Rules, generateHidden, initialWorld, NEW_TEAM_START, PERSONALITIES, runOffseason, TEAMS_2026, runSeason, STAT_KEYS, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, superLicencePoints, type CareerSetup,
 } from '../src/engine';
 
 const setup = (seed: number, extra: Partial<CareerSetup> = {}): CareerSetup => ({
@@ -23,8 +23,9 @@ describe('시즌과 오프시즌', () => {
   it('runSeason과 applyOffseason은 입력을 바꾸지 않는다', () => {
     const c = createCareer(setup(2));
     const snap = JSON.stringify(c);
-    const after = runSeason(c, DEFAULT_POLICY.training(c)).career;
+    let after = runSeason(c, DEFAULT_POLICY.training(c)).career;
     expect(JSON.stringify(c)).toBe(snap);
+    for (const card of pendingEventCards(after)) after = resolveEvent(after, card.id, card.options[0]!.id).career;
     const snap2 = JSON.stringify(after);
     applyOffseason(after, DEFAULT_POLICY.offseason(after, getOffseason(after)));
     expect(JSON.stringify(after)).toBe(snap2);
@@ -153,6 +154,60 @@ describe('성격 기질과 잠재력(SPEC §3.4 v0.11)', () => {
     expect(Math.max(...good)).toBeLessThanOrEqual(88);
     const spread = (xs: number[]) => Math.max(...xs) - Math.min(...xs);
     expect(spread(bad)).toBeGreaterThan(spread(good));
+  });
+});
+
+describe('전환점 이벤트와 언론·팬 피드(SPEC §6, §6.1)', () => {
+  it('이벤트 20개, 반응 문구 80개', () => {
+    expect(EVENTS).toHaveLength(20);
+    expect(new Set(EVENTS.map((e) => e.id)).size).toBe(20);
+    expect(feedTemplateCount()).toBeGreaterThanOrEqual(80);
+  });
+
+  it('이벤트를 처리하기 전에는 오프시즌으로 넘어갈 수 없다', () => {
+    let c = createCareer(setup(21));
+    for (let i = 0; i < 6; i++) {
+      c = runSeason(c, DEFAULT_POLICY.training(c)).career;
+      if (c.pendingEvents?.length) {
+        expect(() => applyOffseason(c, { offerId: null })).toThrow();
+        return;
+      }
+      c = applyOffseason(c, DEFAULT_POLICY.offseason(c, getOffseason(c)));
+    }
+    throw new Error('6시즌 동안 이벤트가 한 번도 나오지 않았다');
+  });
+
+  it('커리어 동안 여러 종류의 이벤트를 겪고, 결과가 기록된다', () => {
+    const c = autoplayCareer(setup(22, { personality: 'aggressive' }));
+    const log = c.eventLog ?? [];
+    expect(log.length).toBeGreaterThanOrEqual(8);
+    expect(new Set(log.map((e) => e.id)).size).toBeGreaterThanOrEqual(6);
+    for (const e of log) expect(e.text.length).toBeGreaterThan(0);
+    // 같은 이벤트가 3년 안에 다시 나오지 않는다
+    for (const e of log) expect(log.filter((x) => x.id === e.id && x.year > e.year && x.year < e.year + 3)).toHaveLength(0);
+  });
+
+  it('선택에 따라 결과가 달라진다(같은 시드, 다른 선택)', () => {
+    let c = createCareer(setup(23));
+    for (let i = 0; i < 10 && !c.pendingEvents?.length; i++) {
+      c = runSeason(c, DEFAULT_POLICY.training(c)).career;
+      if (!c.pendingEvents?.length) c = applyOffseason(c, DEFAULT_POLICY.offseason(c, getOffseason(c)));
+    }
+    const card = pendingEventCards(c)[0]!;
+    const a = resolveEvent(c, card.id, card.options[0]!.id).career;
+    const b = resolveEvent(c, card.id, card.options[card.options.length - 1]!.id).career;
+    expect(JSON.stringify(a.eventLog)).not.toBe(JSON.stringify(b.eventLog));
+  });
+
+  it('시즌마다 언론·팬 피드가 3개 이상 붙고, 가상 매체만 쓴다', () => {
+    const c = autoplayCareer(setup(24));
+    for (const h of c.history) {
+      expect((h.feed ?? []).length).toBeGreaterThanOrEqual(3);
+      for (const f of h.feed ?? []) {
+        if (f.kind === 'press') expect(['패독 데일리', '그리드 위클리', '레이싱 코리아 뉴스']).toContain(f.author);
+        expect(f.text).not.toMatch(/\{\w+\}/);
+      }
+    }
   });
 });
 

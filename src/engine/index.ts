@@ -10,3 +10,5 @@ export * from './growth';
 export * from './media';
 export * from './career';
 export * from './form';
+export * from './events';
+export * from './feed';

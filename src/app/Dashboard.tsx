@@ -6,6 +6,7 @@ import {
   TRAINING_SLOTS_RESERVE, xpNeeded, type TrainingId,
 } from '../engine';
 import { formatMoney } from './format';
+import { FeedList } from './FeedList';
 import { useGame } from './store';
 import { Bar, Button, Card, Pill, SEAT_LABELS, STAT_LABELS, TEMPERAMENT_LABELS } from './ui';
 
@@ -35,6 +36,8 @@ export function Dashboard() {
   const series = contract?.series ?? c.history[c.history.length - 1]?.series ?? 'kart';
   const sl = superLicencePoints(c);
   const lastChamp = c.world.champions[c.world.champions.length - 1];
+  const lastFeed = c.history[c.history.length - 1]?.feed ?? [];
+  const recentEvents = (c.eventLog ?? []).filter((e) => e.year === c.year - 1);
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 px-4 py-6">
@@ -132,6 +135,18 @@ export function Dashboard() {
           </Button>
         </div>
       </Card>
+
+      {(lastFeed.length > 0 || recentEvents.length > 0) && (
+        <Card title="최근 소식">
+          {recentEvents.map((e) => (
+            <div key={`${e.year}-${e.id}`} className="mb-2 rounded-xl border border-white/10 bg-white/5 p-3 text-sm">
+              <div className="text-xs text-zinc-400">{e.year} 겨울 · {e.title} · {e.option}</div>
+              <p className="mt-1">{e.text}</p>
+            </div>
+          ))}
+          <FeedList items={lastFeed} />
+        </Card>
+      )}
 
       <Card title="커리어 기록">
         {c.history.length === 0 ? (

@@ -4,7 +4,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 import {
-  applyOffseason, createCareer, getOffseason, runSeason,
+  applyOffseason, createCareer, getOffseason, resolveEvent, runSeason,
   type Career, type CareerSetup, type Offer, type SeasonRecord, type TrainingId,
 } from '../engine';
 
@@ -44,6 +44,8 @@ interface State {
   playSeason: (plan: TrainingId[]) => void;
   /** 제안을 받아들인다. 서명은 계약서 화면에서 받는다 */
   acceptOffer: (offer: Offer, joinAcademy: boolean, signature: Signature | null) => void;
+  /** 전환점 이벤트 선택(SPEC §6) */
+  chooseEvent: (eventId: string, optionId: string) => void;
   /** 시트 없이 1년 보내기 */
   skipSeat: (joinAcademy: boolean) => void;
   retire: () => void;
@@ -99,6 +101,11 @@ export const useGame = create<State>()(
           });
         }
         set({ career: next, contracts, firstF1Signature: firstF1 && signature ? signature : get().firstF1Signature, screen: 'dashboard' });
+      },
+      chooseEvent: (eventId, optionId) => {
+        const c = get().career;
+        if (!c) return;
+        set({ career: resolveEvent(c, eventId, optionId).career });
       },
       skipSeat: (joinAcademy) => {
         const c = get().career;

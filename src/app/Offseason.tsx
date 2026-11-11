@@ -1,12 +1,24 @@
 // 시즌 결과 + 오프시즌(SPEC §5.2, §7, §3.3): 결과 요약, 제안 비교, 계약서 서명, 무소속, 은퇴
 
 import { useMemo, useState } from 'react';
-import { LADDER, seriesLabel, type Offer, type SeasonRecord } from '../engine';
+import { EVENT_CATEGORY_LABEL, LADDER, pendingEventCards, seriesLabel, type Offer, type SeasonRecord } from '../engine';
+import { FeedList } from './FeedList';
 import { formatMoney } from './format';
 import { SignaturePad } from './SignaturePad';
 import { SignatureView } from './SignatureView';
 import { currentOffseason, useGame, type Signature } from './store';
 import { Bar, Button, Card, Pill, SEAT_LABELS } from './ui';
+
+/** 이벤트 결과 요약의 색: 좋은 변화는 초록, 나쁜 변화는 주황. 압박은 오를수록 나쁘다 */
+function effectTone(s: string): 'green' | 'amber' | 'zinc' {
+  const up = s.includes('+') || s.includes('증가') || s.includes('단단') || s.includes('합류');
+  const down = s.includes('−') || / -\d/.test(s) || s.includes('흔들림');
+  const inverted = s.startsWith('압박');
+  if (s.includes('방출 위험 증가')) return 'amber';
+  if (up) return inverted ? 'amber' : 'green';
+  if (down) return inverted ? 'green' : 'amber';
+  return 'zinc';
+}
 
 function SeasonSummary({ r }: { r: SeasonRecord }) {
   const { showKrw } = useGame();
@@ -39,6 +51,7 @@ function SeasonSummary({ r }: { r: SeasonRecord }) {
         수입 {formatMoney(r.income, showKrw)} · 지출 {formatMoney(r.expenses, showKrw)} · 슈퍼 라이선스 +{r.superLicence}
       </div>
       {r.notes.length > 0 && <ul className="mt-2 list-disc pl-5 text-sm text-zinc-400">{r.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>}
+      {r.feed && r.feed.length > 0 && <div className="mt-4"><FeedList items={r.feed} /></div>}
     </Card>
   );
 }
@@ -138,8 +151,10 @@ function OfferCard({ o, onPick }: { o: Offer; onPick: () => void }) {
 }
 
 export function Offseason() {
-  const { career: c, lastRecord, signature, acceptOffer, skipSeat, retire } = useGame();
+  const { career: c, lastRecord, signature, acceptOffer, skipSeat, retire, chooseEvent } = useGame();
   const off = useMemo(() => (c ? currentOffseason(c) : null), [c]);
+  const pending = useMemo(() => (c ? pendingEventCards(c) : []), [c]);
+  const resolvedThisYear = (c?.eventLog ?? []).filter((e) => e.year === c?.year);
   const [joinAcademy, setJoinAcademy] = useState(true);
   const [picked, setPicked] = useState<Offer | null>(null);
   if (!c) return null;
@@ -154,6 +169,37 @@ export function Offseason() {
     <div className="mx-auto max-w-4xl space-y-4 px-4 py-6">
       <SeasonSummary r={record} />
 
+      {(pending.length > 0 || resolvedThisYear.length > 0) && (
+        <Card title="전환점">
+          <div className="space-y-3">
+            {resolvedThisYear.map((e) => (
+              <div key={e.id} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                <div className="text-xs text-zinc-400">{e.title} · {e.option}</div>
+                <p className="mt-1 text-sm">{e.text}</p>
+                {e.summary.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{e.summary.map((s, i) => <Pill key={i} tone={effectTone(s)}>{s}</Pill>)}</div>}
+              </div>
+            ))}
+            {pending.map((card) => (
+              <div key={card.id} className="rounded-xl border border-racing/50 bg-racing/5 p-3">
+                <div className="flex items-center gap-2"><Pill tone="red">{EVENT_CATEGORY_LABEL[card.category]}</Pill><b>{card.title}</b></div>
+                <p className="mt-2 text-sm text-zinc-200">{card.text}</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {card.options.map((o) => (
+                    <button key={o.id} onClick={() => chooseEvent(card.id, o.id)} className="rounded-xl border border-white/15 p-3 text-left hover:bg-white/5">
+                      <div className="font-bold">{o.label}</div>
+                      {o.hint && <div className="mt-0.5 text-xs text-zinc-400">{o.hint}</div>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {pending.length > 0 ? (
+        <Card><p className="text-sm text-zinc-400">전환점을 먼저 결정하면 다음 시즌 제안이 열립니다.</p></Card>
+      ) : (
       <Card title={`${c.year} 오프시즌 · ${c.year + 1} 시즌 제안`}>
         {off.released && <div className="mb-3 rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm font-bold text-red-200">방출 통보를 받았습니다.</div>}
         {off.notes.length > 0 && <ul className="mb-3 list-disc pl-5 text-sm text-zinc-300">{off.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>}
@@ -174,6 +220,7 @@ export function Offseason() {
           <Button variant="danger" onClick={() => { if (confirm('은퇴를 선언할까요? 되돌릴 수 없습니다.')) retire(); }}>은퇴 선언</Button>
         </div>
       </Card>
+      )}
 
       {picked && (
         <ContractModal
