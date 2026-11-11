@@ -154,3 +154,12 @@ test('첫 안내: 한 번 닫으면 다시 안 뜨고, 설정에서 다시 볼 �
   await expect(page.getByRole('heading', { name: '게임 방법' })).toBeVisible();
   await expect(page.getByText('슈퍼 라이선스 40점')).toBeVisible();
 });
+
+test('게임 방법의 실제 화면 그림이 모두 열린다', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('navigation').getByRole('button', { name: '게임 방법' }).click();
+  const imgs = page.locator('figure img');
+  await expect(imgs).toHaveCount(9);
+  await imgs.evaluateAll((els) => els.forEach((e) => ((e as HTMLImageElement).loading = 'eager')));
+  await expect.poll(() => imgs.evaluateAll((els) => els.filter((e) => !(e as HTMLImageElement).complete || (e as HTMLImageElement).naturalWidth === 0).length)).toBe(0);
+});

@@ -16,7 +16,8 @@
     "balance": "tsx scripts/balance.ts",
     "career": "tsx src/cli.ts career",
     "rate-drivers": "tsx scripts/rate-drivers.ts",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "guide-shots": "tsx scripts/guide-shots.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.1",
