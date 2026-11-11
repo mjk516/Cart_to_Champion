@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  managerOf, MANAGER_STYLE_LABEL, ovr, PERSONALITIES, recommendedPlan, seriesLabel, STAT_KEYS, superLicencePoints, TRAINING, TRAINING_SLOTS,
+  isF1RaceSeason, managerOf, MANAGER_STYLE_LABEL, ovr, PERSONALITIES, recommendedPlan, seriesLabel, STAT_KEYS, superLicencePoints, TRAINING, TRAINING_SLOTS,
   TRAINING_SLOTS_RESERVE, xpNeeded, type TrainingId,
 } from '../engine';
 import { formatMoney } from './format';
@@ -17,7 +17,7 @@ const MODES = [
 ] as const;
 
 export function Dashboard() {
-  const { career: c, showKrw, playSeason } = useGame();
+  const { career: c, showKrw, playSeason, live, startLive, go } = useGame();
   const [running, setRunning] = useState(false);
   const slots = c?.contract?.seat === 'race' || !c?.contract ? TRAINING_SLOTS : TRAINING_SLOTS_RESERVE;
   const [plan, setPlan] = useState<TrainingId[]>(() => (c ? recommendedPlan(c.driver.stats, 'weakness', slots, c.driver.focus) : []));
@@ -131,9 +131,22 @@ export function Dashboard() {
         <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
           <span className="text-zinc-400">훈련 비용 {formatMoney(planCost, showKrw)}</span>
           {!plan.includes('rest') && <Pill tone="amber">휴식이 없으면 컨디션이 떨어지고 부상 위험이 커진다</Pill>}
-          <Button className="ml-auto" disabled={running} onClick={() => { setRunning(true); setTimeout(() => playSeason(plan), 30); }}>
-            {running ? '시즌 진행 중…' : `${c.year} 시즌 진행`}
-          </Button>
+          {isF1RaceSeason(c) ? (
+            <div className="ml-auto flex flex-wrap gap-2">
+              {live && live.year === c.year ? (
+                <Button onClick={() => go('weekend')}>진행 중인 시즌 이어하기 (라운드 {live.round + 1})</Button>
+              ) : (
+                <Button onClick={() => startLive(plan)}>{c.year} 시즌 라이브로 시작</Button>
+              )}
+              <Button variant="ghost" disabled={running} onClick={() => { setRunning(true); setTimeout(() => playSeason(plan), 30); }}>
+                {running ? '시즌 진행 중…' : '한 번에 진행'}
+              </Button>
+            </div>
+          ) : (
+            <Button className="ml-auto" disabled={running} onClick={() => { setRunning(true); setTimeout(() => playSeason(plan), 30); }}>
+              {running ? '시즌 진행 중…' : `${c.year} 시즌 진행`}
+            </Button>
+          )}
         </div>
       </Card>
 

@@ -5,7 +5,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 import {
   applyOffseason, createCareer, getOffseason, resolveEvent, runSeason,
-  type Career, type CareerSetup, type Offer, type SeasonRecord, type TrainingId,
+  type Career, type CareerSetup, type Offer, type RadioOptionId, type SeasonRecord, type TrainingId,
 } from '../engine';
 
 /** 획: [x, y, t, pressure] 목록. x·y는 0~1로 정규화(SPEC §3.3) */
@@ -29,7 +29,21 @@ export interface SignedContract {
   firstF1: boolean;
 }
 
-export type Screen = 'home' | 'create' | 'dashboard' | 'offseason' | 'retired' | 'settings';
+export type Screen = 'home' | 'create' | 'dashboard' | 'offseason' | 'retired' | 'settings' | 'weekend';
+
+/** F1 라이브 시즌 진행 상태(SPEC §5.3). 세션 중간에 닫아도 이어진다 */
+export interface LiveSeason {
+  year: number;
+  plan: TrainingId[];
+  round: number;
+  /** 0 = 주말 시작 화면, 1부터 세션 */
+  step: number;
+  radio: Record<string, RadioOptionId>;
+  /** 지금까지 치른 레이스의 누적 포인트 */
+  points: Record<string, number>;
+  /** 레이스 결과로 바로 간 라운드(라이브 재생 생략) */
+  skipped: number[];
+}
 
 interface State {
   screen: Screen;
@@ -39,7 +53,12 @@ interface State {
   contracts: SignedContract[];
   lastRecord: SeasonRecord | null;
   showKrw: boolean;
+  live: LiveSeason | null;
   go: (s: Screen) => void;
+  startLive: (plan: TrainingId[]) => void;
+  updateLive: (patch: Partial<LiveSeason>) => void;
+  /** 라이브 시즌을 마친다(남은 라운드는 엔지니어 추천으로 자동 진행) */
+  finishLive: () => void;
   startCareer: (setup: CareerSetup, signature: Signature) => void;
   playSeason: (plan: TrainingId[]) => void;
   /** 제안을 받아들인다. 서명은 계약서 화면에서 받는다 */
@@ -73,6 +92,7 @@ const initial = {
   contracts: [] as SignedContract[],
   lastRecord: null,
   showKrw: true,
+  live: null as LiveSeason | null,
 };
 
 export const useGame = create<State>()(
@@ -80,6 +100,22 @@ export const useGame = create<State>()(
     (set, get) => ({
       ...initial,
       go: (screen) => set({ screen }),
+      startLive: (plan) => {
+        const c = get().career;
+        if (!c) return;
+        set({ live: { year: c.year, plan, round: 0, step: 0, radio: {}, points: {}, skipped: [] }, screen: 'weekend' });
+      },
+      updateLive: (patch) => {
+        const l = get().live;
+        if (l) set({ live: { ...l, ...patch } });
+      },
+      finishLive: () => {
+        const c = get().career;
+        const l = get().live;
+        if (!c || !l) return;
+        const { career, record } = runSeason(c, l.plan, l.radio);
+        set({ career, lastRecord: record, live: null, screen: 'offseason' });
+      },
       startCareer: (setup, signature) =>
         set({ career: createCareer(setup), signature, firstF1Signature: null, contracts: [], lastRecord: null, screen: 'dashboard' }),
       playSeason: (plan) => {
@@ -148,7 +184,7 @@ export const useGame = create<State>()(
       storage: createJSONStorage(() => safeStorage),
       partialize: (s) => ({
         screen: s.screen === 'create' ? 'home' : s.screen, career: s.career, signature: s.signature,
-        firstF1Signature: s.firstF1Signature, contracts: s.contracts, lastRecord: s.lastRecord, showKrw: s.showKrw,
+        firstF1Signature: s.firstF1Signature, contracts: s.contracts, lastRecord: s.lastRecord, showKrw: s.showKrw, live: s.live,
       }),
     },
   ),

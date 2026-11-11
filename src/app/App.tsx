@@ -3,6 +3,7 @@ import { Create } from './Create';
 import { Dashboard } from './Dashboard';
 import { Offseason } from './Offseason';
 import { Retired } from './Retired';
+import { Weekend } from './Weekend';
 import { Home, Settings } from './Screens';
 import { useGame } from './store';
 
@@ -26,6 +27,7 @@ export function App() {
       {effective === 'offseason' && <Offseason />}
       {effective === 'retired' && <Retired />}
       {effective === 'settings' && <Settings />}
+      {effective === 'weekend' && <Weekend />}
     </div>
   );
 }
