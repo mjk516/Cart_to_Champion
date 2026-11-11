@@ -14,3 +14,4 @@ export * from './events';
 export * from './feed';
 export * from './manager';
 export * from './calendar';
+export * from './achievements';

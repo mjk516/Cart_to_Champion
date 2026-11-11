@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyOffseason, autoplayCareer, createCareer, DEFAULT_POLICY, getOffseason, MAX_TEAMS, MIN_TEAMS, replayCareer,
   CALENDAR_2026, f1WeekendFor, isF1RaceSeason, radioKey, type RadioOptionId, EVENTS, managerAdvice, MAJOR_FLOOR, OTHERS_CAP, feedTemplateCount, pendingEventCards, resolveEvent, F1_WINNER_TEAMS, f1Rules, generateHidden, initialWorld, NEW_TEAM_START, PERSONALITIES, runOffseason, TEAMS_2026, runSeason, STAT_KEYS, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, superLicencePoints, type CareerSetup,
-  evolveCalendar, RETURNING_CIRCUITS, CALENDAR_2027_SLOTS, ALL_F1_CIRCUITS, CALENDAR_CHANGE_FROM, CALENDAR_COOLDOWN, f1Calendar, type CalendarChange, hasHomeGp, homeGpEffect, type Personality,
+  evolveCalendar, RETURNING_CIRCUITS, CALENDAR_2027_SLOTS, ALL_F1_CIRCUITS, CALENDAR_CHANGE_FROM, CALENDAR_COOLDOWN, f1Calendar, type CalendarChange, hasHomeGp, homeGpEffect, type Personality, achievements, ACHIEVEMENTS, newAchievements,
 } from '../src/engine';
 import { CIRCUIT_PATHS } from '../src/app/circuitPaths';
 
@@ -441,6 +441,31 @@ describe('홈 그랑프리 (SPEC §3.1, §5.6 v0.18)', () => {
       expect(e.boost).toBeGreaterThan(0);
       if (p.temperament === 'good') expect(e.mental).toBeGreaterThan(0);
       if (p.temperament === 'bad') expect(e.mental).toBeLessThan(0);
+    }
+  });
+});
+
+describe('업적 (SPEC §9 v0.22)', () => {
+  it('커리어 기록만으로 계산하고, 달성 연도는 처음 달성한 시즌이다', () => {
+    const c = autoplayCareer(setup(12), DEFAULT_POLICY, 30);
+    const list = achievements(c);
+    expect(list).toHaveLength(ACHIEVEMENTS.length);
+    expect(new Set(ACHIEVEMENTS.map((a) => a.id)).size).toBe(ACHIEVEMENTS.length);
+    const get = (id: string) => list.find((a) => a.def.id === id)!.year;
+    expect(get('f1_debut')).toBe(c.f1Debut);
+    if (c.totals.f1Titles > 0) expect(get('f1_champ')).not.toBeNull();
+    else expect(get('f1_champ')).toBeNull();
+    if (c.totals.f1Wins > 0) expect(get('f1_win')).toBeLessThanOrEqual(c.history[c.history.length - 1]!.year);
+    // 같은 커리어면 언제 계산해도 같다(저장하지 않는 읽기 전용 값)
+    expect(achievements(c).map((a) => a.year)).toEqual(list.map((a) => a.year));
+    for (const a of list) if (a.year) expect(newAchievements(c, a.year).map((d) => d.id)).toContain(a.def.id);
+  });
+
+  it('홈 그랑프리 우승은 시즌 기록에 따로 남는다', () => {
+    const c = autoplayCareer(setup(12, { nationality: 'GB' }), DEFAULT_POLICY, 30);
+    for (const h of c.history) {
+      if (h.series !== 'f1') expect(h.homeWins ?? 0).toBe(0);
+      expect(h.homeWins ?? 0).toBeLessThanOrEqual(h.wins);
     }
   });
 });
