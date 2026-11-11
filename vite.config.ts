@@ -32,6 +32,8 @@ img.src=NEW+'favicon.svg?'+Date.now();
 const legacyRedirect = (): Plugin => ({
   name: 'legacy-address-migration',
   configureServer(server) {
+    // 테스트(vitest)도 Vite 서버를 띄우므로 그때는 안내 서버를 켜지 않는다(켜면 테스트가 끝나도 프로세스가 남는다)
+    if (process.env.VITEST) return;
     const legacy = createServer((_req, res) => {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       res.end(MIGRATE_PAGE);
