@@ -137,3 +137,20 @@ test('휴대폰 폭(375px)에서 가로로 넘치지 않는다', async ({ page }
   await page.getByRole('button', { name: /시즌 라이브로 시작/ }).click();
   expect(await overflow()).toBeLessThanOrEqual(0);
 });
+
+test('첫 안내: 한 번 닫으면 다시 안 뜨고, 설정에서 다시 볼 수 있다. 게임 방법 페이지', async ({ page }) => {
+  await loadSave(page, createCareer({ seed: 11, name: '안내', nationality: 'KR', wealthTier: 3, personality: 'calm', candidateIndex: 0, focus: ['pace'] }));
+  const tip = page.getByRole('note').filter({ hasText: '커리어 본부' });
+  await expect(tip).toBeVisible();
+  await tip.getByRole('button', { name: '알겠어요' }).click();
+  await expect(tip).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole('note').filter({ hasText: '커리어 본부' })).toHaveCount(0);
+  await page.getByRole('button', { name: '설정' }).click();
+  await page.getByRole('button', { name: '처음 안내 다시 보기' }).click();
+  await page.getByRole('button', { name: '돌아가기' }).click();
+  await expect(page.getByRole('note').filter({ hasText: '커리어 본부' })).toBeVisible();
+  await page.getByRole('navigation').getByRole('button', { name: '게임 방법' }).click();
+  await expect(page.getByRole('heading', { name: '게임 방법' })).toBeVisible();
+  await expect(page.getByText('슈퍼 라이선스 40점')).toBeVisible();
+});

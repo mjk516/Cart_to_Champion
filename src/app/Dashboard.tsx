@@ -10,6 +10,7 @@ import { FeedList } from './FeedList';
 import { useGame } from './store';
 import { F1TeamBadge } from './TeamBadge';
 import { HelmetView } from './Helmet';
+import { Tip } from './Guide';
 import { Bar, Button, Card, Pill, SEAT_LABELS, STAT_LABELS, TEMPERAMENT_LABELS, useConfirm } from './ui';
 
 const MODES = [
@@ -118,6 +119,10 @@ export function Dashboard() {
         </div>
       </Card>
 
+      <Tip id="dashboard" title="여기가 커리어 본부입니다">
+        <p>시즌을 시작하기 전에 <b>훈련 계획</b> 칸을 채우세요. 프로그램마다 오르는 능력치와 비용이 다르고, 휴식을 빼면 컨디션이 떨어집니다. 잘 모르겠으면 "약점 보완"을 누르면 추천 계획이 채워집니다.</p>
+        <p>준비가 되면 아래의 시즌 진행 버튼을 누르세요. 시즌이 끝나면 오프시즌으로 넘어가 다음 팀을 고릅니다.</p>
+      </Tip>
       <Card title={`훈련 계획 (${plan.length}칸)`} right={
         <div className="flex gap-1">
           {MODES.map((m) => (
