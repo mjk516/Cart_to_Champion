@@ -6,6 +6,7 @@ import {
   forecastDecision, rngFor, runRace,
   type Classified, type Incident, type LapRecord, type RaceCar, type RaceInput, type RadioDecision, type RadioOptionId,
 } from '../engine';
+import { CIRCUIT_PATHS } from './circuitPaths';
 import { Pill } from './ui';
 
 const ME = 'player';
@@ -62,12 +63,13 @@ function genericTrackPath(circuitId: string, W: number, H: number): string {
   return pts.join(' ') + ' Z';
 }
 
-function TrackView({ circuitId, prev, cur, baseLap, banner, focus, x, onEnd }: {
-  circuitId: string; prev: LapRecord | null; cur: LapRecord; baseLap: number; banner: string; focus: string[]; x: Ctx; onEnd: () => void;
+function TrackView({ circuitId, realLayout, prev, cur, baseLap, banner, focus, x, onEnd }: {
+  circuitId: string; realLayout: boolean; prev: LapRecord | null; cur: LapRecord; baseLap: number; banner: string; focus: string[]; x: Ctx; onEnd: () => void;
 }) {
   const W = 640, H = 300;
   const pathRef = useRef<SVGPathElement>(null);
-  const d = useMemo(() => genericTrackPath(circuitId, W, H), [circuitId]);
+  // 실제 레이아웃은 F1 그랑프리에서만 쓴다. 하부 리그는 같은 서킷이라도 일반 레이아웃
+  const d = useMemo(() => (realLayout && CIRCUIT_PATHS[circuitId]) || genericTrackPath(circuitId, W, H), [circuitId, realLayout]);
   const [tau, setTau] = useState(0);
   useEffect(() => {
     let raf = 0;
@@ -143,8 +145,10 @@ function RadioModal({ input, decision, onPick }: { input: RaceInput; decision: R
   );
 }
 
-export function LiveRace({ input, cars, colorOfTeam, instant, onRadio, onDone }: {
+export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant, onRadio, onDone }: {
   input: RaceInput;
+  /** true면 실제 서킷 모양(F1 그랑프리 전용) */
+  realLayout?: boolean;
   cars: RaceCar[];
   colorOfTeam: (teamId: string) => string;
   instant: boolean;
@@ -217,7 +221,7 @@ export function LiveRace({ input, cars, colorOfTeam, instant, onRadio, onDone }:
       </div>
 
       {track && rec && (
-        <TrackView circuitId={input.circuit.id} prev={laps[cur - 2] ?? null} cur={rec} baseLap={input.circuit.baseLap} banner={track.banner} focus={track.focus} x={x} onEnd={() => setTrack(null)} />
+        <TrackView circuitId={input.circuit.id} realLayout={realLayout} prev={laps[cur - 2] ?? null} cur={rec} baseLap={input.circuit.baseLap} banner={track.banner} focus={track.focus} x={x} onEnd={() => setTrack(null)} />
       )}
 
       {outcome.status === 'pending' && cur >= laps.length && !track && (
