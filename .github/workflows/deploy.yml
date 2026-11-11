@@ -24,7 +24,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - run: npx playwright install --with-deps chromium
+      # 우분투 패키지 저장소가 막히면 시스템 패키지 없이 브라우저만 받는다(러너에 크롬 실행 라이브러리가 이미 있다)
+      - run: npx playwright install --with-deps chromium || npx playwright install chromium
+        timeout-minutes: 15
       - run: npm run e2e
       - run: npm run build
         env:
