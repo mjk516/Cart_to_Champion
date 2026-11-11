@@ -778,7 +778,7 @@ function seatPlan(c: Career): SeatPlan {
     if (!team) continue;
     const age = nextYear - d.birthYear;
     const o = ovr(d.stats);
-    const retire = age >= 42 || (age >= 36 && r() < 0.25 * (age - 35)) || (age >= 31 && o < 76 && d.contractEnd <= c.year);
+    const retire = age >= 42 || (age >= 38 && r() < 0.25 * (age - 37)) || (age >= 31 && o < 76 && d.contractEnd <= c.year);
     if (retire) {
       retiring.push(d.id);
       open.set(d.teamId, (open.get(d.teamId) ?? 0) + 1);
@@ -800,7 +800,7 @@ function seatPlan(c: Career): SeatPlan {
 }
 
 function maxYears(age: number): number {
-  return age >= 36 ? 1 : age >= 33 ? 2 : 3;
+  return age >= 39 ? 1 : age >= 36 ? 2 : 3;
 }
 
 /** 오프시즌 제안 목록. 같은 career면 항상 같은 목록을 돌려준다 */
@@ -880,9 +880,9 @@ export function getOffseason(c: Career): Offseason {
     const plan = seatPlan(c);
     const academyTeams = ACADEMIES.find((a) => a.name === c.academy)?.teamIds ?? [];
     const f1Perf = current === 'f1' && last.seat === 'race' ? clamp(last.expectedAvg - last.actualAvg, -6, 6) * 0.3 + (last.teammateBeat - 0.5) * 3 : perf * 2 + (pct - 0.7) * 5;
-    // F2 상위권 졸업생 보너스, 33세 이후 나이 감점
+    // F2 상위권 졸업생 보너스, 36세 이후 나이 감점(전성기는 37세까지)
     const graduate = current === 'f2' && last.seat === 'race' ? (last.champion ? 4 : (last.position ?? 99) <= 3 ? 2 : 0) : 0;
-    const agePenalty = Math.max(0, nextAge - 33) * 1.0;
+    const agePenalty = Math.max(0, nextAge - 36) * 1.0;
     const rating = ovr(c.driver.stats) + f1Perf + c.media.reputation / 40 + graduate - agePenalty;
     const sortedTeams = [...c.world.teams.teams].sort((a, b) => b.quality - a.quality);
     for (const t of sortedTeams) {
@@ -994,10 +994,11 @@ function ageWorldDrivers(c: Career, r: Rng, nextYear: number): void {
     if (age <= 27 && ovr(d.stats) < d.potential) {
       // 잠재력까지 해마다 OVR +1~1.5 정도
       for (const k of STAT_KEYS) d.stats[k] = Math.min(97, d.stats[k] + int(r, 0, 2));
-    } else if (age >= 34) {
+    } else if (age >= 38) {
+      // AI도 플레이어와 같다: 37세까지 유지, 38세부터 하락
       for (const k of STAT_KEYS) {
         const fast = k === 'pace' || k === 'wet';
-        d.stats[k] = Math.max(40, d.stats[k] - int(r, 0, Math.min(2, age - 33) + (fast ? 1 : 0)));
+        d.stats[k] = Math.max(40, d.stats[k] - int(r, 0, Math.min(2, age - 37) + (fast ? 1 : 0)));
       }
     }
   }

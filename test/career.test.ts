@@ -123,6 +123,13 @@ describe('자동 진행 커리어', () => {
     }
   });
 
+  it('노화: 37세까지 능력치가 떨어지지 않고, 하락은 38세부터', () => {
+    for (const c of careers) {
+      for (const h of c.history) if (h.growth.aging < 0) expect(h.age, `${c.driver.name} ${h.year}`).toBeGreaterThanOrEqual(38);
+    }
+    for (let i = 0; i < 200; i++) expect(generateHidden(i, 'aggressive').peakEnd).toBeGreaterThanOrEqual(37);
+  });
+
   it('나쁜 성격은 좋은 성격보다 방출이 잦다', () => {
     const rel = (t: 'good' | 'bad') => {
       const cs = careers.filter((c) => PERSONALITIES[c.driver.personality].temperament === t);

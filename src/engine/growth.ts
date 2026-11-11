@@ -33,11 +33,8 @@ export function generateHidden(seed: number, personality: Personality): Hidden {
         : g === 'late' ? 0.2
           : personality === 'analytical' ? 0.3 : 0.15,
   );
-  const peakEnd =
-    growthType === 'early' ? 29 + int(r, 0, 2)
-      : growthType === 'longevity' ? 34 + int(r, 0, 3)
-        : growthType === 'late' ? 32 + int(r, 0, 2)
-          : 31 + int(r, 0, 2);
+  // 전성기는 37세까지 유지되고 38세부터 능력치가 떨어진다(SPEC §4.4 v0.14). 장기 유지형은 1~2년 더 버틴다
+  const peakEnd = growthType === 'longevity' ? 38 + int(r, 0, 1) : 37;
   const pressureBonus = personality === 'calm' || personality === 'fighter' ? 15 : personality === 'showman' ? -15 : 0;
   return {
     potential,
