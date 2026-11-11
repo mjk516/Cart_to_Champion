@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import {
-  CALENDAR_2026, circuitType, f1WeekendFor, forecastFinish, ovr, radioKey, runRace,
+  circuitType, f1Calendar, f1WeekendFor, forecastFinish, ovr, radioKey, runRace,
   type Classified, type F1Weekend, type F1WeekendSession,
 } from '../engine';
 import { LiveRace } from './LiveRace';
@@ -52,7 +52,8 @@ export function Weekend() {
   const raceKey = session?.type === 'race' ? `${live.round}:${session.kind}` : null;
   const raceDone = raceKey !== null && (doneKey === raceKey || skipped);
   const canNext = !session || session.type === 'quali' || raceDone;
-  const lastRound = live.round >= CALENDAR_2026.length - 1;
+  const rounds = f1Calendar(c).length;
+  const lastRound = live.round >= rounds - 1;
   const lastStep = live.step >= wk.sessions.length;
 
   const addPoints = (rows: Classified[] | null, pts: Record<string, number>) => {
@@ -83,7 +84,7 @@ export function Weekend() {
     <div className="mx-auto max-w-6xl space-y-4 px-4 py-6">
       <header className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <div className="text-xs text-zinc-400">{c.year} F1 · 라운드 {live.round + 1}/{CALENDAR_2026.length}</div>
+          <div className="text-xs text-zinc-400">{c.year} F1 · 라운드 {live.round + 1}/{rounds}</div>
           <h1 className="text-2xl font-black">{wk.circuit.name}</h1>
           <div className="mt-1 flex flex-wrap gap-1">
             <Pill>{TYPE_LABEL[circuitType(wk.circuit)]}</Pill>

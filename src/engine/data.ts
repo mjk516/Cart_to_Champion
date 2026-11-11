@@ -2,6 +2,7 @@
 // ⚠️ 잠정값: 팀 성능·드라이버 능력치는 rate-drivers 스크립트(SPEC §2.2, PRD WD-3)가 나오기 전까지 쓰는 임시 추정치다.
 // ⚠️ 차 번호, 라인업, 캘린더(개최 여부·랩 수)는 출시 전 공식 자료와 대조한다.
 
+import { RETURNING_CIRCUITS } from './calendar';
 import type { Circuit, Driver, Stats, Team } from './types';
 
 export const OVR_WEIGHTS: Stats = {
@@ -123,8 +124,11 @@ export function teamById(id: string): Team {
   return t;
 }
 
+/** F1 캘린더에 들어갈 수 있는 모든 서킷: 2026 캘린더 + 21세기 복귀 후보 */
+export const ALL_F1_CIRCUITS: Circuit[] = [...CALENDAR_2026, ...RETURNING_CIRCUITS];
+
 export function circuitById(id: string): Circuit {
-  const t = CALENDAR_2026.find((x) => x.id === id);
+  const t = ALL_F1_CIRCUITS.find((x) => x.id === id);
   if (!t) throw new Error(`unknown circuit ${id}`);
   return t;
 }

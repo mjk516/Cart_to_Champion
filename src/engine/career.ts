@@ -7,7 +7,8 @@ import { PERSONALITIES } from './creation';
 import { applyEventChoice, EVENT_BY_ID, eventCard, pickEvents, type EventCard } from './events';
 import { seasonFeed, type FeedItem } from './feed';
 import { generateManager, type Manager } from './manager';
-import { CALENDAR_2026, CAR_WEIGHT, DRIVERS_2026, F1_WINNER_TEAMS, ovr, POINTS_RACE, TEAMS_2026 } from './data';
+import { evolveCalendar, type CalendarChange, type CalendarSlot } from './calendar';
+import { ALL_F1_CIRCUITS, CALENDAR_2026, CAR_WEIGHT, circuitById, DRIVERS_2026, F1_WINNER_TEAMS, ovr, POINTS_RACE, TEAMS_2026 } from './data';
 import { teamForm } from './form';
 import {
   addXp, ageCurve, applyAging, applyXp, generateHidden, recommendedPlan, SESSION_XP, TRAINING, trainingOutcome,
@@ -21,7 +22,7 @@ import {
   ACADEMIES, LADDER, nextSeries, SERIES, seriesLabel, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, type SeriesId,
 } from './series';
 import { initialWorld, runOffseason, type TeamNews, type TeamWorld } from './teams';
-import { STAT_KEYS, type Personality, type StatKey, type Stats, type WealthTier } from './types';
+import { STAT_KEYS, type Circuit, type Personality, type StatKey, type Stats, type WealthTier } from './types';
 
 export const ENGINE_VERSION = '0.2.0';
 export const PLAYER_ID = 'player';
@@ -136,6 +137,17 @@ export interface F1World {
   drivers: F1Driver[];
   champions: Array<{ year: number; driverId: string; name: string; teamId: string }>;
   news: TeamNews[];
+  /** 이번 시즌 F1 캘린더(라운드 순서). 이전 저장 파일에는 없을 수 있다(그때는 2026 캘린더) */
+  calendar?: CalendarSlot[];
+  /** 지금까지의 캘린더 변화 */
+  calendarLog?: CalendarChange[];
+}
+
+const CALENDAR_2026_SLOTS: CalendarSlot[] = CALENDAR_2026.map((x) => ({ id: x.id, sprint: x.sprint }));
+
+/** 이번 시즌 F1 캘린더(SPEC §2.1 v0.17) */
+export function f1Calendar(c: Career): Circuit[] {
+  return (c.world.calendar ?? CALENDAR_2026_SLOTS).map((s) => ({ ...circuitById(s.id), sprint: s.sprint }));
 }
 
 export type ChoiceLogEntry =
@@ -244,6 +256,7 @@ export function createCareer(setup: CareerSetup): Career {
     })),
     champions: [],
     news: [],
+    calendar: CALENDAR_2026_SLOTS.map((s) => ({ ...s })),
   };
 
   return {
@@ -498,7 +511,7 @@ export type F1WeekendSession = F1WeekendQuali | F1WeekendRace;
 
 export interface F1Weekend {
   round: number;
-  circuit: (typeof CALENDAR_2026)[number];
+  circuit: Circuit;
   cars: RaceCar[];
   sessions: F1WeekendSession[];
 }
@@ -511,8 +524,9 @@ export interface F1Weekend {
 function f1Weekend(c: Career, cars: RaceCar[], seed: number, round: number, radio: Record<string, RadioOptionId>, racing: boolean, autoRadio = true): F1Weekend {
   const rules = f1Rules(c);
   const w = CAR_WEIGHT.f1;
-  const circuit = CALENDAR_2026[round]!;
-  const roundCars = cars.map((car) => ({ ...car, teamQuality: car.teamQuality + teamForm(c.seed, c.year, car.teamId, circuit, round, CALENDAR_2026.length) }));
+  const calendar = f1Calendar(c);
+  const circuit = calendar[round]!;
+  const roundCars = cars.map((car) => ({ ...car, teamQuality: car.teamQuality + teamForm(c.seed, c.year, car.teamId, circuit, round, calendar.length) }));
   const sessions: F1WeekendSession[] = [];
   const fps: Array<'FP1' | 'FP2' | 'FP3'> = circuit.sprint ? ['FP1'] : ['FP1', 'FP2', 'FP3'];
   for (const fp of fps) {
@@ -560,7 +574,7 @@ function simulateF1(c: Career, stats: Stats, seed: number, radio: Record<string,
   let finished = 0;
   let beat = 0;
   let duels = 0;
-  CALENDAR_2026.forEach((circuit, round) => {
+  f1Calendar(c).forEach((circuit, round) => {
     addXp(sim.raceXp, SESSION_XP.practice, (circuit.sprint ? 1 : 3) * (racing ? 1 : 0.4));
     const wk = f1Weekend(c, cars, seed, round, radio, racing);
     for (const sess of wk.sessions) {
@@ -631,9 +645,10 @@ function quickF1World(c: Career, seed: number): void {
   const pts = new Map<string, number>();
   const teamPts = new Map<string, number>();
   const w = CAR_WEIGHT.f1;
-  CALENDAR_2026.forEach((circuit, round) => {
+  const calendar = f1Calendar(c);
+  calendar.forEach((circuit, round) => {
     const raw = entries
-      .map((e) => ({ e, s: w * (e.q + teamForm(c.seed, c.year, e.teamId, circuit, round, CALENDAR_2026.length)) + (1 - w) * (ovr(e.d.stats) / 100) + normal(r) * 0.008, dnf: r() < 0.08 }))
+      .map((e) => ({ e, s: w * (e.q + teamForm(c.seed, c.year, e.teamId, circuit, round, calendar.length)) + (1 - w) * (ovr(e.d.stats) / 100) + normal(r) * 0.008, dnf: r() < 0.08 }))
       .filter((x) => !x.dnf)
       .sort((a, b) => b.s - a.s);
     const order = enforceOrder(raw, (x) => x.e.teamId, rules, r());
@@ -1149,6 +1164,15 @@ export function applyOffseason(input: Career, choice: OffseasonChoice): Career {
   c.world.news.push(...teamOut.news);
   for (const d of c.world.drivers) if (d.teamId && removed.includes(d.teamId)) d.teamId = null;
   if (c.contract?.teamId && removed.includes(c.contract.teamId)) c.contract = null;
+
+  // F1 캘린더 변화(낮은 확률, 21세기 개최 서킷만 복귀)
+  const cal = evolveCalendar(c.world.calendar ?? CALENDAR_2026_SLOTS, nextYear, c.seed, ALL_F1_CIRCUITS.map((x) => x.id), c.world.calendarLog ?? []);
+  c.world.calendar = cal.slots.map((s) => ({ ...s }));
+  if (cal.change) {
+    c.world.calendarLog = [...(c.world.calendarLog ?? []), cal.change];
+    const outName = circuitById(cal.change.out).name, inName = circuitById(cal.change.in).name;
+    c.world.news.push({ season: nextYear, kind: 'calendar', team: inName, text: `${nextYear} F1 캘린더: ${inName} 복귀, ${outName} 제외` });
+  }
 
   ageWorldDrivers(c, r, nextYear);
   fillOpenSeats(c, r, nextYear);
