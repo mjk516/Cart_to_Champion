@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import {
-  CALENDAR_2026, generateCandidates, RETURNING_CIRCUITS, ovr, PERSONALITIES, recommendedFocus, STAT_KEYS, WEALTH_TIERS,
+  ALL_F1_CIRCUITS, CALENDAR_2026, CALENDAR_2027_SLOTS, circuitById, generateCandidates, RETURNING_CIRCUITS, ovr, PERSONALITIES, recommendedFocus, STAT_KEYS, WEALTH_TIERS,
   type Personality, type StatKey, type WealthTier,
 } from '../engine';
 import { formatMoney, pct } from './format';
@@ -37,7 +37,8 @@ const flag = (code: string) => String.fromCodePoint(...[...code].map((ch) => 0x1
 /** 2026 캘린더에 그랑프리가 있는 나라(SPEC §3.1 홈 그랑프리) */
 const HOME_GP = new Set(CALENDAR_2026.map((x) => x.country));
 /** 지금은 없지만 캘린더가 바뀌면 그랑프리가 돌아올 수 있는 나라 */
-const MAYBE_HOME_GP = new Set(RETURNING_CIRCUITS.map((x) => x.country).filter((x) => !HOME_GP.has(x)));
+const NEXT_YEAR_GP = new Set(CALENDAR_2027_SLOTS.map((s) => circuitById(s.id).country).filter((x) => !HOME_GP.has(x)));
+const MAYBE_HOME_GP = new Set([...RETURNING_CIRCUITS, ...ALL_F1_CIRCUITS].map((x) => x.country).filter((x) => !HOME_GP.has(x) && !NEXT_YEAR_GP.has(x)));
 const STEPS = ['기본 정보', '자산 규모', '성격', '후보 선택', '서명'];
 
 export function Create() {
@@ -92,7 +93,9 @@ export function Create() {
               <span className="block text-xs text-zinc-500">
                 {HOME_GP.has(nationality)
                   ? '캘린더에 홈 그랑프리가 있어 F1 팀들이 홈 시장을 보고 더 쳐줍니다(F1 데뷔 전). 홈 그랑프리 주말에는 능력치가 조금 오르고, 멘탈은 성격에 따라 오르거나 내립니다.'
-                  : MAYBE_HOME_GP.has(nationality)
+                  : NEXT_YEAR_GP.has(nationality)
+                    ? '2026 캘린더에는 홈 그랑프리가 없지만, 공식 발표된 2027 캘린더에 이 나라 그랑프리가 있습니다.'
+                    : MAYBE_HOME_GP.has(nationality)
                     ? '지금 캘린더에는 홈 그랑프리가 없지만, 캘린더가 바뀌면 이 나라 서킷이 돌아올 수 있습니다.'
                     : '캘린더에 홈 그랑프리가 없는 나라입니다.'}
               </span>

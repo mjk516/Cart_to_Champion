@@ -14,7 +14,8 @@
     "create": "tsx src/cli.ts create",
     "teams": "tsx src/cli.ts teams",
     "balance": "tsx scripts/balance.ts",
-    "career": "tsx src/cli.ts career"
+    "career": "tsx src/cli.ts career",
+    "rate-drivers": "tsx scripts/rate-drivers.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

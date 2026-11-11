@@ -6,11 +6,13 @@ import type { Career, SeasonRecord } from './career';
 import { PERSONALITIES } from './creation';
 import { rngFor, weightedPick, type Rng } from './rng';
 import { generateManager } from './manager';
+import { CALENDAR_2026, circuitById } from './data';
+import { INTERVIEWS, MORE_EVENTS } from './eventsMore';
 import { ACADEMIES, type SeriesId } from './series';
 import { STAT_KEYS, type Personality, type Stats, type WealthTier } from './types';
 
-export type EventCategory = 'training' | 'offtrack' | 'career' | 'life';
-export const EVENT_CATEGORY_LABEL: Record<EventCategory, string> = { training: '훈련', offtrack: '패독 밖', career: '커리어', life: '생활' };
+export type EventCategory = 'training' | 'offtrack' | 'career' | 'life' | 'interview';
+export const EVENT_CATEGORY_LABEL: Record<EventCategory, string> = { training: '훈련', offtrack: '패독 밖', career: '커리어', life: '생활', interview: '기자회견' };
 
 export interface EventEffect {
   /** 능력치 영구 변화 */
@@ -30,7 +32,13 @@ export interface EventEffect {
   newManager?: boolean;
 }
 
-export interface EventOutcome { p: number; text: string; effect: EventEffect }
+export interface EventOutcome {
+  p: number;
+  text: string;
+  effect: EventEffect;
+  /** 기질별 확률 배수(v0.20). 예: 도발 답변은 기질이 나쁘면 잘 먹히고, 좋으면 역풍이 잦다 */
+  tempMul?: Partial<Record<'good' | 'neutral' | 'bad', number>>;
+}
 export interface EventOption { id: string; label: string; hint?: string; outcomes: EventOutcome[] }
 
 export interface EventCtx {
@@ -48,6 +56,12 @@ export interface EventCtx {
   followers: number;
   hasTeammate: boolean;
   f1: boolean;
+  /** 기대 평균 순위 − 실제 평균 순위(+면 기대 이상) */
+  perf: number;
+  /** 방금 끝난 시즌이 F1 데뷔 시즌 */
+  f1Rookie: boolean;
+  /** 캘린더에 자기 나라 그랑프리가 있다 */
+  home: boolean;
 }
 
 export interface EventDef {
@@ -67,7 +81,7 @@ export const SERIES_SCALE: Record<SeriesId, number> = { kart: 1, f4: 2, freca: 3
 const JUNIOR = (s: SeriesId) => s !== 'f1';
 const bad = (x: EventCtx) => (x.temperament === 'bad' ? 2.5 : x.temperament === 'neutral' ? 1.2 : 0.5);
 
-export const EVENTS: EventDef[] = [
+const BASE_EVENTS: EventDef[] = [
   // ── 훈련 ──────────────────────────────────────────────────────────
   {
     id: 'sim_program', category: 'training', title: '시뮬레이터 집중 프로그램',
@@ -318,6 +332,9 @@ export const EVENTS: EventDef[] = [
   },
 ];
 
+/** 이벤트 60개: M2 20개 + M3 일반 28개 + 기자회견 12개 */
+export const EVENTS: EventDef[] = [...BASE_EVENTS, ...MORE_EVENTS, ...INTERVIEWS];
+
 export const EVENT_BY_ID = new Map(EVENTS.map((e) => [e.id, e]));
 
 export function eventContext(c: Career, last: SeasonRecord): EventCtx {
@@ -336,18 +353,29 @@ export function eventContext(c: Career, last: SeasonRecord): EventCtx {
     followers: c.media.followers,
     hasTeammate: last.series !== 'kart',
     f1: c.f1Debut !== null,
+    perf: last.seat === 'race' ? last.expectedAvg - last.actualAvg : 0,
+    f1Rookie: last.series === 'f1' && last.seat === 'race' && c.f1Debut === last.year,
+    home: (c.world.calendar ?? CALENDAR_2026).some((s) => circuitById(s.id).country === c.driver.nationality),
   };
 }
 
-/** 이번 오프시즌 이벤트 0~2개를 고른다(25%/50%/25%). 최근 3년 안에 나온 이벤트는 제외 */
+/**
+ * 이번 오프시즌 이벤트: 레이스 시트로 시즌을 치렀으면(F4 이상) 기자회견 1개를 먼저 띄우고,
+ * 일반 이벤트 0~2개(25%/50%/25%)를 더한다. 최근 3년 안에 나온 이벤트는 제외
+ */
 export function pickEvents(c: Career, last: SeasonRecord): string[] {
   const r = rngFor(c.seed, 'events', c.year);
   const roll = r();
   const count = roll < 0.25 ? 0 : roll < 0.75 ? 1 : 2;
   const recent = new Set((c.eventLog ?? []).filter((e) => e.year > c.year - 3).map((e) => e.id));
   const x = eventContext(c, last);
-  const pool = EVENTS.filter((e) => !recent.has(e.id) && e.when(x));
+  const pool = EVENTS.filter((e) => e.category !== 'interview' && !recent.has(e.id) && e.when(x));
   const picked: string[] = [];
+  if (last.seat === 'race' && last.series !== 'kart') {
+    const ri = rngFor(c.seed, 'interview', c.year);
+    const ivs = INTERVIEWS.filter((e) => !recent.has(e.id) && e.when(x));
+    if (ivs.length) picked.push(weightedPick(ri, ivs, (d) => d.weight?.(x) ?? 1).id);
+  }
   for (let i = 0; i < count && pool.length; i++) {
     const e = weightedPick(r, pool, (d) => d.weight?.(x) ?? 1);
     picked.push(e.id);
@@ -397,7 +425,8 @@ export function applyEventChoice(c: Career, eventId: string, optionId: string): 
   const opt = e.options.find((o) => o.id === optionId);
   if (!opt) throw new Error(`unknown option ${optionId} for ${eventId}`);
   const r: Rng = rngFor(c.seed, 'event-outcome', c.year, eventId, optionId);
-  const outcome = weightedPick(r, opt.outcomes, (o) => o.p);
+  const temperament = PERSONALITIES[c.driver.personality].temperament;
+  const outcome = weightedPick(r, opt.outcomes, (o) => o.p * (o.tempMul?.[temperament] ?? 1));
   const fx = outcome.effect;
   const summary: string[] = [];
   for (const k of STAT_KEYS) {

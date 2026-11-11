@@ -8,7 +8,7 @@ import { applyEventChoice, EVENT_BY_ID, eventCard, pickEvents, type EventCard } 
 import { seasonFeed, type FeedItem } from './feed';
 import { generateManager, type Manager } from './manager';
 import { evolveCalendar, type CalendarChange, type CalendarSlot } from './calendar';
-import { ALL_F1_CIRCUITS, CALENDAR_2026, CAR_WEIGHT, circuitById, DRIVERS_2026, F1_WINNER_TEAMS, ovr, POINTS_RACE, TEAMS_2026 } from './data';
+import { ALL_F1_CIRCUITS, CALENDAR_2026, CALENDAR_2027_SLOTS, CAR_WEIGHT, circuitById, DRIVERS_2026, F1_WINNER_TEAMS, ovr, POINTS_RACE, TEAMS_2026 } from './data';
 import { teamForm } from './form';
 import {
   addXp, ageCurve, applyAging, applyXp, generateHidden, recommendedPlan, SESSION_XP, TRAINING, trainingOutcome,
@@ -1200,8 +1200,14 @@ export function applyOffseason(input: Career, choice: OffseasonChoice): Career {
   for (const d of c.world.drivers) if (d.teamId && removed.includes(d.teamId)) d.teamId = null;
   if (c.contract?.teamId && removed.includes(c.contract.teamId)) c.contract = null;
 
+  // 2027 시즌은 공식 발표된 캘린더를 쓴다(SPEC §2.1 v0.21). 그 뒤로는 낮은 확률의 무작위 변화
+  if (nextYear === 2027) {
+    c.world.calendar = CALENDAR_2027_SLOTS.map((s) => ({ ...s }));
+    c.world.calendarLog = [...(c.world.calendarLog ?? []), { season: 2027, out: 'netherlands', in: 'portimao' }, { season: 2027, out: 'barcelona', in: 'istanbul' }];
+    c.world.news.push({ season: 2027, kind: 'calendar', team: 'Portimão', text: '2027 F1 캘린더: 24라운드. 바레인·사우디 복귀, Portimão·Istanbul Park 합류, Zandvoort·Barcelona-Catalunya 제외' });
+  }
   // F1 캘린더 변화(낮은 확률, 21세기 개최 서킷만 복귀)
-  const cal = evolveCalendar(c.world.calendar ?? CALENDAR_2026_SLOTS, nextYear, c.seed, ALL_F1_CIRCUITS.map((x) => x.id), c.world.calendarLog ?? []);
+  const cal = nextYear === 2027 ? { slots: c.world.calendar!, change: null } : evolveCalendar(c.world.calendar ?? CALENDAR_2026_SLOTS, nextYear, c.seed, ALL_F1_CIRCUITS.map((x) => x.id), c.world.calendarLog ?? []);
   c.world.calendar = cal.slots.map((s) => ({ ...s }));
   if (cal.change) {
     c.world.calendarLog = [...(c.world.calendarLog ?? []), cal.change];

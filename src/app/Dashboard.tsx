@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  isF1RaceSeason, managerOf, MANAGER_STYLE_LABEL, ovr, PERSONALITIES, recommendedPlan, seriesLabel, STAT_KEYS, superLicencePoints, TRAINING, TRAINING_SLOTS,
+  circuitById, isF1RaceSeason, managerOf, MANAGER_STYLE_LABEL, ovr, PERSONALITIES, recommendedPlan, seriesLabel, STAT_KEYS, superLicencePoints, TRAINING, TRAINING_SLOTS,
   TRAINING_SLOTS_RESERVE, xpNeeded, type TrainingId,
 } from '../engine';
 import { formatMoney } from './format';
@@ -192,8 +192,12 @@ export function Dashboard() {
         <div className="space-y-1 text-sm text-zinc-300">
           <div>F1 팀 {c.world.teams.teams.length}개{c.world.teams.pending.length ? ` · 준비 중 ${c.world.teams.pending.length}개` : ''}</div>
           {lastChamp && <div>최근 월드 챔피언: <b>{lastChamp.year} {lastChamp.driverId === 'player' ? d.name : lastChamp.name}</b></div>}
-          {c.world.news.slice(-3).reverse().map((n, i) => <div key={i} className="text-zinc-400">· {n.text}</div>)}
-          {series !== 'f1' && <div className="text-xs text-zinc-500">F1 라이브 레이스 화면은 다음 업데이트에서 붙습니다. 지금은 시즌 단위로 진행합니다.</div>}
+          {(() => {
+            const last = c.world.calendarLog?.[c.world.calendarLog.length - 1];
+            return last && <div>최근 캘린더 변화: <b>{last.season} {circuitById(last.in).name} 복귀</b> · {circuitById(last.out).name} 제외</div>;
+          })()}
+          {c.world.news.filter((n) => n.kind !== 'calendar').slice(-3).reverse().map((n, i) => <div key={i} className="text-zinc-400">· {n.text}</div>)}
+          {series !== 'f1' && <div className="text-xs text-zinc-500">하부 리그는 시즌 단위로 진행합니다. F1 레이스 시트에 오르면 그랑프리마다 라이브로 진행할 수 있습니다.</div>}
         </div>
       </Card>
     </div>
