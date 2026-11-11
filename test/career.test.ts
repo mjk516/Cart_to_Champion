@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyOffseason, autoplayCareer, createCareer, DEFAULT_POLICY, getOffseason, MAX_TEAMS, MIN_TEAMS, replayCareer,
   CALENDAR_2026, f1WeekendFor, isF1RaceSeason, radioKey, type RadioOptionId, EVENTS, managerAdvice, MAJOR_FLOOR, OTHERS_CAP, feedTemplateCount, pendingEventCards, resolveEvent, F1_WINNER_TEAMS, f1Rules, generateHidden, initialWorld, NEW_TEAM_START, PERSONALITIES, runOffseason, TEAMS_2026, runSeason, STAT_KEYS, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, superLicencePoints, type CareerSetup,
-  evolveCalendar, RETURNING_CIRCUITS, CALENDAR_2027_SLOTS, ALL_F1_CIRCUITS, CALENDAR_CHANGE_FROM, CALENDAR_COOLDOWN, f1Calendar, type CalendarChange, hasHomeGp, homeGpEffect, type Personality, achievements, ACHIEVEMENTS, newAchievements,
+  evolveCalendar, RETURNING_CIRCUITS, CALENDAR_2027_SLOTS, ALL_F1_CIRCUITS, CALENDAR_CHANGE_FROM, CALENDAR_COOLDOWN, f1Calendar, type CalendarChange, hasHomeGp, homeGpEffect, type Personality, achievements, ACHIEVEMENTS, newAchievements, careerRecords, playerNumber, DRIVERS_2026,
 } from '../src/engine';
 import { CIRCUIT_PATHS } from '../src/app/circuitPaths';
 
@@ -466,6 +466,32 @@ describe('업적 (SPEC §9 v0.22)', () => {
     for (const h of c.history) {
       if (h.series !== 'f1') expect(h.homeWins ?? 0).toBe(0);
       expect(h.homeWins ?? 0).toBeLessThanOrEqual(h.wins);
+    }
+  });
+});
+
+describe('커리어 기록과 팀 레전드 (SPEC §9 v0.23)', () => {
+  it('최연소·최다 우승·연속 챔피언·최장 기간이 시즌 기록과 맞는다', () => {
+    const c = autoplayCareer(setup(1, { nationality: 'GB', wealthTier: 1, personality: 'aggressive' }), DEFAULT_POLICY, 35);
+    const r = careerRecords(c);
+    const f1 = c.history.filter((h) => h.series === 'f1' && h.seat === 'race');
+    if (r.youngestWin) expect(r.youngestWin.age).toBe(f1.find((h) => h.wins > 0)!.age);
+    if (r.mostWinsSeason) expect(r.mostWinsSeason.wins).toBe(Math.max(...f1.map((h) => h.wins)));
+    if (r.titleStreak) expect(r.titleStreak.count).toBeLessThanOrEqual(c.totals.f1Titles);
+    if (r.legend) {
+      expect(r.legend.seasons).toBeGreaterThanOrEqual(8);
+      expect(r.legend.titles).toBeGreaterThan(0);
+      expect(DRIVERS_2026.map((d) => d.number)).not.toContain(r.legend.number);
+    }
+  });
+
+  it('플레이어 차 번호는 시드로 정해지고 실제 그리드 번호를 피한다', () => {
+    const used = new Set(DRIVERS_2026.map((d) => d.number));
+    for (let s = 1; s < 200; s++) {
+      const n = playerNumber(createCareer(setup(s)));
+      expect(n).toBeGreaterThanOrEqual(2);
+      expect(n).toBeLessThanOrEqual(99);
+      expect(used.has(n)).toBe(false);
     }
   });
 });

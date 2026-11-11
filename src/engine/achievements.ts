@@ -3,6 +3,8 @@
 
 import type { Career, SeasonRecord } from './career';
 import type { SeriesId } from './series';
+import { DRIVERS_2026 } from './data';
+import { hashSeed } from './rng';
 
 export type AchievementGroup = 'junior' | 'f1' | 'special';
 export const ACHIEVEMENT_GROUP_LABEL: Record<AchievementGroup, string> = { junior: '하부 리그', f1: 'F1', special: '특별' };
@@ -29,6 +31,9 @@ function cumulative(c: Career, value: (h: SeasonRecord) => number, target: numbe
   for (const h of c.history) { sum += value(h); if (sum >= target) return h.year; }
   return null;
 }
+
+/** 실제 F1 최연소 기록(만 나이, 정수로 내림). 게임 나이는 정수라 "이보다 어리면" 기록 경신으로 본다 */
+export const REAL_YOUNGEST = { winner: 18, pole: 21, champion: 23 } as const;
 
 export const ACHIEVEMENTS: AchievementDef[] = [
   // 하부 리그
@@ -96,7 +101,84 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'iron_man', group: 'special', title: '철인', desc: '40세 시즌까지 현역', check: (c) => first(c, (h) => h.age >= 40 && h.seat !== 'none') },
   { id: 'rich', group: 'special', title: '1억 유로 드라이버', desc: '통산 수입 €100M', check: (c) => cumulative(c, (h) => h.income, 100_000_000) },
   { id: 'star', group: 'special', title: '글로벌 스타', desc: '팔로워 100만 명', check: (c) => (c.media.followers >= 1_000_000 ? 0 : null) },
+  { id: 'three_peat', group: 'special', title: '3연패', desc: 'F1 챔피언 3시즌 연속', check: (c) => { const s = titleStreak(c); return s && s.count >= 3 ? s.from + 2 : null; } },
+  { id: 'youngest_champ', group: 'special', title: '역대 최연소 챔피언', desc: `실제 F1 최연소 챔피언 기록(${REAL_YOUNGEST.champion}세)보다 어린 나이에 월드 챔피언`, check: (c) => first(c, (h) => h.series === 'f1' && h.champion && h.age < REAL_YOUNGEST.champion) },
+  { id: 'legend', group: 'special', title: '팀 레전드', desc: '한 팀에서 8시즌 이상 뛰며 챔피언. 차 번호가 영구결번된다', check: (c) => teamLegend(c)?.year ?? null },
 ];
+
+function titleStreak(c: Career): { count: number; from: number; to: number } | null {
+  let best: { count: number; from: number; to: number } | null = null;
+  let cur: { count: number; from: number; to: number } | null = null;
+  for (const h of c.history) {
+    if (h.series === 'f1' && h.champion) {
+      const prev = cur as { count: number; from: number; to: number } | null;
+      cur = prev !== null && prev.to === h.year - 1 ? { count: prev.count + 1, from: prev.from, to: h.year } : { count: 1, from: h.year, to: h.year };
+    }
+    else cur = null;
+    if (cur && (!best || cur.count > best.count)) best = cur;
+  }
+  return best;
+}
+
+/** 플레이어 차 번호(영구결번 연출용). 시드로 정하고, 2026 그리드의 실제 번호는 피한다 */
+export function playerNumber(c: Career): number {
+  const used = new Set(DRIVERS_2026.map((d) => d.number));
+  let n = (hashSeed(c.seed, 'car-number') % 98) + 2;
+  while (used.has(n)) n = n >= 99 ? 2 : n + 1;
+  return n;
+}
+
+/** 한 팀에서 8시즌 이상 + 그 팀에서 챔피언 */
+export function teamLegend(c: Career): { team: string; seasons: number; titles: number; number: number; year: number } | null {
+  const byTeam = new Map<string, SeasonRecord[]>();
+  for (const h of c.history) if (f1Race(h) && h.team) byTeam.set(h.team, [...(byTeam.get(h.team) ?? []), h]);
+  let best: { team: string; seasons: number; titles: number; number: number; year: number } | null = null;
+  for (const [team, hs] of byTeam) {
+    const titles = hs.filter((h) => h.champion).length;
+    if (hs.length < 8 || titles === 0) continue;
+    // 8시즌째와 첫 우승 중 늦은 해에 레전드가 된다
+    const year = Math.max(hs[7]!.year, hs.find((h) => h.champion)!.year);
+    if (!best || hs.length > best.seasons) best = { team, seasons: hs.length, titles, number: playerNumber(c), year };
+  }
+  return best;
+}
+
+export interface CareerRecordsSummary {
+  youngestWin: { age: number; year: number; beatsReal: boolean } | null;
+  youngestPole: { age: number; year: number; beatsReal: boolean } | null;
+  youngestChampion: { age: number; year: number; beatsReal: boolean } | null;
+  mostWinsSeason: { wins: number; races: number; year: number; team: string | null } | null;
+  titleStreak: { count: number; from: number; to: number } | null;
+  longestStint: { team: string; seasons: number; from: number; to: number } | null;
+  legend: ReturnType<typeof teamLegend>;
+}
+
+/** 커리어 기록(SPEC §9): 최연소 기록, 단일 시즌 최다 우승, 연속 챔피언, 한 팀 최장 기간, 팀 레전드 */
+export function careerRecords(c: Career): CareerRecordsSummary {
+  const f1 = c.history.filter(f1Race);
+  const youngest = (f: (h: SeasonRecord) => boolean, real: number) => {
+    const h = f1.find(f);
+    return h ? { age: h.age, year: h.year, beatsReal: h.age < real } : null;
+  };
+  const most = [...f1].sort((a, b) => b.wins - a.wins || a.year - b.year)[0];
+  let stint: CareerRecordsSummary['longestStint'] = null;
+  let run: CareerRecordsSummary['longestStint'] = null;
+  for (const h of c.history) {
+    const prev = run as CareerRecordsSummary['longestStint'];
+    if (f1Race(h) && h.team && prev !== null && prev.team === h.team && prev.to === h.year - 1) run = { team: prev.team, seasons: prev.seasons + 1, from: prev.from, to: h.year };
+    else run = f1Race(h) && h.team ? { team: h.team, seasons: 1, from: h.year, to: h.year } : null;
+    if (run && (!stint || run.seasons > stint.seasons)) stint = run;
+  }
+  return {
+    youngestWin: youngest((h) => h.wins > 0, REAL_YOUNGEST.winner),
+    youngestPole: youngest((h) => h.poles > 0, REAL_YOUNGEST.pole),
+    youngestChampion: youngest((h) => h.champion, REAL_YOUNGEST.champion),
+    mostWinsSeason: most && most.wins > 0 ? { wins: most.wins, races: most.races, year: most.year, team: most.team } : null,
+    titleStreak: titleStreak(c),
+    longestStint: stint,
+    legend: teamLegend(c),
+  };
+}
 
 export function achievements(c: Career): AchievementState[] {
   return ACHIEVEMENTS.map((def) => ({ def, year: def.check(c) }));

@@ -8,7 +8,7 @@ import {
 import { LiveRace } from './LiveRace';
 import { F1TeamBadge } from './TeamBadge';
 import { useGame } from './store';
-import { Bar, Button, Card, Pill } from './ui';
+import { Bar, Button, Card, Pill, useConfirm } from './ui';
 
 const ME = 'player';
 const TYPE_LABEL = { power: '고속 서킷', downforce: '다운포스 서킷', street: '시가지 서킷' } as const;
@@ -31,6 +31,7 @@ function racePoints(s: F1WeekendSession, skipped: boolean): Classified[] | null 
 
 export function Weekend() {
   const { career: c, live, updateLive, finishLive, go } = useGame();
+  const confirmBox = useConfirm();
   const [doneKey, setDoneKey] = useState<string | null>(null);
   const wk: F1Weekend | null = useMemo(
     () => (c && live && live.year === c.year ? f1WeekendFor(c, live.plan, live.round, live.radio) : null),
@@ -84,6 +85,7 @@ export function Weekend() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 px-4 py-6">
+      {confirmBox.dialog}
       <header className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <div className="text-xs text-zinc-400">{c.year} F1 · 라운드 {live.round + 1}/{rounds}</div>
@@ -171,7 +173,7 @@ export function Weekend() {
               {lastStep ? (lastRound ? '시즌 마치기' : '다음 그랑프리') : '다음 세션'}
             </Button>
             {!lastStep && <Button variant="ghost" onClick={skipToResult}>레이스 결과로 바로 가기</Button>}
-            <Button variant="ghost" className="ml-auto" onClick={() => { if (confirm('남은 시즌을 자동으로 진행할까요? 무전은 엔지니어 추천을 따릅니다.')) finishLive(); }}>남은 시즌 자동 진행</Button>
+            <Button variant="ghost" className="ml-auto" onClick={() => confirmBox.ask(<>남은 {rounds - live.round}개 라운드를 자동으로 진행하고 시즌을 마칠까요? 지금까지 고른 무전은 그대로 반영되고, 남은 무전은 엔지니어 추천을 따릅니다.</>, finishLive, { confirmLabel: '남은 시즌 자동 진행' })}>남은 시즌 자동 진행</Button>
           </div>
         </Card>
 

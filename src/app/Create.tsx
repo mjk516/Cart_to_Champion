@@ -63,9 +63,9 @@ export function Create() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 px-4 py-6">
-      <div className="flex items-center gap-2 overflow-x-auto text-xs">
+      <div className="flex flex-wrap items-center gap-1.5 text-xs">
         {STEPS.map((s, i) => (
-          <span key={s} className={`whitespace-nowrap rounded-full px-3 py-1 font-bold ${i === step ? 'bg-racing text-white' : i < step ? 'bg-white/15 text-zinc-200' : 'bg-white/5 text-zinc-500'}`}>
+          <span key={s} className={`whitespace-nowrap rounded-full px-2.5 py-1 font-bold ${i === step ? 'bg-racing text-white' : i < step ? 'bg-white/15 text-zinc-200' : 'bg-white/5 text-zinc-500'}`}>
             {i + 1}. {s}
           </span>
         ))}

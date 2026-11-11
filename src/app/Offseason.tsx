@@ -11,7 +11,7 @@ import { SignaturePad } from './SignaturePad';
 import { SignatureView } from './SignatureView';
 import { F1TeamBadge } from './TeamBadge';
 import { currentOffseason, useGame, type Signature } from './store';
-import { Bar, Button, Card, Pill, SEAT_LABELS } from './ui';
+import { Bar, Button, Card, Pill, SEAT_LABELS, useConfirm } from './ui';
 
 /** 이벤트 결과 요약의 색: 좋은 변화는 초록, 나쁜 변화는 주황. 압박은 오를수록 나쁘다 */
 function effectTone(s: string): 'green' | 'amber' | 'zinc' {
@@ -196,6 +196,7 @@ function OfferCard({ o, onPick, advice }: { o: Offer; onPick: () => void; advice
 
 export function Offseason() {
   const { career: c, lastRecord, signature, acceptOffer, skipSeat, retire, chooseEvent } = useGame();
+  const confirmBox = useConfirm();
   const off = useMemo(() => (c ? currentOffseason(c) : null), [c]);
   const pending = useMemo(() => (c ? pendingEventCards(c) : []), [c]);
   const resolvedThisYear = (c?.eventLog ?? []).filter((e) => e.year === c?.year);
@@ -212,6 +213,7 @@ export function Offseason() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 px-4 py-6">
+      {confirmBox.dialog}
       <SeasonSummary r={record} />
 
       {(pending.length > 0 || resolvedThisYear.length > 0) && (
@@ -280,7 +282,7 @@ export function Offseason() {
         </div>
         <div className="mt-4 flex flex-wrap justify-between gap-2">
           <Button variant="ghost" onClick={() => skipSeat(joinAcademy)}>시트 없이 1년 보내기</Button>
-          <Button variant="danger" onClick={() => { if (confirm('은퇴를 선언할까요? 되돌릴 수 없습니다.')) retire(); }}>은퇴 선언</Button>
+          <Button variant="danger" onClick={() => confirmBox.ask(<>은퇴를 선언할까요? <b>되돌릴 수 없습니다.</b> 지금까지의 커리어가 은퇴 화면에 기록됩니다.</>, retire, { confirmLabel: '은퇴 선언', danger: true })}>은퇴 선언</Button>
         </div>
       </Card>
       )}
