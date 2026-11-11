@@ -30,6 +30,8 @@ export interface EventEffect {
   joinAcademy?: boolean;
   /** 더 유능한 매니저로 교체 */
   newManager?: boolean;
+  /** 가정을 꾸린다(영구): 멘탈 안정, 레이스 공격성 감소 */
+  family?: boolean;
 }
 
 export interface EventOutcome {
@@ -62,6 +64,12 @@ export interface EventCtx {
   f1Rookie: boolean;
   /** 캘린더에 자기 나라 그랑프리가 있다 */
   home: boolean;
+  /** F1 레이스 시트 팀의 차 성능 순위(1 = 최고). F1 레이스 시트가 아니면 99 */
+  teamRank: number;
+  /** 팀메이트를 이긴 비율 0~1 */
+  teammateBeat: number;
+  /** 가정이 있다 */
+  family: boolean;
 }
 
 export interface EventDef {
@@ -332,7 +340,7 @@ const BASE_EVENTS: EventDef[] = [
   },
 ];
 
-/** 이벤트 60개: M2 20개 + M3 일반 28개 + 기자회견 12개 */
+/** 이벤트 62개: M2 20개 + M3 일반 28개 + 기자회견 12개 + v0.25 2개(내구레이스, 가정) */
 export const EVENTS: EventDef[] = [...BASE_EVENTS, ...MORE_EVENTS, ...INTERVIEWS];
 
 export const EVENT_BY_ID = new Map(EVENTS.map((e) => [e.id, e]));
@@ -356,6 +364,11 @@ export function eventContext(c: Career, last: SeasonRecord): EventCtx {
     perf: last.seat === 'race' ? last.expectedAvg - last.actualAvg : 0,
     f1Rookie: last.series === 'f1' && last.seat === 'race' && c.f1Debut === last.year,
     home: (c.world.calendar ?? CALENDAR_2026).some((s) => circuitById(s.id).country === c.driver.nationality),
+    teamRank: c.contract?.series === 'f1' && c.contract.seat === 'race' && c.contract.teamId
+      ? [...c.world.teams.teams].sort((a, b) => b.quality - a.quality).findIndex((t) => t.id === c.contract!.teamId) + 1 || 99
+      : 99,
+    teammateBeat: last.teammateBeat,
+    family: !!c.family,
   };
 }
 
@@ -462,6 +475,10 @@ export function applyEventChoice(c: Career, eventId: string, optionId: string): 
   if (fx.joinAcademy && !c.academy) {
     c.academy = ACADEMIES[Math.floor(r() * ACADEMIES.length)]?.name ?? ACADEMIES[0]!.name;
     summary.push(`${c.academy} 합류`);
+  }
+  if (fx.family && !c.family) {
+    c.family = { since: c.year };
+    summary.push('가정을 꾸렸다: 멘탈이 안정되고 레이스 공격성은 줄어든다');
   }
   if (fx.newManager) {
     c.manager = generateManager(c.seed, `agent-${c.year}`, c.driver.nationality, 4);

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyOffseason, autoplayCareer, createCareer, DEFAULT_POLICY, getOffseason, MAX_TEAMS, MIN_TEAMS, replayCareer,
   CALENDAR_2026, f1WeekendFor, isF1RaceSeason, radioKey, type RadioOptionId, EVENTS, managerAdvice, MAJOR_FLOOR, OTHERS_CAP, feedTemplateCount, pendingEventCards, resolveEvent, F1_WINNER_TEAMS, f1Rules, generateHidden, initialWorld, NEW_TEAM_START, PERSONALITIES, runOffseason, TEAMS_2026, runSeason, STAT_KEYS, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, superLicencePoints, type CareerSetup,
-  evolveCalendar, RETURNING_CIRCUITS, CALENDAR_2027_SLOTS, ALL_F1_CIRCUITS, CALENDAR_CHANGE_FROM, CALENDAR_COOLDOWN, f1Calendar, type CalendarChange, hasHomeGp, homeGpEffect, type Personality, achievements, ACHIEVEMENTS, newAchievements, careerRecords, playerNumber, DRIVERS_2026,
+  evolveCalendar, RETURNING_CIRCUITS, CALENDAR_2027_SLOTS, ALL_F1_CIRCUITS, CALENDAR_CHANGE_FROM, CALENDAR_COOLDOWN, f1Calendar, type CalendarChange, hasHomeGp, homeGpEffect, type Personality, achievements, ACHIEVEMENTS, newAchievements, careerRecords, playerNumber, DRIVERS_2026, carNumberProblem, defaultCarNumber, FAMILY_BEHAVIOR,
 } from '../src/engine';
 import { CIRCUIT_PATHS } from '../src/app/circuitPaths';
 
@@ -183,9 +183,9 @@ describe('성격 기질과 잠재력(SPEC §3.4 v0.11)', () => {
 });
 
 describe('전환점 이벤트와 언론·팬 피드(SPEC §6, §6.1)', () => {
-  it('이벤트 60개(기자회견 12개 포함), 반응 문구 80개', () => {
-    expect(EVENTS).toHaveLength(60);
-    expect(new Set(EVENTS.map((e) => e.id)).size).toBe(60);
+  it('이벤트 62개(기자회견 12개 포함), 반응 문구 80개', () => {
+    expect(EVENTS).toHaveLength(62);
+    expect(new Set(EVENTS.map((e) => e.id)).size).toBe(62);
     expect(EVENTS.filter((e) => e.category === 'interview')).toHaveLength(12);
     for (const e of EVENTS) for (const o of e.options) {
       expect(o.outcomes.length).toBeGreaterThan(0);
@@ -492,6 +492,58 @@ describe('커리어 기록과 팀 레전드 (SPEC §9 v0.23)', () => {
       expect(n).toBeGreaterThanOrEqual(2);
       expect(n).toBeLessThanOrEqual(99);
       expect(used.has(n)).toBe(false);
+    }
+  });
+});
+
+describe('v0.25: 차 번호·헬멧, 가정, 내구레이스, 팀 대표 교체', () => {
+  it('차 번호는 2~99이고 실제 F1 드라이버 번호·1번·17번은 막는다', () => {
+    for (const d of DRIVERS_2026) if (d.number !== 1) expect(carNumberProblem(d.number)).toContain('실제 F1 드라이버');
+    expect(carNumberProblem(1)).not.toBeNull();
+    expect(carNumberProblem(17)).not.toBeNull();
+    expect(carNumberProblem(0)).not.toBeNull();
+    expect(carNumberProblem(100)).not.toBeNull();
+    expect(carNumberProblem(9)).toBeNull();
+    for (let s = 1; s < 300; s++) expect(carNumberProblem(defaultCarNumber(s))).toBeNull();
+  });
+
+  it('고른 번호와 헬멧이 커리어에 남고, 막힌 번호를 넘기면 기본 번호로 바꾼다', () => {
+    const helmet = { base: '#2563eb', accent: '#facc15', pattern: 'stars' as const };
+    const c = createCareer(setup(8, { number: 9, helmet }));
+    expect(c.driver.number).toBe(9);
+    expect(c.driver.helmet).toEqual(helmet);
+    expect(playerNumber(c)).toBe(9);
+    const bad = createCareer(setup(8, { number: 44 }));
+    expect(carNumberProblem(bad.driver.number!)).toBeNull();
+  });
+
+  it('가정을 꾸리면 영구히 남고 레이스 공격성이 줄어든다', () => {
+    let c = createCareer(setup(6));
+    c = { ...c, age: 27, history: [{ year: c.year, series: 'f2', seat: 'race', teammateBeat: 0.5, expectedAvg: 8, actualAvg: 8, position: 5, fieldSize: 22, champion: false, wins: 0 } as never] };
+    c.pendingEvents = ['start_family'];
+    const out = resolveEvent(c, 'start_family', 'family').career;
+    expect(out.family?.since).toBe(c.year);
+    expect(FAMILY_BEHAVIOR.contactRisk).toBeLessThan(1);
+    expect(FAMILY_BEHAVIOR.overtakeAttempt).toBeLessThan(1);
+  });
+
+  it('내구레이스 제안은 F1 상위 팀에서 팀메이트를 이길 때만 나온다', () => {
+    const e = EVENTS.find((x) => x.id === 'endurance_race')!;
+    const base = { age: 26, series: 'f1', seat: 'race', f1: true, teammateBeat: 0.6, teamRank: 3 } as never as Parameters<typeof e.when>[0];
+    expect(e.when(base)).toBe(true);
+    expect(e.when({ ...base, teamRank: 8 })).toBe(false);
+    expect(e.when({ ...base, teammateBeat: 0.3 })).toBe(false);
+    expect(e.when({ ...base, f1: false, series: 'f2' })).toBe(false);
+  });
+
+  it('팀 대표 교체가 가끔 일어나고, 그래도 메이저·나머지 팀 성능 범위는 지켜진다', () => {
+    const c = autoplayCareer(setup(14), DEFAULT_POLICY, 30);
+    const log = c.world.principalLog ?? [];
+    expect(log.length).toBeGreaterThan(0);
+    for (const p of log) expect(Math.abs(p.delta)).toBeLessThanOrEqual(0.015);
+    for (const t of c.world.teams.teams) {
+      if ((F1_WINNER_TEAMS as readonly string[]).includes(t.id)) expect(t.quality).toBeGreaterThanOrEqual(MAJOR_FLOOR);
+      else expect(t.quality).toBeLessThanOrEqual(OTHERS_CAP + 1e-9);
     }
   });
 });

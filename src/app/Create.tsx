@@ -1,11 +1,12 @@
-// 드라이버 생성(SPEC §3): 기본 정보 → 자산 규모 → 성격 → 후보 → 집중 육성 → 서명
+// 드라이버 생성(SPEC §3): 기본 정보 → 헬멧·번호 → 자산 규모 → 성격 → 후보 → 집중 육성 → 서명
 
 import { useMemo, useState } from 'react';
 import {
-  ALL_F1_CIRCUITS, CALENDAR_2026, CALENDAR_2027_SLOTS, circuitById, generateCandidates, RETURNING_CIRCUITS, ovr, PERSONALITIES, recommendedFocus, STAT_KEYS, WEALTH_TIERS,
-  type Personality, type StatKey, type WealthTier,
+  ALL_F1_CIRCUITS, CALENDAR_2026, CALENDAR_2027_SLOTS, carNumberProblem, circuitById, DEFAULT_HELMET, defaultCarNumber, generateCandidates, HELMET_COLORS, HELMET_PATTERNS, RETURNING_CIRCUITS, ovr, PERSONALITIES, recommendedFocus, STAT_KEYS, WEALTH_TIERS,
+  type Helmet, type Personality, type StatKey, type WealthTier,
 } from '../engine';
 import { formatMoney, pct } from './format';
+import { HelmetView } from './Helmet';
 import { SignaturePad } from './SignaturePad';
 import { randomSeed, useGame } from './store';
 import { Bar, Button, Card, Pill, STAT_LABELS, TEMPERAMENT_LABELS } from './ui';
@@ -39,7 +40,7 @@ const HOME_GP = new Set(CALENDAR_2026.map((x) => x.country));
 /** 지금은 없지만 캘린더가 바뀌면 그랑프리가 돌아올 수 있는 나라 */
 const NEXT_YEAR_GP = new Set(CALENDAR_2027_SLOTS.map((s) => circuitById(s.id).country).filter((x) => !HOME_GP.has(x)));
 const MAYBE_HOME_GP = new Set([...RETURNING_CIRCUITS, ...ALL_F1_CIRCUITS].map((x) => x.country).filter((x) => !HOME_GP.has(x) && !NEXT_YEAR_GP.has(x)));
-const STEPS = ['기본 정보', '자산 규모', '성격', '후보 선택', '서명'];
+const STEPS = ['기본 정보', '헬멧·번호', '자산 규모', '성격', '후보 선택', '서명'];
 
 export function Create() {
   const { startCareer, showKrw, go } = useGame();
@@ -52,6 +53,10 @@ export function Create() {
   const [reroll, setReroll] = useState(0);
   const [candidate, setCandidate] = useState(0);
   const [focus, setFocus] = useState<StatKey[]>(recommendedFocus('fighter'));
+  const [helmet, setHelmet] = useState<Helmet>(DEFAULT_HELMET);
+  const [numberText, setNumberText] = useState(() => String(defaultCarNumber(seed)));
+  const carNumber = Number(numberText);
+  const numberError = numberText.trim() === '' ? '번호를 입력해 주세요' : carNumberProblem(carNumber);
   const candidates = useMemo(() => generateCandidates(seed, personality, reroll), [seed, personality, reroll]);
 
   const choosePersonality = (p: Personality) => {
@@ -59,7 +64,7 @@ export function Create() {
     setFocus(recommendedFocus(p));
     setCandidate(0);
   };
-  const canNext = step === 0 ? name.trim().length > 0 : true;
+  const canNext = step === 0 ? name.trim().length > 0 : step === 1 ? !numberError : true;
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 px-4 py-6">
@@ -106,6 +111,48 @@ export function Create() {
       )}
 
       {step === 1 && (
+        <Card title="헬멧과 차 번호">
+          <div className="grid gap-5 sm:grid-cols-[auto_1fr]">
+            <div className="flex flex-col items-center gap-2 rounded-2xl bg-white/5 p-4">
+              <HelmetView helmet={helmet} number={numberError ? undefined : carNumber} size={160} />
+              <div className="text-sm font-bold">{name.trim() || '드라이버'} {numberError ? '' : `#${carNumber}`}</div>
+            </div>
+            <div className="space-y-4">
+              {([['base', '바탕색'], ['accent', '포인트색']] as const).map(([key, label]) => (
+                <div key={key}>
+                  <div className="mb-1 text-xs text-zinc-400">{label}</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {HELMET_COLORS.map((col) => (
+                      <button key={col} aria-label={`${label} ${col}`} aria-pressed={helmet[key] === col} onClick={() => setHelmet((h) => ({ ...h, [key]: col }))}
+                        className={`h-8 w-8 rounded-full border-2 ${helmet[key] === col ? 'border-white ring-2 ring-racing' : 'border-white/10'}`} style={{ background: col }} />
+                    ))}
+                  </div>
+                </div>
+              ))}
+              <div>
+                <div className="mb-1 text-xs text-zinc-400">무늬</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {HELMET_PATTERNS.map((p) => (
+                    <button key={p.id} onClick={() => setHelmet((h) => ({ ...h, pattern: p.id }))}
+                      className={`rounded-full px-3 py-1.5 text-sm font-bold ${helmet.pattern === p.id ? 'bg-racing text-white' : 'bg-white/5 text-zinc-300 hover:bg-white/10'}`}>{p.label}</button>
+                  ))}
+                </div>
+              </div>
+              <label className="block space-y-1">
+                <span className="text-xs text-zinc-400">차 번호 (2~99)</span>
+                <input aria-label="차 번호" inputMode="numeric" value={numberText} maxLength={2}
+                  onChange={(e) => setNumberText(e.target.value.replace(/[^0-9]/g, '').slice(0, 2))}
+                  className={`block w-28 rounded-xl border bg-zinc-950 px-3 py-2.5 text-lg font-black outline-none ${numberError ? 'border-red-500/70' : 'border-white/15 focus:border-racing'}`} />
+                {numberError
+                  ? <p role="alert" className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">⚠️ {numberError}</p>
+                  : <p className="text-xs text-emerald-300">쓸 수 있는 번호입니다. F1에 오르면 이 번호를 달고 달립니다.</p>}
+              </label>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {step === 2 && (
         <Card title="가정 자산 규모">
           <p className="mb-3 text-sm text-zinc-400">능력치는 모두 같습니다. 돈은 시작하는 팀과 경로를 바꿉니다. 돈이 모자라면 매니지먼트가 시트 비용을 대신 내고 나중에 F1 연봉의 15%를 가져갑니다.</p>
           <div className="grid gap-2 sm:grid-cols-5">
@@ -126,7 +173,7 @@ export function Create() {
         </Card>
       )}
 
-      {step === 2 && (
+      {step === 3 && (
         <Card title="성격">
           <p className="mb-3 text-sm text-zinc-400">성격이 초기 능력치와 커리어를 정합니다. 꾸준한 성격은 성적이 고르지만 챔피언이 되기 어렵고, 한 방 있는 성격은 들쑥날쑥하지만 정상에 오를 수 있습니다. 대신 팀에서 방출될 수 있습니다.</p>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -156,7 +203,7 @@ export function Create() {
         </Card>
       )}
 
-      {step === 3 && (
+      {step === 4 && (
         <Card title="후보 선택" right={<Button variant="ghost" onClick={() => { setReroll((r) => r + 1); setCandidate(0); }}>다른 후보 보기</Button>}>
           <p className="mb-3 text-sm text-zinc-400">세 후보 모두 OVR 45, 능력치 합 270입니다. 구성만 다릅니다.</p>
           <div className="grid gap-2 sm:grid-cols-3">
@@ -189,7 +236,7 @@ export function Create() {
         </Card>
       )}
 
-      {step === 4 && (
+      {step === 5 && (
         <Card title="서명 등록">
           <p className="mb-1 font-bold">프로 드라이버의 첫걸음. 앞으로 계약서에 쓸 서명을 남겨 주세요.</p>
           <p className="mb-3 text-xs text-zinc-500">실제로 쓰는 서명은 그리지 마세요. 서명은 이 기기에만 저장됩니다.</p>
@@ -197,7 +244,7 @@ export function Create() {
             name={name.trim()}
             doneLabel="커리어 시작"
             onDone={(sig) =>
-              startCareer({ seed, name: name.trim(), nationality, wealthTier: wealth, personality, candidateIndex: candidate, reroll, focus }, sig)
+              startCareer({ seed, name: name.trim(), nationality, wealthTier: wealth, personality, candidateIndex: candidate, reroll, focus, number: carNumber, helmet }, sig)
             }
           />
         </Card>
@@ -205,7 +252,7 @@ export function Create() {
 
       <div className="flex justify-between">
         <Button variant="ghost" onClick={() => (step === 0 ? go('home') : setStep(step - 1))}>{step === 0 ? '취소' : '이전'}</Button>
-        {step < 4 && <Button onClick={() => setStep(step + 1)} disabled={!canNext}>다음</Button>}
+        {step < 5 && <Button onClick={() => setStep(step + 1)} disabled={!canNext}>다음</Button>}
       </div>
     </div>
   );

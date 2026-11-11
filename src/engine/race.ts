@@ -24,6 +24,8 @@ export interface RaceCar {
   teamId: string;
   stats: Stats;
   personality?: Personality;
+  /** 성격 행동 계수에 곱하는 값(예: 가족이 생기면 공격성이 줄어든다, SPEC §6 v0.25) */
+  behaviorMul?: Partial<Behavior>;
   teamQuality: number;
   reliability: number;
   ops: number;
@@ -125,7 +127,7 @@ const LIFE: Record<Compound, number> = { S: 18, M: 28, H: 40, I: 35 };
 const HAZARD = { red: 0.1, sc: 0.5, vsc: 0.3, crash: 0.3, mech: 0.45 };
 const PACE_SPREAD = 0.11;
 
-interface Behavior { overtakeAttempt: number; contactRisk: number; mistake: number; lapVariance: number; fightback: number }
+export interface Behavior { overtakeAttempt: number; contactRisk: number; mistake: number; lapVariance: number; fightback: number }
 
 interface CarState {
   car: RaceCar;
@@ -162,8 +164,14 @@ export function carFromDriver(driver: Driver, team: Team): RaceCar {
   };
 }
 
-function behaviorOf(p?: Personality): Behavior {
-  return p ? PERSONALITIES[p].race : NEUTRAL_RACE;
+function behaviorOf(car: RaceCar): Behavior {
+  const b = car.personality ? PERSONALITIES[car.personality].race : NEUTRAL_RACE;
+  const m = car.behaviorMul;
+  if (!m) return b;
+  return {
+    overtakeAttempt: b.overtakeAttempt * (m.overtakeAttempt ?? 1), contactRisk: b.contactRisk * (m.contactRisk ?? 1),
+    mistake: b.mistake * (m.mistake ?? 1), lapVariance: b.lapVariance * (m.lapVariance ?? 1), fightback: b.fightback * (m.fightback ?? 1),
+  };
 }
 
 export function raceLaps(circuit: Circuit, kind: 'race' | 'sprint'): number {
@@ -228,7 +236,7 @@ export function runRace(input: RaceInput): RaceOutcome {
         : [];
     const compound: Compound = twoStop ? 'S' : 'M';
     return {
-      car, beh: behaviorOf(car.personality), grid: i + 1, time: i * 0.22, compound, tyreAge: 0, stops: 0,
+      car, beh: behaviorOf(car), grid: i + 1, time: i * 0.22, compound, tyreAge: 0, stops: 0,
       dryUsed: new Set<Compound>([compound]), planned, out: false, lapsDone: 0, lastPitLap: 0,
       pitThisLap: null, pitNextLap: null, radioLap: -1, holdRain: false, holdDryUntil: 0, lostPositionLap: -99,
     };
@@ -681,7 +689,7 @@ export function simulateQualifying(
   const times: Record<string, number> = {};
   for (const car of cars) {
     const st = car.stats;
-    const beh = behaviorOf(car.personality);
+    const beh = behaviorOf(car);
     const skill = (0.6 * st.pace + 0.4 * ovr(st)) / 100;
     const perf = carWeight * car.teamQuality + (1 - carWeight) * skill;
     times[car.id] =

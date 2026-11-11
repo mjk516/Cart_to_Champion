@@ -54,7 +54,7 @@ export interface TeamWorld {
 
 export interface TeamNews {
   season: number;
-  kind: 'application' | 'fia_approved' | 'fia_rejected' | 'fom_agreed' | 'fom_rejected' | 'debut' | 'withdrawal' | 'takeover' | 'calendar';
+  kind: 'application' | 'fia_approved' | 'fia_rejected' | 'fom_agreed' | 'fom_rejected' | 'debut' | 'withdrawal' | 'takeover' | 'calendar' | 'principal';
   team: string;
   text: string;
 }
