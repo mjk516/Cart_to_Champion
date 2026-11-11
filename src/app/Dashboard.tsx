@@ -8,6 +8,7 @@ import {
 import { formatMoney } from './format';
 import { FeedList } from './FeedList';
 import { useGame } from './store';
+import { F1TeamBadge } from './TeamBadge';
 import { Bar, Button, Card, Pill, SEAT_LABELS, STAT_LABELS, TEMPERAMENT_LABELS } from './ui';
 
 const MODES = [
@@ -63,7 +64,7 @@ export function Dashboard() {
         <Card title="이번 시즌">
           {contract ? (
             <div className="space-y-1 text-sm">
-              <div className="text-lg font-black">{seriesLabel(contract.series)} · {contract.team}</div>
+              <div className="flex items-center gap-2 text-lg font-black">{contract.series === 'f1' && <F1TeamBadge teamId={contract.teamId} size={30} />}{seriesLabel(contract.series)} · {contract.team}</div>
               <div className="text-zinc-300">{SEAT_LABELS[contract.seat]} · 계약 {contract.endYear}년까지</div>
               {contract.salary > 0 && <div>연봉 {formatMoney(contract.salary, showKrw)}</div>}
               {contract.seatCost > 0 && (

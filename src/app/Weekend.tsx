@@ -6,6 +6,7 @@ import {
   type Classified, type F1Weekend, type F1WeekendSession,
 } from '../engine';
 import { LiveRace } from './LiveRace';
+import { F1TeamBadge } from './TeamBadge';
 import { useGame } from './store';
 import { Bar, Button, Card, Pill } from './ui';
 
@@ -138,7 +139,7 @@ export function Weekend() {
                   return (
                     <li key={id} className={`flex items-center gap-2 border-b border-white/5 py-1 ${id === ME ? 'font-bold text-racing' : ''}`}>
                       <span className="w-6 text-right text-zinc-400">{i + 1}</span>
-                      <span className="h-4 w-1 rounded" style={{ background: teamColor(wk.cars.find((x) => x.id === id)?.teamId ?? '') }} />
+                      <F1TeamBadge teamId={wk.cars.find((x) => x.id === id)?.teamId} size={18} />
                       <span className="w-12">{codeOf(id)}</span>
                       <span className="flex-1 text-right tabular-nums text-zinc-400">{i === 0 ? '최고 기록' : `+${((session.result.times[id] ?? 0) - t0).toFixed(3)}`}</span>
                       {elim && <span className="text-xs text-zinc-500">{elim}</span>}
@@ -178,7 +179,7 @@ export function Weekend() {
           {standings.length === 0 ? <p className="text-sm text-zinc-400">아직 치른 레이스가 없습니다.</p> : (
             <ol className="space-y-1 text-sm">
               {standings.slice(0, 10).map(([id, p], i) => (
-                <li key={id} className={`flex gap-2 ${id === ME ? 'font-bold text-racing' : ''}`}><span className="w-5 text-right text-zinc-500">{i + 1}</span><span className="flex-1">{codeOf(id)}</span><span>{p}</span></li>
+                <li key={id} className={`flex items-center gap-2 ${id === ME ? 'font-bold text-racing' : ''}`}><span className="w-5 text-right text-zinc-500">{i + 1}</span><F1TeamBadge teamId={wk.cars.find((x) => x.id === id)?.teamId} size={16} /><span className="flex-1">{codeOf(id)}</span><span>{p}</span></li>
               ))}
               {myPos > 10 && <li className="flex gap-2 font-bold text-racing"><span className="w-5 text-right">{myPos}</span><span className="flex-1">{codeOf(ME)}</span><span>{live.points[ME] ?? 0}</span></li>}
             </ol>

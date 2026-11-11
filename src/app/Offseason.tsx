@@ -9,6 +9,7 @@ import { FeedList } from './FeedList';
 import { formatMoney } from './format';
 import { SignaturePad } from './SignaturePad';
 import { SignatureView } from './SignatureView';
+import { F1TeamBadge } from './TeamBadge';
 import { currentOffseason, useGame, type Signature } from './store';
 import { Bar, Button, Card, Pill, SEAT_LABELS } from './ui';
 
@@ -72,7 +73,7 @@ function ContractModal({ offer, name, firstF1, signature, onCancel, onSigned }: 
         <div className="text-center text-xs tracking-[0.3em] text-zinc-500">DRIVER AGREEMENT</div>
         <h2 className="mt-1 text-center text-2xl font-black">드라이버 계약서</h2>
         <dl className="mt-4 grid grid-cols-[6rem_1fr] gap-y-1.5 text-sm">
-          <dt className="text-zinc-500">팀</dt><dd className="font-bold">{offer.team}</dd>
+          <dt className="text-zinc-500">팀</dt><dd className="flex items-center gap-2 font-bold">{offer.series === 'f1' && <F1TeamBadge teamId={offer.teamId} size={22} />}{offer.team}</dd>
           <dt className="text-zinc-500">드라이버</dt><dd className="font-bold">{name}</dd>
           <dt className="text-zinc-500">시리즈</dt><dd>{seriesLabel(offer.series)}</dd>
           <dt className="text-zinc-500">시트</dt><dd>{SEAT_LABELS[offer.seat]}</dd>
@@ -152,6 +153,7 @@ function OfferCard({ o, onPick, advice }: { o: Offer; onPick: () => void; advice
   return (
     <div className={`rounded-xl border p-3 ${o.series === 'f1' && o.seat === 'race' ? 'border-racing/60 bg-racing/5' : 'border-white/10'}`}>
       <div className="flex flex-wrap items-center gap-2">
+        {o.series === 'f1' && <F1TeamBadge teamId={o.teamId} size={30} />}
         <span className="text-lg font-black">{o.team}</span>
         <Pill tone={o.series === 'f1' ? 'red' : 'zinc'}>{seriesLabel(o.series)}</Pill>
         <Pill tone={o.seat === 'race' ? 'green' : 'amber'}>{SEAT_LABELS[o.seat]}</Pill>
