@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyOffseason, autoplayCareer, createCareer, DEFAULT_POLICY, getOffseason, MAX_TEAMS, MIN_TEAMS, replayCareer,
   CALENDAR_2026, f1WeekendFor, isF1RaceSeason, radioKey, type RadioOptionId, EVENTS, managerAdvice, MAJOR_FLOOR, OTHERS_CAP, feedTemplateCount, pendingEventCards, resolveEvent, F1_WINNER_TEAMS, f1Rules, generateHidden, initialWorld, NEW_TEAM_START, PERSONALITIES, runOffseason, TEAMS_2026, runSeason, STAT_KEYS, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, superLicencePoints, type CareerSetup,
-  evolveCalendar, RETURNING_CIRCUITS, CALENDAR_CHANGE_FROM, CALENDAR_COOLDOWN, f1Calendar, type CalendarChange,
+  evolveCalendar, RETURNING_CIRCUITS, CALENDAR_CHANGE_FROM, CALENDAR_COOLDOWN, f1Calendar, type CalendarChange, hasHomeGp, homeGpEffect, type Personality,
 } from '../src/engine';
 import { CIRCUIT_PATHS } from '../src/app/circuitPaths';
 
@@ -383,5 +383,25 @@ describe('F1 캘린더 변화 (SPEC §2.1 v0.17)', () => {
     const r = replayCareer(c.setup, c.choiceLog);
     expect(r.world.calendar).toEqual(c.world.calendar);
     expect(f1Calendar(c)).toHaveLength(24);
+  });
+});
+
+describe('홈 그랑프리 (SPEC §3.1, §5.6 v0.18)', () => {
+  it('캘린더에 자기 나라 그랑프리가 있는지 안다', () => {
+    expect(hasHomeGp(createCareer(setup(3, { nationality: 'GB' })))).toBe(true);
+    expect(hasHomeGp(createCareer(setup(3, { nationality: 'KR' })))).toBe(false);
+  });
+
+  it('홈 그랑프리에서만 능력치가 오르고, 일관성은 기질이 좋으면 오르고 나쁘면 내린다', () => {
+    const silverstone = CALENDAR_2026.find((x) => x.id === 'britain')!;
+    const monza = CALENDAR_2026.find((x) => x.id === 'italy')!;
+    const gb = (personality: Personality) => createCareer(setup(3, { nationality: 'GB', personality }));
+    expect(homeGpEffect(gb('calm'), monza)).toBeNull();
+    for (const p of Object.values(PERSONALITIES)) {
+      const e = homeGpEffect(gb(p.id), silverstone)!;
+      expect(e.boost).toBeGreaterThan(0);
+      if (p.temperament === 'good') expect(e.mental).toBeGreaterThan(0);
+      if (p.temperament === 'bad') expect(e.mental).toBeLessThan(0);
+    }
   });
 });

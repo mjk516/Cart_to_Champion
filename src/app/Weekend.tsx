@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import {
-  circuitType, f1Calendar, f1WeekendFor, forecastFinish, ovr, radioKey, runRace,
+  circuitType, f1Calendar, f1WeekendFor, homeGpEffect, forecastFinish, ovr, radioKey, runRace,
   type Classified, type F1Weekend, type F1WeekendSession,
 } from '../engine';
 import { LiveRace } from './LiveRace';
@@ -53,6 +53,7 @@ export function Weekend() {
   const raceDone = raceKey !== null && (doneKey === raceKey || skipped);
   const canNext = !session || session.type === 'quali' || raceDone;
   const rounds = f1Calendar(c).length;
+  const home = homeGpEffect(c, wk.circuit);
   const lastRound = live.round >= rounds - 1;
   const lastStep = live.step >= wk.sessions.length;
 
@@ -90,6 +91,7 @@ export function Weekend() {
             <Pill>{TYPE_LABEL[circuitType(wk.circuit)]}</Pill>
             {wk.circuit.sprint && <Pill tone="amber">스프린트 주말</Pill>}
             <Pill tone="blue">비 확률 {Math.round(wk.circuit.rainChance * 100)}%</Pill>
+            {home && <Pill tone="green">홈 그랑프리</Pill>}
           </div>
         </div>
         <div className="flex flex-wrap gap-1 text-xs">
@@ -115,6 +117,13 @@ export function Weekend() {
                 <div><div className="flex justify-between text-sm"><span>차 성능</span><b>{carRank}위 / {teams.length}팀</b></div><Bar value={teams.length - carRank + 1} max={teams.length} color="bg-sky-400" /></div>
                 <div><div className="flex justify-between text-sm"><span>드라이버 실력</span><b>{driverRank}위 / {wk.cars.length}명</b></div><Bar value={wk.cars.length - driverRank + 1} max={wk.cars.length} color="bg-emerald-400" /></div>
               </div>
+              {home && (
+                <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/5 p-3 text-sm">
+                  <div className="font-bold">홈 그랑프리</div>
+                  <div className="text-zinc-300">{home.line}</div>
+                  <div className="mt-1 text-xs text-zinc-400">이번 주말 능력치 +{home.boost} · 일관성 {home.mental >= 0 ? '+' : ''}{home.mental}</div>
+                </div>
+              )}
               <p className="text-xs text-zinc-500">예상 순위는 이번 주말을 80번 미리 돌린 결과의 80% 구간입니다.</p>
             </div>
           )}

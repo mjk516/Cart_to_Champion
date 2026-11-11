@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import {
-  generateCandidates, ovr, PERSONALITIES, recommendedFocus, STAT_KEYS, WEALTH_TIERS,
+  CALENDAR_2026, generateCandidates, RETURNING_CIRCUITS, ovr, PERSONALITIES, recommendedFocus, STAT_KEYS, WEALTH_TIERS,
   type Personality, type StatKey, type WealthTier,
 } from '../engine';
 import { formatMoney, pct } from './format';
@@ -13,7 +13,14 @@ import { Bar, Button, Card, Pill, STAT_LABELS, TEMPERAMENT_LABELS } from './ui';
 const NATIONS: Array<[string, string]> = [
   ['KR', '대한민국'], ['JP', '일본'], ['GB', '영국'], ['IT', '이탈리아'], ['DE', '독일'], ['FR', '프랑스'],
   ['ES', '스페인'], ['NL', '네덜란드'], ['US', '미국'], ['BR', '브라질'], ['AU', '호주'], ['MX', '멕시코'],
+  ['CA', '캐나다'], ['AT', '오스트리아'], ['BE', '벨기에'], ['HU', '헝가리'], ['MC', '모나코'], ['CN', '중국'],
+  ['SG', '싱가포르'], ['AZ', '아제르바이잔'], ['SA', '사우디아라비아'], ['BH', '바레인'], ['QA', '카타르'], ['AE', '아랍에미리트'],
+  ['FI', '핀란드'], ['DK', '덴마크'], ['NZ', '뉴질랜드'], ['AR', '아르헨티나'], ['TH', '태국'],
 ];
+/** 2026 캘린더에 그랑프리가 있는 나라(SPEC §3.1 홈 그랑프리) */
+const HOME_GP = new Set(CALENDAR_2026.map((x) => x.country));
+/** 지금은 없지만 캘린더가 바뀌면 그랑프리가 돌아올 수 있는 나라 */
+const MAYBE_HOME_GP = new Set(RETURNING_CIRCUITS.map((x) => x.country).filter((x) => !HOME_GP.has(x)));
 const STEPS = ['기본 정보', '자산 규모', '성격', '후보 선택', '서명'];
 
 export function Create() {
@@ -59,8 +66,15 @@ export function Create() {
             <label className="space-y-1">
               <span className="text-xs text-zinc-400">국적</span>
               <select aria-label="국적" value={nationality} onChange={(e) => setNationality(e.target.value)} className="w-full rounded-xl border border-white/15 bg-zinc-950 px-3 py-2.5">
-                {NATIONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
+                {NATIONS.map(([code, label]) => <option key={code} value={code}>{label}{HOME_GP.has(code) ? ' · 홈 그랑프리' : ''}</option>)}
               </select>
+              <span className="block text-xs text-zinc-500">
+                {HOME_GP.has(nationality)
+                  ? '캘린더에 홈 그랑프리가 있어 F1 팀들이 홈 시장을 보고 더 쳐줍니다(F1 데뷔 전). 홈 그랑프리 주말에는 능력치가 조금 오르고, 멘탈은 성격에 따라 오르거나 내립니다.'
+                  : MAYBE_HOME_GP.has(nationality)
+                    ? '지금 캘린더에는 홈 그랑프리가 없지만, 캘린더가 바뀌면 이 나라 서킷이 돌아올 수 있습니다.'
+                    : '캘린더에 홈 그랑프리가 없는 나라입니다.'}
+              </span>
             </label>
           </div>
           <p className="mt-4 text-sm text-zinc-400">12세, 첫 카트 시즌부터 시작합니다.</p>

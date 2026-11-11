@@ -28,36 +28,40 @@ export interface PersonalityDef {
   releaseRisk: number;
   /** 방출될 때 언론에 나오는 이유 */
   releaseReason: string;
+  /** 홈 그랑프리 멘탈(SPEC §5.6): 일관성 변화. 기질이 좋으면 오르고 나쁘면 떨어진다 */
+  homeMental: number;
+  /** 홈 그랑프리에서 보이는 한 줄 */
+  homeLine: string;
 }
 
 export const PERSONALITIES: Record<Personality, PersonalityDef> = {
   aggressive: {
-    id: 'aggressive', temperament: 'bad', releaseRisk: 0.12, releaseReason: '팀메이트와의 잦은 충돌', label: '공격형', motto: '1코너에서 양보는 없다',
+    id: 'aggressive', temperament: 'bad', releaseRisk: 0.12, releaseReason: '팀메이트와의 잦은 충돌', homeMental: -4, homeLine: '홈 관중 앞에서 너무 들떠 있다. 무리한 시도가 늘 수 있다', label: '공격형', motto: '1코너에서 양보는 없다',
     mods: { pace: 6, racecraft: 8, tyre: -4, consistency: -8, wet: 0, feedback: -2 },
     race: { overtakeAttempt: 1.15, contactRisk: 2.4, mistake: 1.35, lapVariance: 1.35, fightback: 0 },
   },
   calm: {
-    id: 'calm', temperament: 'good', releaseRisk: 0.01, releaseReason: '성적 부진', label: '침착형', motto: '레이스는 마지막 랩에 끝난다',
+    id: 'calm', temperament: 'good', releaseRisk: 0.01, releaseReason: '성적 부진', homeMental: 4, homeLine: '홈 관중의 응원을 힘으로 바꾼다. 평소보다 더 차분하다', label: '침착형', motto: '레이스는 마지막 랩에 끝난다',
     mods: { pace: -2, racecraft: -4, tyre: 6, consistency: 8, wet: -2, feedback: -6 },
     race: { overtakeAttempt: 0.95, contactRisk: 0.5, mistake: 0.55, lapVariance: 0.8, fightback: 0 },
   },
   analytical: {
-    id: 'analytical', temperament: 'good', releaseRisk: 0.015, releaseReason: '엔지니어링 방향을 둘러싼 이견', label: '분석형', motto: '데이터는 거짓말하지 않는다',
+    id: 'analytical', temperament: 'good', releaseRisk: 0.015, releaseReason: '엔지니어링 방향을 둘러싼 이견', homeMental: 2, homeLine: '익숙한 서킷 데이터가 많다. 준비가 탄탄하다', label: '분석형', motto: '데이터는 거짓말하지 않는다',
     mods: { pace: -2, racecraft: -6, tyre: 6, consistency: 2, wet: -6, feedback: 6 },
     race: { overtakeAttempt: 1.0, contactRisk: 0.8, mistake: 0.8, lapVariance: 0.85, fightback: 0 },
   },
   instinctive: {
-    id: 'instinctive', temperament: 'bad', releaseRisk: 0.1, releaseReason: '잦은 실수와 팀 오더 무시', label: '본능형', motto: '생각보다 발이 먼저 나간다',
+    id: 'instinctive', temperament: 'bad', releaseRisk: 0.1, releaseReason: '잦은 실수와 팀 오더 무시', homeMental: -5, homeLine: '기대가 부담이 됐다. 마음이 급해 실수가 늘 수 있다', label: '본능형', motto: '생각보다 발이 먼저 나간다',
     mods: { pace: 8, racecraft: 2, tyre: -6, consistency: -4, wet: 6, feedback: -6 },
     race: { overtakeAttempt: 1.05, contactRisk: 1.3, mistake: 1.2, lapVariance: 1.5, fightback: 0 },
   },
   fighter: {
-    id: 'fighter', temperament: 'neutral', releaseRisk: 0.05, releaseReason: '팀 수뇌부와의 공개 언쟁', label: '투사형', motto: '잃은 자리는 다시 찾아온다',
+    id: 'fighter', temperament: 'neutral', releaseRisk: 0.05, releaseReason: '팀 수뇌부와의 공개 언쟁', homeMental: 2, homeLine: '응원이 투지에 불을 붙였다', label: '투사형', motto: '잃은 자리는 다시 찾아온다',
     mods: { pace: -4, racecraft: 6, tyre: -4, consistency: 2, wet: 4, feedback: -4 },
     race: { overtakeAttempt: 1.15, contactRisk: 1.1, mistake: 1.0, lapVariance: 1.0, fightback: 0.12 },
   },
   showman: {
-    id: 'showman', temperament: 'neutral', releaseRisk: 0.04, releaseReason: 'SNS 논란', label: '쇼맨형', motto: '카메라가 있는 곳이 내 무대',
+    id: 'showman', temperament: 'neutral', releaseRisk: 0.04, releaseReason: 'SNS 논란', homeMental: -2, homeLine: '카메라와 행사가 너무 많다. 집중이 흐트러질 수 있다', label: '쇼맨형', motto: '카메라가 있는 곳이 내 무대',
     mods: { pace: 2, racecraft: 2, tyre: -2, consistency: -2, wet: 0, feedback: 0 },
     race: { overtakeAttempt: 1.05, contactRisk: 1.1, mistake: 1.05, lapVariance: 1.05, fightback: 0 },
   },
