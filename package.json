@@ -15,9 +15,11 @@
     "teams": "tsx src/cli.ts teams",
     "balance": "tsx scripts/balance.ts",
     "career": "tsx src/cli.ts career",
-    "rate-drivers": "tsx scripts/rate-drivers.ts"
+    "rate-drivers": "tsx scripts/rate-drivers.ts",
+    "e2e": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.49.1",
     "@types/node": "^22.10.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",

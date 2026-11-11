@@ -16,6 +16,7 @@ sudo sh -c 'echo "127.0.0.1 cart-to-champion" >> /etc/hosts'
 npm install
 npm run dev        # http://cart-to-champion/
 npm test           # 엔진·저장 테스트
+npm run e2e        # 화면 흐름 자동 테스트(처음 한 번: npx playwright install chromium)
 npm run build      # dist/에 정적 파일 생성
 npm run preview    # 빌드 결과 미리 보기
 ```

@@ -23,6 +23,7 @@ export function Home() {
           if (career && !career.retired) confirmBox.ask('진행 중인 커리어가 사라집니다. 새로 시작할까요? (설정에서 저장 파일을 내보내 두면 나중에 다시 불러올 수 있습니다)', start, { confirmLabel: '새로 시작', danger: true });
           else start();
         }}>새 커리어</Button>
+        <Button variant="ghost" onClick={() => go('guide')}>게임 방법</Button>
         <Button variant="ghost" onClick={() => go('settings')}>설정 · 저장 파일</Button>
       </div>
       <p className="text-xs leading-relaxed text-zinc-500">
@@ -33,7 +34,7 @@ export function Home() {
 }
 
 export function Settings() {
-  const { showKrw, setShowKrw, exportSave, importSave, peekSave, go, career, interviewAuto, setInterviewAuto } = useGame();
+  const { showKrw, setShowKrw, exportSave, importSave, peekSave, go, career, interviewAuto, setInterviewAuto, seenTips, resetTips } = useGame();
   const file = useRef<HTMLInputElement>(null);
   const [msg, setMsg] = useState('');
   const confirmBox = useConfirm();
@@ -44,6 +45,10 @@ export function Settings() {
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={showKrw} onChange={(e) => setShowKrw(e.target.checked)} /> 금액 옆에 원화 환산 보기
         </label>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <Button variant="ghost" className="!px-3 !py-1.5 text-xs" disabled={seenTips.length === 0} onClick={resetTips}>처음 안내 다시 보기</Button>
+          <Button variant="ghost" className="!px-3 !py-1.5 text-xs" onClick={() => go('guide')}>게임 방법</Button>
+        </div>
       </Card>
       <Card title="기자회견 자동 응답">
         <p className="mb-2 text-xs text-zinc-400">켜 두면 시즌 결산 기자회견을 고른 톤으로 바로 처리하고 결과만 보여 줍니다. 다른 전환점 이벤트는 그대로 직접 고릅니다.</p>

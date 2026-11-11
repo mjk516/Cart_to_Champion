@@ -10,6 +10,7 @@ import { formatMoney } from './format';
 import { SignaturePad } from './SignaturePad';
 import { SignatureView } from './SignatureView';
 import { F1TeamBadge } from './TeamBadge';
+import { Tip } from './Guide';
 import { currentOffseason, useGame, type Signature } from './store';
 import { Bar, Button, Card, Pill, SEAT_LABELS, useConfirm } from './ui';
 
@@ -264,6 +265,11 @@ export function Offseason() {
       {pending.length > 0 ? (
         <Card><p className="text-sm text-zinc-400">전환점을 먼저 결정하면 다음 시즌 제안이 열립니다.</p></Card>
       ) : (
+      <>
+      <Tip id="offseason" title="오프시즌: 다음 시즌 팀을 고르는 시간">
+        <p>팀들의 <b>제안</b>을 비교하세요. 매니저가 제안마다 추천·괜찮음·비추천과 이유를 달아 줍니다. 팀 성능이 높을수록 성적을 내기 쉽고, 시설이 좋을수록 훈련 효율이 오릅니다.</p>
+        <p>"계약서 보기"를 눌러 서명하면 다음 시즌 팀이 정해집니다. 시트를 사야 하는 제안은 자금을 확인하세요.</p>
+      </Tip>
       <Card title={`${c.year} 오프시즌 · ${c.year + 1} 시즌 제안`}>
         {advice && <ManagerCard a={advice} />}
         {off.released && <div className="mb-3 rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm font-bold text-red-200">방출 통보를 받았습니다.</div>}
@@ -285,6 +291,7 @@ export function Offseason() {
           <Button variant="danger" onClick={() => confirmBox.ask(<>은퇴를 선언할까요? <b>되돌릴 수 없습니다.</b> 지금까지의 커리어가 은퇴 화면에 기록됩니다.</>, retire, { confirmLabel: '은퇴 선언', danger: true })}>은퇴 선언</Button>
         </div>
       </Card>
+      </>
       )}
 
       {picked && (

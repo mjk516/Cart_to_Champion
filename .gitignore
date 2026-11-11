@@ -4,3 +4,5 @@ coverage/
 .DS_Store
 graphify-out/
 data/drivers/cache/
+test-results/
+playwright-report/

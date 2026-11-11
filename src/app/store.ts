@@ -29,7 +29,7 @@ export interface SignedContract {
   firstF1: boolean;
 }
 
-export type Screen = 'home' | 'create' | 'dashboard' | 'offseason' | 'retired' | 'settings' | 'weekend' | 'records';
+export type Screen = 'home' | 'create' | 'dashboard' | 'offseason' | 'retired' | 'settings' | 'weekend' | 'records' | 'guide';
 
 /** 기자회견 자동 응답(SPEC §6.1): null이면 매번 직접 고른다 */
 export type InterviewAuto = null | 'humble' | 'confident' | 'bold';
@@ -59,6 +59,10 @@ interface State {
   live: LiveSeason | null;
   interviewAuto: InterviewAuto;
   setInterviewAuto: (v: InterviewAuto) => void;
+  /** 닫은 첫 안내(SPEC §10 v0.26). 한 번 닫으면 다시 뜨지 않는다 */
+  seenTips: string[];
+  dismissTip: (id: string) => void;
+  resetTips: () => void;
   go: (s: Screen) => void;
   startLive: (plan: TrainingId[]) => void;
   updateLive: (patch: Partial<LiveSeason>) => void;
@@ -101,6 +105,7 @@ const initial = {
   showKrw: true,
   live: null as LiveSeason | null,
   interviewAuto: null as InterviewAuto,
+  seenTips: [] as string[],
 };
 
 /** 기자회견 자동 응답이 켜져 있으면 이번 오프시즌 기자회견을 그 톤으로 처리한다 */
@@ -183,8 +188,10 @@ export const useGame = create<State>()(
       setSignature: (signature) => set({ signature }),
       setShowKrw: (showKrw) => set({ showKrw }),
       setInterviewAuto: (interviewAuto) => set({ interviewAuto }),
+      dismissTip: (id) => set({ seenTips: [...new Set([...get().seenTips, id])] }),
+      resetTips: () => set({ seenTips: [] }),
       // 새 커리어: 표시·자동 응답 설정은 남긴다
-      reset: () => set({ ...initial, showKrw: get().showKrw, interviewAuto: get().interviewAuto }),
+      reset: () => set({ ...initial, showKrw: get().showKrw, interviewAuto: get().interviewAuto, seenTips: get().seenTips }),
       exportSave: () => {
         const { career, signature, firstF1Signature, contracts, showKrw, live, lastRecord, interviewAuto } = get();
         return JSON.stringify({ app: 'kart-to-champion', saveVersion: SAVE_VERSION, exportedAt: new Date().toISOString(), career, signature, firstF1Signature, contracts, showKrw, live, lastRecord, interviewAuto });
@@ -223,7 +230,7 @@ export const useGame = create<State>()(
       partialize: (s) => ({
         screen: s.screen === 'create' ? 'home' : s.screen, career: s.career, signature: s.signature,
         firstF1Signature: s.firstF1Signature, contracts: s.contracts, lastRecord: s.lastRecord, showKrw: s.showKrw, live: s.live,
-        interviewAuto: s.interviewAuto,
+        interviewAuto: s.interviewAuto, seenTips: s.seenTips,
       }),
     },
   ),

@@ -175,8 +175,9 @@ const SPECIAL_NUMBERS: Record<number, string> = { 1: '1번은 월드 챔피언�
 
 /** 고를 수 없는 번호면 이유를, 고를 수 있으면 null */
 export function carNumberProblem(n: number): string | null {
-  if (!Number.isInteger(n) || n < 2 || n > 99) return '2부터 99까지의 숫자만 고를 수 있습니다';
+  // 1번·17번은 범위 안내보다 이유를 먼저 보여 준다
   if (SPECIAL_NUMBERS[n]) return SPECIAL_NUMBERS[n]!;
+  if (!Number.isInteger(n) || n < 2 || n > 99) return '2부터 99까지의 숫자만 고를 수 있습니다';
   const taken = DRIVERS_2026.find((d) => d.number === n);
   if (taken) return `${n}번은 실제 F1 드라이버(${taken.name})가 쓰고 있어 겹치기 때문에 고를 수 없습니다. 다른 번호를 골라 주세요`;
   return null;

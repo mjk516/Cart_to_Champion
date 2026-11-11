@@ -7,6 +7,7 @@ import {
 } from '../engine';
 import { LiveRace } from './LiveRace';
 import { F1TeamBadge } from './TeamBadge';
+import { Tip } from './Guide';
 import { useGame } from './store';
 import { Bar, Button, Card, Pill, useConfirm } from './ui';
 
@@ -108,6 +109,10 @@ export function Weekend() {
         <Card>
           {live.step === 0 && (
             <div className="space-y-4">
+              <Tip id="weekend" title="그랑프리 주말">
+                <p>위쪽 단계 표시처럼 <b>다음 세션</b>을 누를 때마다 프랙티스 → 퀄리파잉 → 레이스로 넘어갑니다. 레이스는 라이브로 진행되고, 세이프티카·비가 오면 <b>엔지니어 무전</b>을 고릅니다(★가 추천, 선택지마다 예상 순위 표시).</p>
+                <p>바쁘면 "레이스 결과로 바로 가기"나 "남은 시즌 자동 진행"을 쓰세요.</p>
+              </Tip>
               <div className="text-lg font-black">이번 주말 전망</div>
               {forecast && (
                 <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
