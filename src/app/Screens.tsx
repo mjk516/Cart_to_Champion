@@ -1,11 +1,8 @@
-// 홈 · 은퇴 · 설정 화면
+// 홈 · 설정 화면 (은퇴 화면은 Retired.tsx)
 
 import { useRef, useState } from 'react';
-import { PERSONALITIES, seriesLabel } from '../engine';
-import { formatMoney } from './format';
-import { SignatureView } from './SignatureView';
 import { useGame } from './store';
-import { Button, Card, Pill, SEAT_LABELS } from './ui';
+import { Button, Card } from './ui';
 
 export function Home() {
   const { career, go, reset } = useGame();
@@ -29,74 +26,6 @@ export function Home() {
       <p className="text-xs leading-relaxed text-zinc-500">
         진행 상황은 이 브라우저에만 저장됩니다. 시크릿 모드를 닫거나 브라우저 데이터를 지우면 사라지니, 설정에서 저장 파일을 내보내 두세요.
       </p>
-    </div>
-  );
-}
-
-export function Retired() {
-  const { career: c, firstF1Signature, signature, contracts, showKrw, go, reset } = useGame();
-  if (!c) return null;
-  const t = c.totals;
-  const sig = firstF1Signature ?? signature;
-  const best = c.history.reduce((a, h) => (h.position && (!a || h.position < (a.position ?? 99)) && h.series === 'f1' ? h : a), null as (typeof c.history)[number] | null);
-  return (
-    <div className="mx-auto max-w-4xl space-y-4 px-4 py-6">
-      <Card className="bg-gradient-to-br from-zinc-900 to-racing/30">
-        <div className="text-xs tracking-[0.3em] text-zinc-400">CAREER CARD</div>
-        <h1 className="mt-1 text-3xl font-black">{c.driver.name}</h1>
-        <div className="mt-1 flex flex-wrap gap-2">
-          <Pill>{PERSONALITIES[c.driver.personality].label}</Pill>
-          <Pill>{c.age}세 은퇴</Pill>
-          {c.f1Debut && <Pill tone="red">F1 데뷔 {c.f1Debut}</Pill>}
-        </div>
-        <div className="mt-4 grid grid-cols-3 gap-2 text-center sm:grid-cols-6">
-          {[
-            ['월드 챔피언', t.f1Titles], ['F1 출전', t.f1Starts], ['F1 우승', t.f1Wins],
-            ['포디움', t.f1Podiums], ['폴', t.f1Poles], ['최고 OVR', t.bestOvr],
-          ].map(([k, v]) => (
-            <div key={k as string} className="rounded-xl bg-black/30 p-2"><div className="text-[11px] text-zinc-400">{k}</div><div className="text-2xl font-black">{v}</div></div>
-          ))}
-        </div>
-        <div className="mt-3 text-sm text-zinc-300">
-          주니어 타이틀: {t.juniorTitles.length ? t.juniorTitles.join(', ') : '없음'} · 통산 수입 {formatMoney(t.earnings, showKrw)} · 방출 {t.releases}회
-          {best && ` · F1 최고 시즌 ${best.year} P${best.position}`}
-        </div>
-        {sig && (
-          <div className="mt-4 max-w-xs rounded-xl bg-[#f6f1e7] p-2 text-zinc-900">
-            <SignatureView sig={sig} className="h-16 w-full" />
-            <div className="text-center text-[10px] text-zinc-500">{firstF1Signature ? '첫 F1 계약 서명' : '서명'}</div>
-          </div>
-        )}
-      </Card>
-
-      <Card title="커리어 히스토리">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[520px] text-sm">
-            <tbody>
-              {c.history.map((h) => (
-                <tr key={h.year} className="border-t border-white/5">
-                  <td className="py-1.5">{h.year}</td><td>{h.age}세</td><td>{seriesLabel(h.series)}</td><td>{h.team ?? '—'}</td>
-                  <td>{h.position ? `${h.champion ? '🏆 ' : ''}P${h.position}` : SEAT_LABELS[h.seat]}</td><td className="text-zinc-400">{h.headline.split(': ')[1]}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      <Card title={`계약서 보관함 (${contracts.length})`}>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {contracts.map((k, i) => (
-            <div key={i} className="rounded-xl bg-[#f6f1e7] p-3 text-zinc-900">
-              <div className="text-xs text-zinc-500">{k.year} · {seriesLabel(k.series as never)} · {SEAT_LABELS[k.seat]}</div>
-              <div className="font-black">{k.team}</div>
-              <SignatureView sig={k.signature} className="h-10 w-40" />
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      <div className="flex justify-center"><Button onClick={() => { reset(); go('create'); }}>새 커리어 시작</Button></div>
     </div>
   );
 }

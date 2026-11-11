@@ -2,7 +2,8 @@ import { useEffect } from 'react';
 import { Create } from './Create';
 import { Dashboard } from './Dashboard';
 import { Offseason } from './Offseason';
-import { Home, Retired, Settings } from './Screens';
+import { Retired } from './Retired';
+import { Home, Settings } from './Screens';
 import { useGame } from './store';
 
 export function App() {

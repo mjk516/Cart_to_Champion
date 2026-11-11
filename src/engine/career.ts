@@ -106,6 +106,8 @@ export interface SeasonRecord {
   teammateBeat: number;
   headline: string;
   notes: string[];
+  /** 시즌을 마친 뒤의 세부 능력치(은퇴 화면 성장 곡선용). 이전 저장 파일에는 없을 수 있다 */
+  statsEnd?: Stats;
 }
 
 export interface F1Driver {
@@ -704,7 +706,7 @@ export function runSeason(input: Career, plan: TrainingId[]): { career: Career; 
     },
     superLicence: sl, income, expenses, fundsEnd: c.funds, expectedAvg: Math.round(sim.expectedAvg * 10) / 10,
     actualAvg: Math.round(sim.actualAvg * 10) / 10, teammateBeat: Math.round(sim.teammateBeat * 100) / 100,
-    headline: mediaOut.headline, notes,
+    headline: mediaOut.headline, notes, statsEnd: { ...c.driver.stats },
   };
   c.history.push(record);
   if (seat === 'race') c.noSeatSeasons = 0;
