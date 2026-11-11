@@ -146,7 +146,7 @@ export const useGame = create<State>()(
         const c = get().career;
         if (!c) return;
         const { career, record } = runSeason(c, plan);
-        set({ career: autoInterview(career, get().interviewAuto), lastRecord: record, screen: 'offseason' });
+        set({ career: autoInterview(career, get().interviewAuto), lastRecord: record, live: null, screen: 'offseason' });
       },
       acceptOffer: (offer, joinAcademy, signature) => {
         const c = get().career;

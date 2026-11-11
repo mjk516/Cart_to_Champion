@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 export function Card({ title, children, className = '', right }: { title?: ReactNode; children: ReactNode; className?: string; right?: ReactNode }) {
   return (
@@ -65,3 +65,35 @@ export const TEMPERAMENT_LABELS: Record<string, { label: string; tone: 'green' |
   neutral: { label: '균형', tone: 'amber', desc: '꾸준함과 한 방 사이' },
   bad: { label: '한 방', tone: 'red', desc: '들쑥날쑥하지만 정상에 오를 잠재력이 크다. 팀과 부딪혀 방출될 수 있다' },
 };
+
+/**
+ * 게임 화면 안에 그리는 확인 창. 브라우저 기본 confirm()은 앱 내 브라우저·일부 웹뷰에서 막혀
+ * 아무 반응 없이 '취소'가 되므로 쓰지 않는다.
+ */
+export function ConfirmDialog({ message, confirmLabel, danger, onConfirm, onCancel }: {
+  message: ReactNode; confirmLabel: string; danger?: boolean; onConfirm: () => void; onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 p-3 sm:items-center" role="alertdialog" aria-modal="true" onClick={onCancel}>
+      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-zinc-900 p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <p className="text-sm leading-relaxed text-zinc-100">{message}</p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="ghost" onClick={onCancel}>취소</Button>
+          <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm}>{confirmLabel}</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 확인 창 하나를 관리한다: ask(내용, 실행할 일) → 확인을 누르면 실행 */
+export function useConfirm() {
+  const [req, setReq] = useState<{ message: ReactNode; confirmLabel: string; danger?: boolean; run: () => void } | null>(null);
+  const ask = (message: ReactNode, run: () => void, opts: { confirmLabel?: string; danger?: boolean } = {}) =>
+    setReq({ message, run, confirmLabel: opts.confirmLabel ?? '확인', danger: opts.danger });
+  const dialog = req && (
+    <ConfirmDialog message={req.message} confirmLabel={req.confirmLabel} danger={req.danger}
+      onCancel={() => setReq(null)} onConfirm={() => { const r = req.run; setReq(null); r(); }} />
+  );
+  return { ask, dialog };
+}

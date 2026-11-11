@@ -2,12 +2,14 @@
 
 import { useRef, useState } from 'react';
 import { useGame } from './store';
-import { Button, Card } from './ui';
+import { Button, Card, useConfirm } from './ui';
 
 export function Home() {
   const { career, go, reset } = useGame();
+  const confirmBox = useConfirm();
   return (
     <div className="mx-auto flex min-h-[80vh] max-w-xl flex-col justify-center gap-6 px-4 py-10">
+      {confirmBox.dialog}
       <div>
         <div className="text-xs font-bold tracking-[0.4em] text-racing">KART TO CHAMPION</div>
         <h1 className="mt-2 text-4xl font-black leading-tight">카트에서<br />챔피언까지</h1>
@@ -17,9 +19,9 @@ export function Home() {
         {career && !career.retired && <Button onClick={() => go('dashboard')}>이어하기 · {career.driver.name} ({career.year}, {career.age}세)</Button>}
         {career?.retired && <Button variant="ghost" onClick={() => go('retired')}>지난 커리어 보기 · {career.driver.name}</Button>}
         <Button variant={career && !career.retired ? 'ghost' : 'primary'} onClick={() => {
-          if (career && !career.retired && !confirm('진행 중인 커리어가 사라집니다. 새로 시작할까요?')) return;
-          reset();
-          go('create');
+          const start = () => { reset(); go('create'); };
+          if (career && !career.retired) confirmBox.ask('진행 중인 커리어가 사라집니다. 새로 시작할까요? (설정에서 저장 파일을 내보내 두면 나중에 다시 불러올 수 있습니다)', start, { confirmLabel: '새로 시작', danger: true });
+          else start();
         }}>새 커리어</Button>
         <Button variant="ghost" onClick={() => go('settings')}>설정 · 저장 파일</Button>
       </div>
@@ -34,8 +36,10 @@ export function Settings() {
   const { showKrw, setShowKrw, exportSave, importSave, peekSave, go, career, interviewAuto, setInterviewAuto } = useGame();
   const file = useRef<HTMLInputElement>(null);
   const [msg, setMsg] = useState('');
+  const confirmBox = useConfirm();
   return (
     <div className="mx-auto max-w-xl space-y-4 px-4 py-6">
+      {confirmBox.dialog}
       <Card title="표시">
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={showKrw} onChange={(e) => setShowKrw(e.target.checked)} /> 금액 옆에 원화 환산 보기
@@ -68,8 +72,9 @@ export function Settings() {
             const p = peekSave(text);
             if (!p.ok) { setMsg(p.reason); return; }
             const what = `${p.name} · ${p.year}${p.retired ? ' (은퇴)' : ''}`;
-            if (career && !confirm(`지금 커리어(${career.driver.name} · ${career.year})를 ${what} 저장 파일로 바꿀까요? 지금 커리어는 내보내 두지 않으면 사라집니다.`)) return;
-            setMsg(importSave(text) ? `불러왔습니다: ${what}` : '불러오지 못했습니다.');
+            const load = () => setMsg(importSave(text) ? `불러왔습니다: ${what}` : '불러오지 못했습니다.');
+            if (career) confirmBox.ask(`지금 커리어(${career.driver.name} · ${career.year})를 ${what} 저장 파일로 바꿀까요? 지금 커리어는 내보내 두지 않으면 사라집니다.`, load, { confirmLabel: '불러오기', danger: true });
+            else load();
           }} />
         </div>
         <p className="mt-2 text-xs text-zinc-500">진행 상황은 이 브라우저에만 저장됩니다. 다른 기기로 옮기거나 브라우저 데이터를 지우기 전에 내보내 두세요. 진행 중인 라이브 시즌, 서명, 계약서 보관함까지 함께 저장됩니다.</p>

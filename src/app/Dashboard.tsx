@@ -9,7 +9,7 @@ import { formatMoney } from './format';
 import { FeedList } from './FeedList';
 import { useGame } from './store';
 import { F1TeamBadge } from './TeamBadge';
-import { Bar, Button, Card, Pill, SEAT_LABELS, STAT_LABELS, TEMPERAMENT_LABELS } from './ui';
+import { Bar, Button, Card, Pill, SEAT_LABELS, STAT_LABELS, TEMPERAMENT_LABELS, useConfirm } from './ui';
 
 const MODES = [
   { id: 'weakness', label: '약점 보완' },
@@ -18,8 +18,9 @@ const MODES = [
 ] as const;
 
 export function Dashboard() {
-  const { career: c, showKrw, playSeason, live, startLive, go } = useGame();
+  const { career: c, showKrw, playSeason, live, startLive, finishLive, retire, go } = useGame();
   const [running, setRunning] = useState(false);
+  const confirmBox = useConfirm();
   const slots = c?.contract?.seat === 'race' || !c?.contract ? TRAINING_SLOTS : TRAINING_SLOTS_RESERVE;
   const [plan, setPlan] = useState<TrainingId[]>(() => (c ? recommendedPlan(c.driver.stats, 'weakness', slots, c.driver.focus) : []));
   useEffect(() => {
@@ -42,6 +43,7 @@ export function Dashboard() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 px-4 py-6">
+      {confirmBox.dialog}
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="text-xs text-zinc-400">{c.year} 시즌 · {c.age}세</div>
@@ -72,7 +74,10 @@ export function Dashboard() {
               )}
             </div>
           ) : (
-            <p className="text-sm text-zinc-300">시트가 없습니다. 이번 시즌은 훈련만 합니다.</p>
+            <div className="space-y-2">
+              <p className="text-sm text-zinc-300">시트가 없습니다. 이번 시즌은 훈련만 합니다.</p>
+              <Button variant="danger" className="!px-3 !py-1.5 text-xs" onClick={() => confirmBox.ask(<>지금 은퇴할까요? <b>되돌릴 수 없습니다.</b> 지금까지의 커리어가 은퇴 화면에 기록됩니다.</>, retire, { confirmLabel: '은퇴 선언', danger: true })}>은퇴 선언</Button>
+            </div>
           )}
           <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
             <div className="rounded-xl bg-white/5 p-2"><div className="text-xs text-zinc-400">자금</div><b>{formatMoney(c.funds, showKrw)}</b></div>
@@ -139,8 +144,13 @@ export function Dashboard() {
               ) : (
                 <Button onClick={() => startLive(plan)}>{c.year} 시즌 라이브로 시작</Button>
               )}
-              <Button variant="ghost" disabled={running} onClick={() => { setRunning(true); setTimeout(() => playSeason(plan), 30); }}>
-                {running ? '시즌 진행 중…' : '한 번에 진행'}
+              {/* 라이브 시즌을 진행하던 중이면 지금까지의 무전 선택을 살려 남은 라운드를 마저 진행한다 */}
+              <Button variant="ghost" disabled={running} onClick={() => {
+                const inLive = live && live.year === c.year;
+                setRunning(true);
+                setTimeout(() => (inLive ? finishLive() : playSeason(plan)), 30);
+              }}>
+                {running ? '시즌 진행 중…' : live && live.year === c.year ? '남은 시즌 한 번에 진행' : '한 번에 진행'}
               </Button>
             </div>
           ) : (
