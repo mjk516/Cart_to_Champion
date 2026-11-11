@@ -63,8 +63,16 @@ function genericTrackPath(circuitId: string, W: number, H: number): string {
   return pts.join(' ') + ' Z';
 }
 
-function TrackView({ circuitId, realLayout, prev, cur, baseLap, banner, focus, x, onEnd }: {
-  circuitId: string; realLayout: boolean; prev: LapRecord | null; cur: LapRecord; baseLap: number; banner: string; focus: string[]; x: Ctx; onEnd: () => void;
+/** 트랙 뷰가 보여 주는 실제 레이스 시간(초) */
+const TRACK_WINDOW_SEC = 6;
+/** 트랙 뷰에서 선두가 출발하는 위치(랩 비율) */
+const LEADER_START = 0.25;
+
+function TrackView({ circuitId, realLayout, prev, cur, baseLap, banner, focus, x, speed, onEnd }: {
+  circuitId: string; realLayout: boolean; prev: LapRecord | null; cur: LapRecord; baseLap: number; banner: string; focus: string[]; x: Ctx;
+  /** 재생 배속. ×1이면 차가 실제 레이스 속도로 움직인다 */
+  speed: number;
+  onEnd: () => void;
 }) {
   const W = 640, H = 300;
   const pathRef = useRef<SVGPathElement>(null);
@@ -85,11 +93,13 @@ function TrackView({ circuitId, realLayout, prev, cur, baseLap, banner, focus, x
     let raf = 0;
     let end: ReturnType<typeof setTimeout> | undefined;
     const start = performance.now();
+    // 실제 레이스 시간 TRACK_WINDOW_SEC초를 보여 준다. ×1이면 그 시간 그대로, ×2·×4면 그만큼 빠르게
+    const duration = (TRACK_WINDOW_SEC * 1000) / speed;
     const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / 3200);
+      const t = Math.min(1, (now - start) / duration);
       setTau(t);
       if (t < 1) raf = requestAnimationFrame(tick);
-      else end = setTimeout(onEnd, 600);
+      else end = setTimeout(onEnd, 900);
     };
     raf = requestAnimationFrame(tick);
     return () => { cancelAnimationFrame(raf); if (end) clearTimeout(end); };
@@ -99,7 +109,8 @@ function TrackView({ circuitId, realLayout, prev, cur, baseLap, banner, focus, x
   const pos = (id: string, gap: number) => {
     if (!pathRef.current || !L) return null;
     const g = (prevGap.get(id) ?? gap) * (1 - tau) + gap * tau;
-    const p = (((tau - g / baseLap) % 1) + 1) % 1;
+    // 선두는 랩의 1/4 지점에서 출발해 실제 속도로 TRACK_WINDOW_SEC초만큼 달린다(예전에는 3초에 한 바퀴를 돌아 너무 빨랐다)
+    const p = (((LEADER_START + (tau * TRACK_WINDOW_SEC) / baseLap - g / baseLap) % 1) + 1) % 1;
     return pathRef.current.getPointAtLength(p * L);
   };
   return (
@@ -231,7 +242,7 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
       </div>
 
       {track && rec && (
-        <TrackView circuitId={input.circuit.id} realLayout={realLayout} prev={laps[cur - 2] ?? null} cur={rec} baseLap={input.circuit.baseLap} banner={track.banner} focus={track.focus} x={x} onEnd={() => setTrack(null)} />
+        <TrackView circuitId={input.circuit.id} realLayout={realLayout} prev={laps[cur - 2] ?? null} cur={rec} baseLap={input.circuit.baseLap} banner={track.banner} focus={track.focus} x={x} speed={speed} onEnd={() => setTrack(null)} />
       )}
 
       {outcome.status === 'pending' && cur >= laps.length && !track && (
