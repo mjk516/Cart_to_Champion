@@ -15,6 +15,25 @@
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
+    <script>
+      // 개발 주소: http://cart-to-champion/ . 예전 주소에서 옮겨 온 저장 파일(#migrate=)을 받아 둔다. 배포 주소에는 영향 없음
+      (function () {
+        var KEY = 'kart-to-champion-save', NAMED = 'cart-to-champion';
+        try {
+          var h = location.hostname;
+          if ((h === 'localhost' || h === '127.0.0.1') && (location.port === '' || location.port === '80')) {
+            var save = localStorage.getItem(KEY);
+            location.replace('http://' + NAMED + '/' + (save ? '#migrate=' + encodeURIComponent(save) : ''));
+            return;
+          }
+          if (h === NAMED && location.hash.indexOf('#migrate=') === 0) {
+            var data = decodeURIComponent(location.hash.slice(9));
+            if (!localStorage.getItem(KEY)) localStorage.setItem(KEY, data);
+            history.replaceState(null, '', location.pathname + location.search);
+          }
+        } catch (e) { /* 저장소를 못 쓰는 환경: 그냥 진행 */ }
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Nanum+Pen+Script&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet" />

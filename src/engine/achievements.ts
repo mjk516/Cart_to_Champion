@@ -103,6 +103,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'star', group: 'special', title: '글로벌 스타', desc: '팔로워 100만 명', check: (c) => (c.media.followers >= 1_000_000 ? 0 : null) },
   { id: 'three_peat', group: 'special', title: '3연패', desc: 'F1 챔피언 3시즌 연속', check: (c) => { const s = titleStreak(c); return s && s.count >= 3 ? s.from + 2 : null; } },
   { id: 'youngest_champ', group: 'special', title: '역대 최연소 챔피언', desc: `실제 F1 최연소 챔피언 기록(${REAL_YOUNGEST.champion}세)보다 어린 나이에 월드 챔피언`, check: (c) => first(c, (h) => h.series === 'f1' && h.champion && h.age < REAL_YOUNGEST.champion) },
+  { id: 'endurance_win', group: 'special', title: '24시간의 승자', desc: 'F1 시즌 사이 내구레이스에서 클래스 우승', check: (c) => (c.eventLog ?? []).find((e) => e.id === 'endurance_race' && e.text.includes('클래스 우승'))?.year ?? null },
   { id: 'legend', group: 'special', title: '팀 레전드', desc: '한 팀에서 8시즌 이상 뛰며 챔피언. 차 번호가 영구결번된다', check: (c) => teamLegend(c)?.year ?? null },
 ];
 
@@ -122,6 +123,7 @@ function titleStreak(c: Career): { count: number; from: number; to: number } | n
 
 /** 플레이어 차 번호(영구결번 연출용). 시드로 정하고, 2026 그리드의 실제 번호는 피한다 */
 export function playerNumber(c: Career): number {
+  if (c.driver.number) return c.driver.number;
   const used = new Set(DRIVERS_2026.map((d) => d.number));
   let n = (hashSeed(c.seed, 'car-number') % 98) + 2;
   while (used.has(n)) n = n >= 99 ? 2 : n + 1;

@@ -6,13 +6,25 @@
 
 ## 실행
 
+처음 한 번만, 개발 주소 이름을 이 컴퓨터에 등록한다(관리자 권한 필요):
+
+```bash
+sudo sh -c 'echo "127.0.0.1 cart-to-champion" >> /etc/hosts'
+```
+
 ```bash
 npm install
-npm run dev        # http://localhost:5173
+npm run dev        # http://cart-to-champion/
 npm test           # 엔진·저장 테스트
 npm run build      # dist/에 정적 파일 생성
 npm run preview    # 빌드 결과 미리 보기
 ```
+
+개발 주소 참고:
+
+- 80번 포트를 관리자 권한 없이 쓰려고 개발 서버를 모든 네트워크 주소(0.0.0.0)로 연다. 같은 네트워크의 기기도 IP로 접속할 수 있으니 공용 와이파이에서는 주의한다. 이름 접속은 `cart-to-champion`, `localhost`만 허용한다
+- 예전 주소(`localhost:5173`)로 들어오면 그 주소에 저장된 커리어를 들고 새 주소로 옮겨 준다
+- 80번 포트를 쓸 수 없으면 `npm run dev -- --port 5180 --host 127.0.0.1`로 띄우고 `http://localhost:5180/`을 연다
 
 ## 스크립트
 

@@ -9,6 +9,7 @@ import { formatMoney } from './format';
 import { FeedList } from './FeedList';
 import { useGame } from './store';
 import { F1TeamBadge } from './TeamBadge';
+import { HelmetView } from './Helmet';
 import { Bar, Button, Card, Pill, SEAT_LABELS, STAT_LABELS, TEMPERAMENT_LABELS, useConfirm } from './ui';
 
 const MODES = [
@@ -47,7 +48,7 @@ export function Dashboard() {
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="text-xs text-zinc-400">{c.year} 시즌 · {c.age}세</div>
-          <h1 className="text-2xl font-black">{d.name}</h1>
+          <h1 className="flex items-center gap-2 text-2xl font-black">{d.helmet && <HelmetView helmet={d.helmet} size={44} />}{d.name}{d.number && <span className="text-base font-black text-zinc-400">#{d.number}</span>}</h1>
           <div className="mt-1 flex flex-wrap gap-2">
             <Pill>{pdef.label}</Pill>
             <Pill tone={temper.tone}>{temper.label}</Pill>

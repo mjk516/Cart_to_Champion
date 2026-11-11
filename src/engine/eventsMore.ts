@@ -413,6 +413,20 @@ export const MORE_EVENTS: EventDef[] = [
       ] },
     ],
   },
+  {
+    id: 'endurance_race', category: 'career', title: '내구레이스 출전 제안',
+    text: '팀 성적도 좋고 팀 안에서 입지도 단단하다. 팀이 겨울 동안 GT3 24시간 내구레이스에 잠깐 나가 보는 것을 허락했다.',
+    when: (x) => x.f1 && x.seat === 'race' && x.teamRank <= 5 && x.teammateBeat >= 0.5 && x.age >= 20 && x.age <= 38,
+    weight: () => 1.5,
+    options: [
+      { id: 'race', label: '출전한다', hint: '레이스크래프트·우천·일관성 성장, 팬 크게 +, 사고 위험', outcomes: [
+        { p: 0.45, text: '새벽 빗속 스틴트에서 차이를 벌렸다. 클래스 우승. 내구레이스 팬들까지 이름을 외웠다.', effect: { stats: { racecraft: 1, wet: 1, consistency: 1 }, followersMul: 1.15, reputation: 5, sentiment: 6 } },
+        { p: 0.43, text: '팀과 교대로 24시간을 버텨 완주했다. 긴 레이스에서 페이스를 지키는 법을 배웠다.', effect: { stats: { consistency: 1, tyre: 1 }, followersMul: 1.06, reputation: 2 } },
+        { p: 0.12, text: '밤사이 다른 차와 얽혀 리타이어했다. F1 팀이 "다음엔 신중하자"고 했다.', effect: { followersMul: 1.03, pressure: 8, flags: { releaseRisk: 0.03 } } },
+      ] },
+      { id: 'no', label: 'F1 준비에 집중한다', outcomes: [{ p: 1, text: '겨울 내내 시뮬레이터와 체력 훈련에 집중했다.', effect: { pressure: -3 } }] },
+    ],
+  },
   // ── 생활 7 ────────────────────────────────────────────────────────
   {
     id: 'injury_scare', category: 'life', title: '훈련 중 부상',
@@ -475,6 +489,17 @@ export const MORE_EVENTS: EventDef[] = [
         { p: 0.6, text: '어떻게든 버텼다.', effect: { pressure: 3 } },
         { p: 0.4, text: '레이스 주말에 집중력이 떨어졌다.', effect: { stats: { consistency: -1 }, pressure: 5 } },
       ] },
+    ],
+  },
+  {
+    id: 'start_family', category: 'life', title: '가정을 꾸릴까',
+    text: '오래 만난 사람과 미래를 이야기했다. 결혼하고 아이를 갖는 것도 생각해 볼 때다.',
+    when: (x) => x.age >= 25 && !x.family, weight: (x) => (x.age >= 29 ? 2 : 1),
+    options: [
+      { id: 'family', label: '가정을 꾸린다', hint: '멘탈 안정(일관성 +, 압박 −), 레이스 공격성 −', outcomes: [
+        { p: 1, text: '집에 돌아갈 이유가 생겼다. 마음은 편해졌지만, 예전처럼 무리하게 틈을 파고들지는 않게 됐다.', effect: { family: true, stats: { consistency: 2, racecraft: -1 }, pressure: -12, sentiment: 6 } },
+      ] },
+      { id: 'later', label: '지금은 레이싱이 먼저다', outcomes: [{ p: 1, text: '커리어가 자리 잡을 때까지 미루기로 했다.', effect: {} }] },
     ],
   },
   {

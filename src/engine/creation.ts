@@ -1,6 +1,6 @@
 // 드라이버 생성: 가정 자산 규모(SPEC §3.1), 성격(§3.4), 후보 생성.
 
-import { ovr, OVR_WEIGHTS } from './data';
+import { DRIVERS_2026, ovr, OVR_WEIGHTS } from './data';
 import { int, pick, rngFor } from './rng';
 import { STAT_KEYS, type Personality, type StatKey, type Stats, type WealthTier } from './types';
 
@@ -159,4 +159,32 @@ export function generateCandidates(seed: number, personality: Personality, rerol
 export function recommendedFocus(personality: Personality): StatKey[] {
   const mods = PERSONALITIES[personality].mods;
   return [...STAT_KEYS].sort((a, b) => mods[a] - mods[b]).slice(0, 2);
+}
+
+// ── 헬멧과 차 번호(SPEC §3.6 v0.25) ─────────────────────────────────
+export type HelmetPattern = 'plain' | 'stripe' | 'chevron' | 'stars' | 'split';
+export interface Helmet { base: string; accent: string; pattern: HelmetPattern }
+export const HELMET_PATTERNS: Array<{ id: HelmetPattern; label: string }> = [
+  { id: 'plain', label: '단색' }, { id: 'stripe', label: '줄무늬' }, { id: 'chevron', label: '쉐브론' }, { id: 'stars', label: '별' }, { id: 'split', label: '반반' },
+];
+export const HELMET_COLORS = ['#e10600', '#ff8000', '#facc15', '#22c55e', '#06b6d4', '#2563eb', '#7c3aed', '#ec4899', '#fafafa', '#18181b'];
+export const DEFAULT_HELMET: Helmet = { base: '#fafafa', accent: '#e10600', pattern: 'stripe' };
+
+/** 실제 F1에서 쓸 수 없는 번호: 1번(챔피언 전용), 17번(영구결번) */
+const SPECIAL_NUMBERS: Record<number, string> = { 1: '1번은 월드 챔피언만 쓸 수 있는 번호입니다', 17: '17번은 F1에서 영구결번된 번호입니다' };
+
+/** 고를 수 없는 번호면 이유를, 고를 수 있으면 null */
+export function carNumberProblem(n: number): string | null {
+  if (!Number.isInteger(n) || n < 2 || n > 99) return '2부터 99까지의 숫자만 고를 수 있습니다';
+  if (SPECIAL_NUMBERS[n]) return SPECIAL_NUMBERS[n]!;
+  const taken = DRIVERS_2026.find((d) => d.number === n);
+  if (taken) return `${n}번은 실제 F1 드라이버(${taken.name})가 쓰고 있어 겹치기 때문에 고를 수 없습니다. 다른 번호를 골라 주세요`;
+  return null;
+}
+
+/** 시드로 정하는 기본 번호(고를 수 있는 번호 중) */
+export function defaultCarNumber(seed: number): number {
+  let n = (Math.abs(seed) % 98) + 2;
+  while (carNumberProblem(n)) n = n >= 99 ? 2 : n + 1;
+  return n;
 }

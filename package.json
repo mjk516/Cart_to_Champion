@@ -1,5 +1,5 @@
 {
-  "name": "kart-to-champion",
+  "name": "cart-to-champion",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -27,7 +27,7 @@
     "tailwindcss": "^3.4.15",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
-    "vite": "^5.4.11",
+    "vite": "^5.4.21",
     "vitest": "^2.1.0"
   },
   "dependencies": {

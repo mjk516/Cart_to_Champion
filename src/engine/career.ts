@@ -2,7 +2,7 @@
 // 흐름: createCareer → [runSeason → getOffseason → applyOffseason] 반복 → 은퇴.
 // 모든 난수는 커리어 시드에서 나오고, 플레이어의 선택은 choiceLog에 남는다(랭킹 검증 §9).
 
-import { generateCandidates, WEALTH_TIERS } from './creation';
+import { carNumberProblem, DEFAULT_HELMET, defaultCarNumber, generateCandidates, WEALTH_TIERS, type Helmet } from './creation';
 import { PERSONALITIES } from './creation';
 import { applyEventChoice, EVENT_BY_ID, eventCard, pickEvents, type EventCard } from './events';
 import { seasonFeed, type FeedItem } from './feed';
@@ -41,6 +41,10 @@ export interface CareerSetup {
   reroll?: number;
   focus: StatKey[];
   startYear?: number;
+  /** 차 번호(2~99, 실제 F1 번호와 겹치지 않음). 없으면 시드로 정한다 */
+  number?: number;
+  /** 헬멧 디자인 */
+  helmet?: Helmet;
 }
 
 export interface Contract {
@@ -143,9 +147,21 @@ export interface F1World {
   calendar?: CalendarSlot[];
   /** 지금까지의 캘린더 변화 */
   calendarLog?: CalendarChange[];
+  /** 팀 대표 교체 기록(SPEC §2.1 v0.25) */
+  principalLog?: Array<{ season: number; teamId: string; team: string; good: boolean; delta: number }>;
 }
 
 const CALENDAR_2026_SLOTS: CalendarSlot[] = CALENDAR_2026.map((x) => ({ id: x.id, sprint: x.sprint }));
+
+/** 팀 대표가 바뀔 확률(팀마다 시즌당) */
+export const PRINCIPAL_CHANGE_CHANCE = 0.06;
+
+/** 가족이 생기면(SPEC §6 v0.25) 레이스에서 덜 공격적이고 실수가 줄어든다 */
+export const FAMILY_BEHAVIOR = { overtakeAttempt: 0.88, contactRisk: 0.7, mistake: 0.8, lapVariance: 0.9, fightback: 0.8 } as const;
+
+function playerBehavior(c: Career): RaceCar['behaviorMul'] {
+  return c.family ? FAMILY_BEHAVIOR : undefined;
+}
 
 /** 홈 그랑프리 시장 보너스(SPEC §3.1 v0.18): 캘린더에 자기 나라 그랑프리가 있으면 F1 팀의 평가에 더한다 */
 export const HOME_MARKET_BONUS = 5;
@@ -206,6 +222,9 @@ export interface Career {
     personality: Personality;
     wealthTier: WealthTier;
     focus: StatKey[];
+    /** 차 번호. 이전 저장 파일에는 없을 수 있다 */
+    number?: number;
+    helmet?: Helmet;
     stats: Stats;
     xp: Stats;
     hidden: Hidden;
@@ -233,6 +252,8 @@ export interface Career {
   flags?: Record<string, number>;
   /** 선수 매니저(오프시즌 조언). 이전 저장 파일에는 없을 수 있다 */
   manager?: Manager;
+  /** 가정을 꾸린 해(SPEC §6 v0.25): 멘탈은 안정되고 레이스 공격성은 줄어든다 */
+  family?: { since: number };
   totals: {
     f1Titles: number;
     f1Starts: number;
@@ -301,6 +322,8 @@ export function createCareer(setup: CareerSetup): Career {
       personality: setup.personality,
       wealthTier: setup.wealthTier,
       focus: setup.focus.slice(0, 2),
+      number: setup.number !== undefined && !carNumberProblem(setup.number) ? setup.number : defaultCarNumber(setup.seed),
+      helmet: setup.helmet ?? DEFAULT_HELMET,
       stats: { ...cand.stats },
       xp: zeroStats(),
       hidden: generateHidden(setup.seed, setup.personality),
@@ -425,7 +448,7 @@ function simulateJunior(c: Career, stats: Stats, seed: number): SeasonSim {
   for (const t of teams) {
     for (let s = 0; s < perTeam; s++) {
       if (t.name === contract.team && s === 0) {
-        cars.push({ id: PLAYER_ID, code: c.driver.code, teamId: t.name, stats, personality: c.driver.personality, teamQuality: contract.teamQuality, reliability: 0.9, ops: contract.teamQuality });
+        cars.push({ id: PLAYER_ID, code: c.driver.code, teamId: t.name, stats, personality: c.driver.personality, behaviorMul: playerBehavior(c), teamQuality: contract.teamQuality, reliability: 0.9, ops: contract.teamQuality });
         continue;
       }
       const nm = fictionalName(r);
@@ -508,7 +531,7 @@ function f1Cars(c: Career, stats: Stats): RaceCar[] {
       cars.push({ id: d.id, code: d.code, teamId: t.id, stats: d.stats, teamQuality: t.quality, reliability: t.reliability, ops: t.ops });
     }
     if (playerTeam === t.id) {
-      cars.push({ id: PLAYER_ID, code: c.driver.code, teamId: t.id, stats, personality: c.driver.personality, teamQuality: t.quality, reliability: t.reliability, ops: t.ops });
+      cars.push({ id: PLAYER_ID, code: c.driver.code, teamId: t.id, stats, personality: c.driver.personality, behaviorMul: playerBehavior(c), teamQuality: t.quality, reliability: t.reliability, ops: t.ops });
     }
   }
   return cars;
@@ -1095,6 +1118,7 @@ export function getOffseason(c: Career): Offseason {
 
 function fillOpenSeats(c: Career, r: Rng, nextYear: number): void {
   const used = new Set(c.world.drivers.filter((d) => !d.retired && d.teamId).map((d) => d.number));
+  if (c.driver.number) used.add(c.driver.number); // 플레이어 번호는 AI 신인에게 주지 않는다
   let rookieIdx = 0;
   for (const t of c.world.teams.teams) {
     const playerHere = c.contract?.series === 'f1' && c.contract.seat === 'race' && c.contract.teamId === t.id ? 1 : 0;
@@ -1140,10 +1164,19 @@ function ageWorldDrivers(c: Career, r: Rng, nextYear: number): void {
     // 데뷔하는 해에는 출발 조건(NEW_TEAM_START) 그대로 둔다: 모든 신생팀이 캐딜락과 같은 성능으로 첫 시즌을 치른다
     if (teamAge <= 0) continue;
     const catchUp = teamAge >= 1 && teamAge <= 2 ? 0.004 : 0;
+    // 팀 대표 교체(SPEC §2.1 v0.25): 팀마다 시즌당 6%. 새 대표가 팀을 추스르면 차가 좋아지고, 혼란이 생기면 나빠진다
+    const pr = rngFor(c.seed, 'principal', nextYear, t.id);
+    let principal = 0;
+    if (pr() < PRINCIPAL_CHANGE_CHANCE) {
+      const good = pr() < 0.55;
+      principal = (good ? 1 : -1) * (0.006 + pr() * 0.008);
+      c.world.principalLog = [...(c.world.principalLog ?? []), { season: nextYear, teamId: t.id, team: t.name, good, delta: Math.round(principal * 1000) / 1000 }];
+      c.world.news.push({ season: nextYear, kind: 'principal', team: t.name, text: good ? `${t.name}, 새 팀 대표 선임. 조직이 정비돼 차가 좋아질 것이라는 평가` : `${t.name}, 팀 대표 교체 뒤 내부 혼란. 개발 방향이 흔들린다` });
+    }
     // 우승 가능 4팀은 늘 선두권(0.90 이상), 나머지는 0.915 이하: 포디움은 가능하지만 시즌 챔피언 경쟁은 4팀 몫
     const top = (F1_WINNER_TEAMS as readonly string[]).includes(t.id);
     // 메이저 4팀(0.915 이상)과 나머지(0.885 이하)가 겹치지 않게: 메이저 팀 레이스 시트면 챔피언십 8위 안이 거의 보장된다
-    t.quality = top ? clamp(q, MAJOR_FLOOR, 0.95) : clamp(q + catchUp, 0.83, OTHERS_CAP);
+    t.quality = top ? clamp(q + principal, MAJOR_FLOOR, 0.95) : clamp(q + catchUp + principal, 0.83, OTHERS_CAP);
   }
 }
 
@@ -1226,6 +1259,15 @@ export function applyOffseason(input: Career, choice: OffseasonChoice): Career {
   fillOpenSeats(c, r, nextYear);
 
   c.flags = {};
+  // 내 팀의 대표가 바뀌었으면 팀 내 입지도 바뀐다: 새 대표가 나를 믿으면 방출 위험 ↓·압박 ↓, 아니면 반대
+  const myTeamId = c.contract?.series === 'f1' ? c.contract.teamId : undefined;
+  const myChange = myTeamId ? c.world.principalLog?.find((p) => p.season === nextYear && p.teamId === myTeamId) : undefined;
+  if (myChange) {
+    const backs = rngFor(c.seed, 'principal-player', nextYear)() < (myChange.good ? 0.65 : 0.35);
+    c.flags.releaseRisk = backs ? -0.03 : 0.04;
+    c.media.pressure = clamp(c.media.pressure + (backs ? -8 : 10), 0, 100);
+    c.world.news.push({ season: nextYear, kind: 'principal', team: myChange.team, text: backs ? `새 팀 대표가 ${c.driver.name}을 팀의 중심으로 보고 있다(팀 내 입지 상승)` : `새 팀 대표가 ${c.driver.name}의 자리를 다시 따져 보겠다고 했다(팀 내 입지 흔들림)` });
+  }
   c.year = nextYear;
   c.age += 1;
   return c;
