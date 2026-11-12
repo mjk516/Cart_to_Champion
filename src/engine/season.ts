@@ -6,7 +6,7 @@ import { clamp, juniorTeams, lerp, statsAround } from './careerInternal';
 import { WEALTH_TIERS } from './creation';
 import { coachAdvice, followsCoach } from './coach';
 import { applyEndurance, enduranceResult } from './endurance';
-import { myRaceResult, snsReaction, sumSnsEffects, type MyRaceResult } from './raceNews';
+import { myRaceResult, neutralCounts, snsReaction, sumSnsEffects, type MyRaceResult, type NeutralCounts } from './raceNews';
 import { strategyKey, type StrategyMap } from './strategy';
 import { pickEvents } from './events';
 import { seasonFeed } from './feed';
@@ -50,7 +50,7 @@ interface SeasonSim {
   /** 라운드별 내 결승 결과(SNS 반응 계산용) */
   myRaces: Record<number, MyRaceResult>;
   /** 라운드별 결승 메모(기사용) */
-  raceNotes: Record<number, { neutralizations: number; retired: string[]; mateId?: string }>;
+  raceNotes: Record<number, { neutralizations: number; neutral?: NeutralCounts; retired: string[]; mateId?: string }>;
 }
 
 const emptySim = (fieldSize: number): SeasonSim => ({
@@ -347,6 +347,7 @@ function simulateF1(c: Career, stats: Stats, seed: number, radio: Record<string,
         if (res) sim.myRaces[round] = res;
         sim.raceNotes[round] = {
           neutralizations: out.incidents.filter((i) => i.type === 'sc_deploy' || i.type === 'vsc_deploy' || i.type === 'red_flag').length,
+          neutral: neutralCounts(out.incidents),
           retired: out.incidents.flatMap((i) => ((i.type === 'crash' || i.type === 'mech_dnf') && i.car !== PLAYER_ID ? [i.car] : [])),
           mateId,
         };
@@ -453,6 +454,7 @@ function raceHighlights(c: Career, sim: SeasonSim): RaceHighlight[] {
       winnerName: r.winnerId === PLAYER_ID ? c.driver.name : nameOf(r.winnerId),
       ...(note?.mateId ? { mateName: nameOf(note.mateId) } : {}),
       neutralizations: note?.neutralizations ?? 0,
+      ...(note?.neutral ? { neutral: note.neutral } : {}),
       retired: (note?.retired ?? []).map(nameOf),
     };
   });

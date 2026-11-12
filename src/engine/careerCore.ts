@@ -10,7 +10,7 @@ import { rngFor } from './rng';
 import { type Hidden, type TrainingId } from './growth';
 import { type Media } from './media';
 import { type RaceCar, type RadioOptionId } from './race';
-import { type MyRaceResult } from './raceNews';
+import { type MyRaceResult, type NeutralCounts } from './raceNews';
 import { type SeriesId } from './series';
 import { type TeamNews, type TeamWorld } from './teams';
 import { STAT_KEYS, type Circuit, type Compound, type Personality, type StatKey, type Stats, type WealthTier } from './types';
@@ -132,6 +132,7 @@ export interface RaceHighlight {
   winnerName: string;
   mateName?: string;
   neutralizations: number;
+  neutral?: NeutralCounts;
   retired: string[];
 }
 

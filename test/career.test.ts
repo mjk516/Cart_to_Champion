@@ -897,3 +897,15 @@ describe('전략 회의 선택 재생 (v0.40)', () => {
     expect(replayCareer(yes.career.setup, yes.career.choiceLog)).toEqual(yes.career);
   });
 });
+
+describe('기사의 세이프티카 문장', () => {
+  it('나온 것만 말하고, 2번 이상이면 어지러운 레이스', async () => {
+    const { neutralSentence } = await import('../src/engine');
+    expect(neutralSentence(1, { sc: 1, vsc: 0, red: 0 })).toBe('세이프티카가 1번 나온 레이스였다.');
+    expect(neutralSentence(1, { sc: 0, vsc: 1, red: 0 })).toBe('VSC가 1번 나온 레이스였다.');
+    expect(neutralSentence(1, { sc: 0, vsc: 0, red: 1 })).toBe('레드 플래그가 1번 나온 레이스였다.');
+    expect(neutralSentence(2, { sc: 2, vsc: 0, red: 0 })).toBe('세이프티카가 2번 나온 어지러운 레이스였다.');
+    expect(neutralSentence(3, { sc: 1, vsc: 1, red: 1 })).toBe('세이프티카 1번, VSC 1번, 레드 플래그 1번이 나온 어지러운 레이스였다.');
+    expect(neutralSentence(1)).toBe('세이프티카·VSC·레드 플래그가 모두 1번 나온 레이스였다.');
+  });
+});

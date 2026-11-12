@@ -54,6 +54,24 @@ export interface RaceArticle {
   body: string[];
 }
 
+/** 레이스 중 세이프티카·VSC·레드 플래그 횟수 */
+export interface NeutralCounts { sc: number; vsc: number; red: number }
+
+export function neutralCounts(incidents: ReadonlyArray<{ type: string }>): NeutralCounts {
+  const n = (t: string) => incidents.filter((i) => i.type === t).length;
+  return { sc: n('sc_deploy'), vsc: n('vsc_deploy'), red: n('red_flag') };
+}
+
+/** "세이프티카가 1번 나온 레이스였다." 2번 이상이면 "어지러운 레이스". 종류를 모르면(이전 저장) 묶어서 말한다 */
+export function neutralSentence(total: number, k?: NeutralCounts): string {
+  const messy = total >= 2 ? '어지러운 ' : '';
+  const parts = k ? ([['세이프티카', k.sc], ['VSC', k.vsc], ['레드 플래그', k.red]] as const).filter(([, v]) => v > 0) : [];
+  if (!parts.length) return `세이프티카·VSC·레드 플래그가 모두 ${total}번 나온 ${messy}레이스였다.`;
+  if (parts.length === 1) { const [name, v] = parts[0]!; return `${josa(name, '이/가')} ${v}번 나온 ${messy}레이스였다.`; }
+  const list = parts.map(([name, v]) => `${name} ${v}번`).join(', ');
+  return `${list}${josaOf(list, '이/가')} 나온 ${messy}레이스였다.`;
+}
+
 export interface ArticleContext {
   gp: string;
   round: number;
@@ -65,6 +83,8 @@ export interface ArticleContext {
   mateName?: string;
   /** 이 레이스의 세이프티카·VSC·레드 플래그 수 */
   neutralizations: number;
+  /** 종류별 횟수(없으면 이전 저장) */
+  neutral?: NeutralCounts;
   /** 사고·결함으로 리타이어한 다른 드라이버 이름 */
   retired: string[];
 }
@@ -101,7 +121,7 @@ export function raceArticle(c: Career, r: MyRaceResult, x: ArticleContext): Race
   }
   if (x.neutralizations > 0) {
     const who = x.retired.length ? ` ${x.retired.slice(0, 3).join(', ')}${x.retired.length > 3 ? ' 등' : ''}${x.retired.length > 3 ? '이' : josaOf(x.retired[Math.min(2, x.retired.length - 1)]!, '이/가')} 레이스를 끝내지 못했다.` : '';
-    body.push(`세이프티카·VSC·레드 플래그가 ${x.neutralizations}번 나온 어지러운 레이스였다.${who}`);
+    body.push(`${neutralSentence(x.neutralizations, x.neutral)}${who}`);
   }
   return { outlet: pick(rng, OUTLETS), headline: fill(pick(rng, HEAD[s])), body };
 }
