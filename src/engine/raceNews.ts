@@ -3,6 +3,7 @@
 // SNS: 드라이버 성격에 따라 고를 수 있는 글이 달라지고(성격다운 글 하나 포함), 결과에 따라 팬 반응이 달라진다.
 // 고른 글은 라이브 시즌 선택 기록(sns)으로 남고, 시즌을 마칠 때 언론 지표에 반영된다(재생 가능).
 
+import { fixJosa, josa, josaOf } from './josa';
 import { type Career } from './careerCore';
 import { type Classified } from './race';
 import { pick, rngFor } from './rng';
@@ -70,10 +71,10 @@ export function raceArticle(c: Career, r: MyRaceResult, x: ArticleContext): Race
   const rng = rngFor(c.seed, 'race-article', c.year, x.round);
   const s = situationOf(r);
   const gain = r.position !== null ? r.grid - r.position : 0;
-  const fill = (t: string) => t
+  const fill = (t: string) => fixJosa(t
     .replace(/\{name\}/g, x.name).replace(/\{gp\}/g, x.gp).replace(/\{team\}/g, x.team).replace(/\{pos\}/g, String(r.position ?? ''))
     .replace(/\{grid\}/g, String(r.grid)).replace(/\{gain\}/g, String(Math.abs(gain))).replace(/\{winner\}/g, x.winnerName)
-    .replace(/\{reason\}/g, r.reason ?? '사고').replace(/\{pts\}/g, String(r.points));
+    .replace(/\{reason\}/g, r.reason ?? '사고').replace(/\{pts\}/g, String(r.points)), [x.name, x.team, x.winnerName, x.gp, r.reason ?? '사고']);
   const HEAD: Record<RaceSituation, string[]> = {
     win: ['{name}, {gp} 우승! {grid}번 그리드에서 체커기까지', '{gp}의 주인공은 {name}. {team}에 우승 트로피', '"완벽한 일요일" {name}, {gp} 정상'],
     podium: ['{name}, {gp} {pos}위 포디움', '{name} 샴페인 세례, {gp}에서 {pos}위', '{team}의 {name}, {gp} 포디움에 오르다'],
@@ -93,11 +94,11 @@ export function raceArticle(c: Career, r: MyRaceResult, x: ArticleContext): Race
   else if (r.position !== null && gain <= -4) body.push(fill(pick(rng, ['{grid}번 그리드에서 출발했지만 {gain}자리를 잃었다. 레이스 페이스가 아쉬웠다.', '출발보다 {gain}계단 밀려났다. 팀은 원인을 분석 중이다.'])));
   if (x.mateName && r.mateAhead !== null) {
     body.push(r.mateAhead
-      ? `팀메이트 ${x.mateName}이 앞에서 레이스를 마쳐, 팀 안의 비교에서는 밀렸다.`
+      ? `팀메이트 ${josa(x.mateName, '이/가')} 앞에서 레이스를 마쳐, 팀 안의 비교에서는 밀렸다.`
       : `팀메이트 ${x.mateName}보다 앞에서 체커기를 받았다.`);
   }
   if (x.neutralizations > 0) {
-    const who = x.retired.length ? ` ${x.retired.slice(0, 3).join(', ')}${x.retired.length > 3 ? ' 등' : ''}이 레이스를 끝내지 못했다.` : '';
+    const who = x.retired.length ? ` ${x.retired.slice(0, 3).join(', ')}${x.retired.length > 3 ? ' 등' : ''}${x.retired.length > 3 ? '이' : josaOf(x.retired[Math.min(2, x.retired.length - 1)]!, '이/가')} 레이스를 끝내지 못했다.` : '';
     body.push(`세이프티카·VSC·레드 플래그가 ${x.neutralizations}번 나온 어지러운 레이스였다.${who}`);
   }
   return { outlet: pick(rng, OUTLETS), headline: fill(pick(rng, HEAD[s])), body };
@@ -197,8 +198,8 @@ const COMMON: Record<Exclude<SnsTone, 'signature'>, { label: string; text: Recor
 };
 
 function fillPost(t: string, r: MyRaceResult, gp: string, team: string): string {
-  return t.replace(/\{pos\}/g, String(r.position ?? '')).replace(/\{grid\}/g, String(r.grid)).replace(/\{pts\}/g, String(r.points))
-    .replace(/\{gp\}/g, gp).replace(/\{team\}/g, team).replace(/\{reason\}/g, r.reason ?? '사고');
+  return fixJosa(t.replace(/\{pos\}/g, String(r.position ?? '')).replace(/\{grid\}/g, String(r.grid)).replace(/\{pts\}/g, String(r.points))
+    .replace(/\{gp\}/g, gp).replace(/\{team\}/g, team).replace(/\{reason\}/g, r.reason ?? '사고'), [gp, team, r.reason ?? '사고']);
 }
 
 /** 이번 결승 뒤 올릴 수 있는 글. 성격다운 글이 맨 앞 */

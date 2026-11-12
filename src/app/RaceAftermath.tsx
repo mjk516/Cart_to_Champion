@@ -1,6 +1,6 @@
 // 그랑프리 결승 뒤(SPEC v0.36): 결과 기사 한 편과 SNS 글 고르기. 고른 글은 시즌을 마칠 때 언론 지표에 반영된다.
 
-import { myRaceResult, raceArticle, snsOptions, snsReaction, type Career, type Circuit, type Classified, type Incident, type RaceCar } from '../engine';
+import { circuitById, f1Calendar, myRaceResult, raceArticle, snsOptions, snsReaction, type Career, type Circuit, type Classified, type Incident, type RaceCar, type RaceHighlight } from '../engine';
 import { nationName } from './Create';
 import { Pill } from './ui';
 
@@ -69,5 +69,37 @@ export function RaceAftermath({ c, round, gp, rows, incidents, cars, chosen, onP
         )}
       </section>
     </div>
+  );
+}
+
+/** 시즌 결과의 주요 결승 기사(SPEC v0.38): 한 번에 진행한 시즌에도 나온다 */
+export function SeasonArticles({ c, year, team, highlights }: { c: Career; year: number; team: string; highlights: RaceHighlight[] }) {
+  const cal = f1Calendar(c);
+  const items = highlights.map((h) => {
+    let circuit: Circuit | null = null;
+    try { circuit = circuitById(h.circuitId); } catch { /* 알 수 없는 서킷 */ }
+    const gp = circuit ? gpName(c, circuit, cal) : `${h.round + 1}라운드`;
+    const a = raceArticle({ ...c, year }, h.result, {
+      gp, round: h.round, name: c.driver.name, team, winnerName: h.winnerName, mateName: h.mateName,
+      neutralizations: h.neutralizations, retired: h.retired,
+    });
+    return { h, a };
+  });
+  if (!items.length) return null;
+  return (
+    <section aria-label="시즌 주요 기사" className="mt-4">
+      <h3 className="mb-2 text-sm font-bold">📰 시즌 주요 기사</h3>
+      <div className="space-y-2">
+        {items.map(({ h, a }, i) => (
+          <details key={h.round} open={i === 0} className="rounded-xl border border-white/10 bg-[#f6f1e7] p-3 text-zinc-900">
+            <summary className="cursor-pointer list-none">
+              <span className="text-[11px] font-bold tracking-widest text-zinc-500">{h.round + 1}라운드 · {a.outlet}</span>
+              <span className="mt-0.5 block font-black leading-snug">{a.headline}</span>
+            </summary>
+            <div className="mt-2 space-y-1.5 text-sm leading-relaxed text-zinc-700">{a.body.map((p, j) => <p key={j}>{p}</p>)}</div>
+          </details>
+        ))}
+      </div>
+    </section>
   );
 }

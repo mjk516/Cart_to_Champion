@@ -11,6 +11,7 @@ import { formatMoney } from './format';
 import { SignaturePad } from './SignaturePad';
 import { SignatureView } from './SignatureView';
 import { F1TeamBadge } from './TeamBadge';
+import { SeasonArticles } from './RaceAftermath';
 import { Tip } from './Guide';
 import { currentOffseason, useGame, type Signature } from './store';
 import { Bar, Button, Card, Pill, SEAT_LABELS, useConfirm } from './ui';
@@ -129,6 +130,7 @@ function SeasonSummary({ r }: { r: SeasonRecord }) {
       </div>
       {r.endurance && <EnduranceCard e={r.endurance} />}
       {r.f1Standings && <StandingsTables st={r.f1Standings} me={PLAYER_ID} />}
+      {r.raceHighlights && career && <SeasonArticles c={career} year={r.year} team={r.team ?? ""} highlights={r.raceHighlights} />}
       {r.notes.length > 0 && <ul className="mt-2 list-disc pl-5 text-sm text-zinc-400">{r.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>}
       {r.feed && r.feed.length > 0 && <div className="mt-4"><FeedList items={r.feed} />{career && <RollingComments comments={seasonChatter(career, r)} />}</div>}
     </Card>

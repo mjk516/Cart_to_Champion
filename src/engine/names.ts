@@ -3,28 +3,93 @@
 import { DRIVERS_2026 } from './data';
 import { pick, type Rng } from './rng';
 
-const FIRST = [
-  'Luca', 'Mateo', 'Noah', 'Elias', 'Leon', 'Hugo', 'Oskar', 'Theo', 'Rafael', 'Tomas', 'Kai', 'Jonas', 'Felix',
-  'Adrien', 'Marco', 'Diego', 'Sebastian', 'Emil', 'Nathan', 'Ryo', 'Haruto', 'Min-jun', 'Ji-ho', 'Arjun', 'Yuki',
-  'Lorenzo', 'Pablo', 'Victor', 'Matias', 'Owen', 'Callum', 'Finn', 'Anton', 'Milan', 'Bruno', 'Iker',
-];
-const LAST = [
-  'Moreau', 'Kessler', 'Varga', 'Lindqvist', 'Rossetti', 'Castell', 'Novak', 'Brandt', 'Okafor', 'Duarte', 'Ferraz',
-  'Halvorsen', 'Marchetti', 'Delacroix', 'Vogel', 'Sato', 'Tanaka', 'Park', 'Kang', 'Mehta', 'Quinn', 'Hale',
-  'Ortega', 'Santoro', 'Weber', 'Kowalski', 'Ivanov', 'Laurent', 'Mendes', 'Riva', 'Aalto', 'Bianchini', 'Corral',
-];
-const NATIONS = ['IT', 'FR', 'DE', 'GB', 'ES', 'NL', 'BR', 'JP', 'KR', 'US', 'AU', 'FI', 'PL', 'IN', 'MX', 'AR', 'BE', 'DK'];
+/**
+ * 나라별 이름 풀(SPEC v0.38): 이름과 성이 같은 나라에서 나온다(한국 성 + 이탈리아 이름 같은 조합이 없게).
+ * weight는 모터스포츠에서 드라이버가 나오는 정도. 실존 F1 드라이버 성과 겹치는 성은 뽑지 않는다.
+ */
+interface NamePool { weight: number; first: string[]; last: string[] }
+const POOLS: Record<string, NamePool> = {
+  GB: { weight: 3, first: ['Oliver', 'Harry', 'Jack', 'Callum', 'Archie', 'Freddie', 'Rory', 'Alfie', 'Toby', 'Jamie', 'Ethan', 'Reuben', 'Kieran', 'Owen'], last: ['Whitmore', 'Ashford', 'Pemberton', 'Hale', 'Carver', 'Langley', 'Thornton', 'Blake', 'Fairfax', 'Holloway', 'Kendrick', 'Marsh', 'Radcliffe', 'Sutton'] },
+  IT: { weight: 2, first: ['Lorenzo', 'Matteo', 'Tommaso', 'Edoardo', 'Riccardo', 'Davide', 'Filippo', 'Gabriele', 'Niccolò', 'Pietro', 'Samuele', 'Elia'], last: ['Rossetti', 'Marchetti', 'Bianchini', 'Santoro', 'Ferraro', 'Galli', 'Moretti', 'Lombardi', 'Barbieri', 'Fontana', 'Caruso', 'Vitale'] },
+  FR: { weight: 2, first: ['Adrien', 'Théo', 'Hugo', 'Louis', 'Baptiste', 'Mathis', 'Clément', 'Maxence', 'Raphaël', 'Enzo', 'Valentin', 'Corentin'], last: ['Moreau', 'Delacroix', 'Laurent', 'Fournier', 'Girard', 'Lambert', 'Rousseau', 'Mercier', 'Chevalier', 'Bonnet', 'Faure', 'Garnier'] },
+  DE: { weight: 2, first: ['Leon', 'Felix', 'Jonas', 'Lukas', 'Maximilian', 'Paul', 'Niklas', 'Moritz', 'Tim', 'Fabian', 'Jannik', 'Henrik'], last: ['Kessler', 'Brandt', 'Vogel', 'Weber', 'Krüger', 'Hartmann', 'Lehmann', 'Bauer', 'Schäfer', 'Wolff', 'Engel', 'Seidel'] },
+  ES: { weight: 2, first: ['Pablo', 'Iker', 'Álvaro', 'Hugo', 'Daniel', 'Javier', 'Mario', 'Adrián', 'Sergio', 'Marcos', 'Rubén', 'Unai'], last: ['Castell', 'Ortega', 'Navarro', 'Romero', 'Domínguez', 'Ruiz', 'Serrano', 'Molina', 'Herrera', 'Prieto', 'Vidal', 'Campos'] },
+  NL: { weight: 1.4, first: ['Daan', 'Sem', 'Lars', 'Thijs', 'Bram', 'Jesse', 'Ruben', 'Niels', 'Joris', 'Stijn'], last: ['de Groot', 'Visser', 'Bakker', 'van Dijk', 'Smit', 'Mulder', 'de Wit', 'Hendriks', 'Dekker', 'van Leeuwen'] },
+  BR: { weight: 1.5, first: ['Rafael', 'Gustavo', 'Thiago', 'Felipe', 'Caio', 'Matheus', 'Enzo', 'Bruno', 'Vinícius', 'Davi', 'Arthur', 'Heitor'], last: ['Ferraz', 'Duarte', 'Mendes', 'Carvalho', 'Ribeiro', 'Almeida', 'Barros', 'Teixeira', 'Moura', 'Cardoso', 'Rocha', 'Pires'] },
+  US: { weight: 1.5, first: ['Tyler', 'Mason', 'Logan', 'Cole', 'Brody', 'Hunter', 'Chase', 'Wyatt', 'Carter', 'Grayson', 'Easton', 'Jaxon'], last: ['Quinn', 'Harper', 'Brooks', 'Sullivan', 'Reed', 'Coleman', 'Hayes', 'Porter', 'Bennett', 'Walsh', 'Griffin', 'Monroe'] },
+  CA: { weight: 0.9, first: ['Liam', 'Nathan', 'Mathieu', 'Gabriel', 'Owen', 'Xavier', 'Samuel', 'Benoît'], last: ['Tremblay', 'Gagnon', 'Bouchard', 'MacLeod', 'Fraser', 'Côté', 'Pelletier', 'Morin'] },
+  JP: { weight: 1.2, first: ['Haruto', 'Ren', 'Sota', 'Yuma', 'Kaito', 'Riku', 'Hinata', 'Takumi', 'Daiki', 'Kenta', 'Shun', 'Itsuki'], last: ['Sato', 'Tanaka', 'Kobayashi', 'Nakamura', 'Yamamoto', 'Matsumoto', 'Inoue', 'Kimura', 'Fujiwara', 'Ishikawa', 'Kondo', 'Ogawa'] },
+  KR: { weight: 0.6, first: ['Ji-hoon', 'Seo-jun', 'Do-yun', 'Ha-jun', 'Eun-woo', 'Tae-yang', 'Joon-ho', 'Hyun-woo', 'Seung-min', 'Woo-jin', 'Jae-won', 'Si-woo', 'Min-jun', 'Yeon-woo'], last: ['Kim', 'Lee', 'Park', 'Choi', 'Jung', 'Kang', 'Cho', 'Yoon', 'Jang', 'Lim', 'Han', 'Shin', 'Seo', 'Kwon'] },
+  CN: { weight: 0.8, first: ['Haoran', 'Zihan', 'Yuxuan', 'Junjie', 'Mingyu', 'Tianyi', 'Zhengyang', 'Weilun', 'Kaiwen', 'Bowen'], last: ['Wang', 'Li', 'Chen', 'Liu', 'Yang', 'Huang', 'Lin', 'Xu', 'Sun', 'Ma'] },
+  IN: { weight: 0.7, first: ['Arjun', 'Rohan', 'Kabir', 'Vihaan', 'Aditya', 'Ishaan', 'Karan', 'Dev'], last: ['Mehta', 'Sharma', 'Kapoor', 'Iyer', 'Reddy', 'Nair', 'Malhotra', 'Bhatia'] },
+  AU: { weight: 1, first: ['Cooper', 'Lachlan', 'Riley', 'Hamish', 'Flynn', 'Bailey', 'Jett', 'Darcy', 'Kai'], last: ['Mitchell', 'Clarke', 'Gallagher', 'Doyle', 'Fletcher', 'Kerr', 'Matheson', 'Nolan', 'Pritchard'] },
+  NZ: { weight: 0.5, first: ['Nikau', 'Blake', 'Hunter', 'Mitchell', 'Tama', 'Finn'], last: ['Ngata', 'McKenzie', 'Tuhoe', 'Rangi', 'Wallace', 'Burke'] },
+  FI: { weight: 0.9, first: ['Eetu', 'Aleksi', 'Joona', 'Onni', 'Veeti', 'Elias', 'Lauri', 'Topias'], last: ['Aalto', 'Lindqvist', 'Koskinen', 'Heikkinen', 'Laine', 'Nieminen', 'Salonen', 'Virtanen'] },
+  SE: { weight: 0.7, first: ['Viktor', 'Gustav', 'Axel', 'Hugo', 'Linus', 'Albin', 'Melker'], last: ['Lindgren', 'Bergström', 'Nyberg', 'Sandberg', 'Holm', 'Ekström', 'Wallin'] },
+  DK: { weight: 0.8, first: ['Mikkel', 'Rasmus', 'Frederik', 'Mads', 'Oskar', 'Emil', 'Asger'], last: ['Halvorsen', 'Jessen', 'Kjær', 'Lund', 'Dahl', 'Holst', 'Bech'] },
+  BE: { weight: 0.9, first: ['Arthur', 'Jules', 'Wout', 'Lucas', 'Milan', 'Victor', 'Siebe'], last: ['Peeters', 'Janssens', 'Maes', 'Claes', 'Wouters', 'Dubois', 'Lemaire'] },
+  AT: { weight: 0.6, first: ['Lukas', 'Florian', 'Tobias', 'Elias', 'Simon', 'Raphael'], last: ['Gruber', 'Huber', 'Pichler', 'Steiner', 'Moser', 'Leitner'] },
+  CH: { weight: 0.5, first: ['Noah', 'Luca', 'Gian', 'Nico', 'Joel', 'Matteo'], last: ['Meier', 'Brunner', 'Zürcher', 'Frei', 'Keller', 'Baumann'] },
+  PL: { weight: 0.6, first: ['Jakub', 'Kacper', 'Szymon', 'Filip', 'Mikołaj', 'Antoni'], last: ['Kowalski', 'Nowak', 'Wiśniewski', 'Zieliński', 'Kamiński', 'Lewandowski'] },
+  CZ: { weight: 0.4, first: ['Tomáš', 'Jakub', 'Ondřej', 'Vojtěch', 'Matěj'], last: ['Novák', 'Dvořák', 'Černý', 'Procházka', 'Kučera'] },
+  PT: { weight: 0.5, first: ['Tiago', 'Duarte', 'Rodrigo', 'Afonso', 'Gonçalo', 'Martim'], last: ['Ferreira', 'Santos', 'Costa', 'Oliveira', 'Pereira', 'Lopes'] },
+  MX: { weight: 1, first: ['Diego', 'Santiago', 'Emiliano', 'Sebastián', 'Mateo', 'Leonardo', 'Iker', 'Rodrigo'], last: ['Corral', 'Villalobos', 'Garza', 'Treviño', 'Salazar', 'Ochoa', 'Cervantes', 'Zamora'] },
+  AR: { weight: 0.9, first: ['Matías', 'Tomás', 'Joaquín', 'Facundo', 'Bautista', 'Thiago', 'Agustín'], last: ['Riva', 'Benítez', 'Acosta', 'Medina', 'Sosa', 'Quiroga', 'Ledesma'] },
+  CO: { weight: 0.4, first: ['Andrés', 'Juan Pablo', 'Camilo', 'Esteban', 'Nicolás'], last: ['Restrepo', 'Ospina', 'Cárdenas', 'Valencia', 'Arango'] },
+  EE: { weight: 0.3, first: ['Kaspar', 'Rasmus', 'Oliver', 'Karl'], last: ['Tamm', 'Saar', 'Kask', 'Mägi'] },
+  TH: { weight: 0.4, first: ['Thanawat', 'Kittipong', 'Natthapong', 'Pakin'], last: ['Srisuk', 'Chaiyaporn', 'Wongsakul', 'Rattanakorn'] },
+  ZA: { weight: 0.4, first: ['Ruan', 'Jaden', 'Liam', 'Thabo', 'Pieter'], last: ['van der Merwe', 'Botha', 'Nkosi', 'Pretorius', 'Steyn'] },
+  IE: { weight: 0.5, first: ['Cian', 'Oisín', 'Darragh', 'Seán', 'Conor'], last: ['Byrne', 'Kavanagh', 'Brennan', 'Doherty', 'Gallagher'] },
+};
+const POOL_KEYS = Object.keys(POOLS);
+const POOL_TOTAL = POOL_KEYS.reduce((a, k) => a + POOLS[k]!.weight, 0);
 
 const REAL_SURNAMES = new Set(DRIVERS_2026.map((d) => d.name.split(' ').slice(1).join(' ').toLowerCase()));
 
-export function fictionalName(rng: Rng): { name: string; code: string; nationality: string } {
-  for (let i = 0; i < 20; i++) {
-    const last = pick(rng, LAST);
+function pickNation(rng: Rng): string {
+  let x = rng() * POOL_TOTAL;
+  for (const k of POOL_KEYS) { x -= POOLS[k]!.weight; if (x <= 0) return k; }
+  return POOL_KEYS[0]!;
+}
+
+/** 이름 풀에 있는 모든 이름 수(테스트·화면 안내용) */
+export function namePoolSize(): { nations: number; first: number; last: number } {
+  return {
+    nations: POOL_KEYS.length,
+    first: POOL_KEYS.reduce((a, k) => a + POOLS[k]!.first.length, 0),
+    last: POOL_KEYS.reduce((a, k) => a + POOLS[k]!.last.length, 0),
+  };
+}
+
+/**
+ * 가상 인물 이름. 나라를 먼저 고르고 그 나라의 이름·성을 쓴다. 이름 순서는 그 나라 방식(한국·중국 등은 성이 먼저).
+ * avoid: 이미 쓰는 이름(이름 부분)·성명. 같은 이름(예: 같은 Min-jun)이 한 그리드에 겹치지 않게 다시 뽑는다
+ */
+export function fictionalName(rng: Rng, avoid?: Set<string>): { name: string; code: string; nationality: string; first: string } {
+  let fallback: { name: string; code: string; nationality: string; first: string } | null = null;
+  for (let i = 0; i < 30; i++) {
+    const nationality = pickNation(rng);
+    const pool = POOLS[nationality]!;
+    const last = pick(rng, pool.last);
+    const first = pick(rng, pool.first);
     if (REAL_SURNAMES.has(last.toLowerCase())) continue;
-    const name = `${pick(rng, FIRST)} ${last}`;
-    return { name, code: last.slice(0, 3).toUpperCase(), nationality: pick(rng, NATIONS) };
+    const name = formatFullName(last, first, nationality);
+    const letters = (x: string) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z]/g, '');
+    // 성이 두 글자(Li, Ma)면 이름 첫 글자를 붙여 세 글자로
+    const code = (letters(last) + letters(first)).slice(0, 3).toUpperCase();
+    const out = { name, code, nationality, first };
+    if (!fallback) fallback = out;
+    if (avoid && (avoid.has(first) || avoid.has(name))) continue;
+    return out;
   }
-  return { name: 'Alex Moreau', code: 'MOR', nationality: 'FR' };
+  return fallback ?? { name: 'Alex Moreau', code: 'MOR', nationality: 'FR', first: 'Alex' };
+}
+
+/** 실제·가상 드라이버 이름에서 이름 부분(성을 뺀 것)을 꺼낸다 */
+export function firstNameOf(name: string, nationality: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length < 2) return name;
+  return FAMILY_FIRST_NATIONS.has(nationality) ? parts.slice(1).join(' ') : parts.slice(0, -1).join(' ');
 }
 
 // ── 플레이어 이름(SPEC v0.37) ─────────────────────────────────────────

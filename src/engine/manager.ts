@@ -1,6 +1,7 @@
 // 선수 매니저와 오프시즌 조언(SPEC §7 v0.15).
 // 조언은 읽기 전용이다: 결과를 바꾸지 않고, 선택은 늘 플레이어가 한다(랭킹 검증에 영향 없음).
 
+import { josa } from './josa';
 import type { Career, Offseason } from './career';
 import { F1_WINNER_TEAMS, ovr } from './data';
 import { fictionalName } from './names';
@@ -104,7 +105,7 @@ export function managerAdvice(c: Career, off: Offseason): ManagerAdvice {
       if (rank > LADDER.indexOf(last.series)) {
         const def = SERIES[o.series as Exclude<typeof o.series, 'f1'>];
         const mid = (def.aiOvr[0] + def.aiOvr[1]) / 2;
-        if (now < mid - 2) { s -= 18; reasons.push(`${seriesLabel(o.series)}는 아직 이를 수 있어. 지금 실력으로는 중위권 아래야`); }
+        if (now < mid - 2) { s -= 18; reasons.push(`${josa(seriesLabel(o.series), '은/는')} 아직 이를 수 있어. 지금 실력으로는 중위권 아래야`); }
         else { s += 8; reasons.push(`${seriesLabel(o.series)}로 올라갈 준비가 됐어`); }
       }
       if (o.series === 'f2' && last.series === 'f2' && sl < 40) { s += 15; reasons.push(`슈퍼 라이선스가 ${sl}/40점이야. F2에서 포인트를 더 쌓자`); }
@@ -113,7 +114,7 @@ export function managerAdvice(c: Career, off: Offseason): ManagerAdvice {
         reasons.push('매니지먼트 후원 조건이야. F1에 가면 8년 동안 연봉 15%를 내야 해');
       } else if (o.seatCost > 0 && !c.academy && o.seatCost > Math.max(1, c.funds) * 0.6) {
         s -= m.style === 'money' ? 12 : 5;
-        reasons.push(`시트 비용 ${eur(o.seatCost)}이 자금의 큰 몫이야`);
+        reasons.push(`시트 비용 ${josa(eur(o.seatCost), '이/가')} 자금의 큰 몫이야`);
       }
     }
     if (o.id === 'stay') { s += m.style === 'stable' ? 12 : 4; reasons.push('지금 팀과 계약이 남아 있어. 새로 적응할 필요가 없지'); }

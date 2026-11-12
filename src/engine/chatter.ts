@@ -5,6 +5,7 @@ import type { Career, SeasonRecord } from './careerCore';
 import { int, pick, rngFor, type Rng } from './rng';
 import { PLATFORM_LABEL, type FanPlatform } from './feed';
 import { seriesLabel } from './series';
+import { fixJosa } from './josa';
 
 export interface Chat { platform: FanPlatform; author: string; text: string }
 
@@ -58,7 +59,7 @@ function author(r: Rng, kr: boolean): { platform: FanPlatform; author: string } 
 }
 
 function fill(t: string, v: Record<string, string | number | undefined>): string {
-  return t.replace(/\{(\w+)\}/g, (_m, k: string) => String(v[k] ?? ''));
+  return fixJosa(t.replace(/\{(\w+)\}/g, (_m, k: string) => String(v[k] ?? '')), Object.values(v).map((x) => (x === undefined ? undefined : String(x))));
 }
 
 /** 레이스 사건 하나에 붙는 댓글(같은 seed·key·n이면 같은 댓글) */

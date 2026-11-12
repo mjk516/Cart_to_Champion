@@ -1,5 +1,6 @@
 // 오프시즌(SPEC §7·§2.1): 제안 만들기, 선택 반영, 팀·캘린더·AI 드라이버 세계 진행.
 
+import { josa } from './josa';
 import { CALENDAR_2026_SLOTS, type Career, HOME_MARKET_BONUS, type Offer, type Offseason, type OffseasonChoice, PRINCIPAL_CHANGE_CHANCE, draftedNext, MILITARY_SEASONS, ROOKIE_GUARANTEE_POS, ROOKIE_GUARANTEE_POS_HOME, hasHomeGp } from './careerCore';
 import { MAJOR_FLOOR, OTHERS_CAP, newRookie, superLicencePoints } from './season';
 import { clamp, juniorTeams, lerp } from './careerInternal';
@@ -9,6 +10,7 @@ import { evolveCalendar } from './calendar';
 import { ALL_F1_CIRCUITS, CALENDAR_2027_SLOTS, circuitById, F1_WINNER_TEAMS, ovr } from './data';
 import { int, normal, pick, rngFor, type Rng } from './rng';
 import { ACADEMIES, nextSeries, SERIES, seriesLabel, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, type SeriesId } from './series';
+import { firstNameOf } from './names';
 import { runOffseason } from './teams';
 import { STAT_KEYS } from './types';
 
@@ -256,7 +258,7 @@ export function getOffseason(c: Career): Offseason {
         offers.push({
           id: `f1:${t.id}`, series: 'f1', team: t.name, teamId: t.id, seat: 'race', endYear: c.year + years, salary, seatCost: 0,
           teamQuality: t.quality, facility: t.budget, years, affordable: true, displaceDriverId: seat.displace,
-          note: seat.displace && 'name' in seat ? `F1 레이스 시트 · ${t.name}가 신인을 위해 ${seat.name}의 자리를 비웠다` : 'F1 레이스 시트(데뷔)',
+          note: seat.displace && 'name' in seat ? `F1 레이스 시트 · ${josa(t.name, '이/가')} 신인을 위해 ${seat.name}의 자리를 비웠다` : 'F1 레이스 시트(데뷔)',
         });
       }
       // 레이스 제안이 없고 돈이 있으면 추첨 1순위 팀이 페이 시트를 내민다
@@ -282,7 +284,7 @@ export function getOffseason(c: Career): Offseason {
         offers.push({
           id: `f1:${target.t.id}`, series: 'f1', team: target.t.name, teamId: target.t.id, seat: 'race', endYear: c.year + years,
           salary: Math.round(900_000 + target.t.budget * 600_000), seatCost: 0, teamQuality: target.t.quality, facility: target.t.budget,
-          years, affordable: true, displaceDriverId: target.d.id, note: `F1 레이스 시트 · ${target.t.name}가 신인을 위해 ${target.d.name}의 자리를 비웠다`,
+          years, affordable: true, displaceDriverId: target.d.id, note: `F1 레이스 시트 · ${josa(target.t.name, '이/가')} 신인을 위해 ${target.d.name}의 자리를 비웠다`,
         });
       }
     }
@@ -316,6 +318,11 @@ export function getOffseason(c: Career): Offseason {
 function fillOpenSeats(c: Career, r: Rng, nextYear: number): void {
   const used = new Set(c.world.drivers.filter((d) => !d.retired && d.teamId).map((d) => d.number));
   if (c.driver.number) used.add(c.driver.number); // 플레이어 번호는 AI 신인에게 주지 않는다
+  // 그리드에 같은 이름(이름 부분)이 겹치지 않게: 지금 뛰는 드라이버·플레이어 이름을 피한다
+  const names = new Set<string>();
+  for (const d of c.world.drivers) if (!d.retired) { names.add(d.name); names.add(firstNameOf(d.name, d.nationality)); }
+  names.add(c.driver.name);
+  if (c.driver.fullName) names.add(c.driver.fullName);
   let rookieIdx = 0;
   for (const t of c.world.teams.teams) {
     const playerHere = c.contract?.series === 'f1' && c.contract.seat === 'race' && c.contract.teamId === t.id ? 1 : 0;
@@ -325,7 +332,7 @@ function fillOpenSeats(c: Career, r: Rng, nextYear: number): void {
         .filter((d) => !d.retired && !d.teamId && nextYear - d.birthYear < 36)
         .sort((a, b) => ovr(b.stats) - ovr(a.stats))[0];
       const pickFree = free && ovr(free.stats) >= teamRequirement(c, t.id) - 4;
-      const d = pickFree ? free : newRookie(r, nextYear, rookieIdx++, used);
+      const d = pickFree ? free : newRookie(r, nextYear, rookieIdx++, used, names);
       if (!pickFree) c.world.drivers.push(d);
       d.teamId = t.id;
       d.contractEnd = nextYear + int(r, 0, 2);
@@ -473,7 +480,7 @@ export function applyOffseason(input: Career, choice: OffseasonChoice): Career {
     const backs = rngFor(c.seed, 'principal-player', nextYear)() < (myChange.good ? 0.65 : 0.35);
     c.flags.releaseRisk = backs ? -0.03 : 0.04;
     c.media.pressure = clamp(c.media.pressure + (backs ? -8 : 10), 0, 100);
-    c.world.news.push({ season: nextYear, kind: 'principal', team: myChange.team, text: backs ? `새 팀 대표가 ${c.driver.name}을 팀의 중심으로 보고 있다(팀 내 입지 상승)` : `새 팀 대표가 ${c.driver.name}의 자리를 다시 따져 보겠다고 했다(팀 내 입지 흔들림)` });
+    c.world.news.push({ season: nextYear, kind: 'principal', team: myChange.team, text: backs ? `새 팀 대표가 ${josa(c.driver.name, '을/를')} 팀의 중심으로 보고 있다(팀 내 입지 상승)` : `새 팀 대표가 ${c.driver.name}의 자리를 다시 따져 보겠다고 했다(팀 내 입지 흔들림)` });
   }
   c.year = nextYear;
   c.age += 1;

@@ -114,6 +114,8 @@ test('F1 라이브 중 대시보드의 "남은 시즌 한 번에 진행"이 진�
   // 시즌 결과에 드라이버·컨스트럭터 최종 순위표
   await expect(page.getByRole('region', { name: '드라이버 챔피언십 순위' }).locator('li').nth(9)).toBeVisible();
   await expect(page.getByRole('region', { name: '컨스트럭터 챔피언십 순위' }).locator('li')).not.toHaveCount(0);
+  // 한 번에 진행한 시즌에도 주요 결승 기사
+  await expect(page.getByRole('region', { name: '시즌 주요 기사' }).locator('details').first()).toBeVisible();
 });
 
 test('업적·기록과 설정(내보내기 → 가져오기 확인 창)', async ({ page }) => {
