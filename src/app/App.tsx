@@ -4,6 +4,7 @@ import { Dashboard } from './Dashboard';
 import { Offseason } from './Offseason';
 import { Records } from './Records';
 import { Guide } from './Guide';
+import { PatchNotes } from './PatchNotes';
 import { Retired } from './Retired';
 import { Weekend } from './Weekend';
 import { Home } from './Home';
@@ -20,11 +21,12 @@ export function App() {
   useEffect(() => { window.scrollTo(0, 0); }, [effective, career?.year]);
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      <nav className="sticky top-0 z-40 flex items-center justify-between border-b border-white/10 bg-zinc-950/90 px-4 py-3 backdrop-blur">
-        <button onClick={() => go('home')} className="text-sm font-black tracking-tight">
+      <nav className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-white/10 bg-zinc-950/90 px-4 py-3 backdrop-blur">
+        <button onClick={() => go('home')} className="min-w-0 truncate text-sm font-black tracking-tight">
           <span className="text-racing">▍</span>카트에서 챔피언까지
         </button>
-        <div className="flex gap-4">
+        <div className="flex shrink-0 gap-2.5 whitespace-nowrap sm:gap-4">
+          <button onClick={() => go('patch')} className="text-xs text-zinc-400 hover:text-zinc-200">패치노트</button>
           <button onClick={() => go('guide')} className="text-xs text-zinc-400 hover:text-zinc-200">게임 방법</button>
           {career && <button onClick={() => go('records')} className="text-xs text-zinc-400 hover:text-zinc-200">업적·기록</button>}
           <button onClick={() => go('settings')} className="text-xs text-zinc-400 hover:text-zinc-200">설정</button>
@@ -39,6 +41,7 @@ export function App() {
       {effective === 'weekend' && <Weekend />}
       {effective === 'records' && <Records />}
       {effective === 'guide' && <Guide />}
+      {effective === 'patch' && <PatchNotes />}
       <footer className={`mx-auto max-w-5xl px-4 pt-4 text-[11px] leading-relaxed text-zinc-500 ${effective === 'home' ? 'pb-40' : 'pb-8'}`}>
         비공식 팬 게임입니다. Formula 1, FIA 및 각 팀·드라이버와 아무 관계가 없으며 승인받지 않았습니다. F1, FORMULA 1 및 관련 표장은 Formula One Licensing B.V.의 상표입니다. 경기 결과와 계약은 모두 가상의 시뮬레이션입니다.{' '}
         <button onClick={() => go('settings')} className="underline hover:text-zinc-300">크레딧</button>

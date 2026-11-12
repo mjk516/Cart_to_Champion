@@ -131,3 +131,13 @@ test('성·이름·별명: 국적에 맞는 순서로 부르고, 원하면 별�
   await expect(page.getByRole('heading', { level: 1 })).toContainText('The Rocket');
   await expect(page.getByLabel('본명·별명')).toHaveText('본명 Luca Rossi');
 });
+
+test('패치노트: 상단 메뉴에서 날짜별 변경 사항을 본다', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('navigation').getByRole('button', { name: '패치노트' }).click();
+  await expect(page.getByRole('heading', { name: '패치노트' })).toBeVisible();
+  await expect(page.getByRole('list', { name: '2026년 11월 12일 변경 사항' })).toContainText('팀 전략 회의');
+  await expect(page.getByRole('list', { name: '2026년 11월 11일 변경 사항' })).toContainText('첫 공개');
+  await page.getByRole('button', { name: '돌아가기' }).click();
+  await expect(page.getByRole('button', { name: '새 커리어' })).toBeVisible();
+});
