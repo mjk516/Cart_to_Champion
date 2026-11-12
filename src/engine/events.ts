@@ -4,6 +4,7 @@
 
 import { fixJosa } from './josa';
 import type { Career, SeasonRecord } from './career';
+import { h2hClose } from './careerCore';
 import { PERSONALITIES } from './creation';
 import { rngFor, weightedPick, type Rng } from './rng';
 import { generateManager } from './manager';
@@ -71,6 +72,8 @@ export interface EventCtx {
   teammateBeat: number;
   /** 가정이 있다 */
   family: boolean;
+  /** F1 팀메이트 맞대결이 팽팽했다(SPEC v0.43) */
+  h2hClose: boolean;
 }
 
 export interface EventDef {
@@ -89,6 +92,10 @@ export interface EventDef {
 export const SERIES_SCALE: Record<SeriesId, number> = { kart: 1, f4: 2, freca: 3, f3: 5, f2: 8, f1: 30 };
 const JUNIOR = (s: SeriesId) => s !== 'f1';
 const bad = (x: EventCtx) => (x.temperament === 'bad' ? 2.5 : x.temperament === 'neutral' ? 1.2 : 0.5);
+
+export const RIVALRY_AHEAD_ID = 'rivalry_ahead';
+export const RIVALRY_BEHIND_ID = 'rivalry_behind';
+const RIVALRY_IDS = new Set([RIVALRY_AHEAD_ID, RIVALRY_BEHIND_ID]);
 
 const BASE_EVENTS: EventDef[] = [
   // ── 훈련 ──────────────────────────────────────────────────────────
@@ -269,6 +276,41 @@ const BASE_EVENTS: EventDef[] = [
       ] },
     ],
   },
+  // 팀 내 1인자 경쟁(SPEC v0.43): 맞대결이 팽팽하면 오프시즌에 반드시 나온다(최근 2년 안에 나왔으면 제외)
+  {
+    id: RIVALRY_AHEAD_ID, category: 'career', title: '팀 내 1인자 경쟁',
+    text: '{mate}와 시즌 내내 팽팽했다({h2h}). 근소하게 앞섰지만 {team} 안에서는 누가 1번 드라이버인지 말이 많다.',
+    when: (x) => x.h2hClose && x.teammateBeat >= 0.5,
+    options: [
+      { id: 'demand', label: '1번 드라이버 대우를 요구한다', hint: '받아들여지면 입지가 단단해진다. 안 되면 압박', outcomes: [
+        { p: 0.6, text: '팀이 받아들였다. 다음 시즌 전략 우선권은 {name}에게 있다.', effect: { reputation: 4, pressure: 4, flags: { releaseRisk: -0.04 } } },
+        { p: 0.4, text: '팀은 "두 드라이버는 동등하다"고 못 박았다. 분위기가 서먹해졌다.', effect: { pressure: 8, flags: { releaseRisk: 0.03 } } },
+      ] },
+      { id: 'prove', label: '트랙에서 증명하겠다', hint: '겨울 내내 훈련. 속도·일관성 성장', outcomes: [
+        { p: 1, text: '말 대신 랩타임으로 답하기로 했다. 겨울 훈련 강도를 올렸다.', effect: { stats: { pace: 1, consistency: 1 }, pressure: 5 } },
+      ] },
+      { id: 'team', label: '팀을 위해 함께 간다', hint: '팀 분위기·평판 상승, 팬은 아쉬워함', outcomes: [
+        { p: 1, text: '{mate}와 함께 팀을 끌어올리겠다고 밝혔다. 팀 수뇌부가 반겼다.', effect: { reputation: 3, pressure: -6, sentiment: -4, flags: { releaseRisk: -0.02 } } },
+      ] },
+    ],
+  },
+  {
+    id: RIVALRY_BEHIND_ID, category: 'career', title: '팀 내 1인자 경쟁',
+    text: '{mate}와 시즌 내내 팽팽했다({h2h}). 근소하게 밀렸고, {team} 안에서는 {mate} 쪽으로 무게가 기운다는 말이 나온다.',
+    when: (x) => x.h2hClose && x.teammateBeat < 0.5,
+    options: [
+      { id: 'challenge', label: '동등한 대우를 요구한다', hint: '성공하면 반격 기회, 실패하면 입지 흔들림', outcomes: [
+        { p: 0.45, text: '팀이 동등한 기회를 약속했다. 다음 시즌이 진짜 승부다.', effect: { reputation: 2, pressure: 6 } },
+        { p: 0.55, text: '팀은 확답을 피했다. "성적으로 보여 달라."', effect: { pressure: 10, flags: { releaseRisk: 0.04 } } },
+      ] },
+      { id: 'prove', label: '트랙에서 되찾겠다', hint: '겨울 내내 훈련. 속도·레이스크래프트 성장', outcomes: [
+        { p: 1, text: '데이터를 밤새 비교하며 차이를 찾았다.', effect: { stats: { pace: 1, racecraft: 1 }, pressure: 5 } },
+      ] },
+      { id: 'accept', label: '지금은 팀 플레이에 집중한다', hint: '압박은 줄지만 2번 드라이버로 굳어질 수 있다', outcomes: [
+        { p: 1, text: '팀 오더도 받아들이겠다고 했다. 팀은 고마워했다.', effect: { pressure: -8, reputation: 1, sentiment: -5, flags: { releaseRisk: -0.02 } } },
+      ] },
+    ],
+  },
   {
     id: 'team_leader', category: 'career', title: '팀 리더 역할 제안',
     text: '{team}이 다음 시즌 팀의 개발 방향을 이끄는 리더 역할을 맡아 달라고 했다.',
@@ -370,6 +412,7 @@ export function eventContext(c: Career, last: SeasonRecord): EventCtx {
       : 99,
     teammateBeat: last.teammateBeat,
     family: !!c.family,
+    h2hClose: last.series === 'f1' && last.seat === 'race' && h2hClose(last.h2h),
   };
 }
 
@@ -385,7 +428,7 @@ export function pickEvents(c: Career, last: SeasonRecord): string[] {
   const x = eventContext(c, last);
   // 에이전트 제안을 거절했으면 1~2 오프시즌 뒤에 다시 찾아온다(계약할 때까지)
   const agentBack = agentReturns(c) && EVENT_BY_ID.get(AGENT_EVENT_ID)!.when(x);
-  const pool = EVENTS.filter((e) => e.category !== 'interview' && !recent.has(e.id) && e.when(x) && !(agentBack && e.id === AGENT_EVENT_ID));
+  const pool = EVENTS.filter((e) => e.category !== 'interview' && !RIVALRY_IDS.has(e.id) && !recent.has(e.id) && e.when(x) && !(agentBack && e.id === AGENT_EVENT_ID));
   const picked: string[] = [];
   if (last.seat === 'race' && last.series !== 'kart') {
     const ri = rngFor(c.seed, 'interview', c.year);
@@ -398,10 +441,17 @@ export function pickEvents(c: Career, last: SeasonRecord): string[] {
     pool.splice(pool.indexOf(e), 1);
   }
   if (agentBack) picked.push(AGENT_EVENT_ID);
+  // 팽팽한 팀메이트 맞대결 뒤에는 1인자 경쟁 이벤트(최근 2년 안에 없었을 때)
+  const recent2 = (c.eventLog ?? []).some((e) => e.year > c.year - 2 && RIVALRY_IDS.has(e.id));
+  if (!recent2) {
+    const rv = EVENTS.find((e) => RIVALRY_IDS.has(e.id) && e.when(x));
+    if (rv) picked.push(rv.id);
+  }
   return picked;
 }
 
 export const AGENT_EVENT_ID = 'agent_change';
+
 
 /** 마지막 에이전트 제안을 거절했고, 그 뒤로 1~2 오프시즌(시드로 정함)이 지났으면 true */
 export function agentReturns(c: Career): boolean {
@@ -423,7 +473,11 @@ export function unitsToEur(c: Career, units: number): number {
 
 export function fillText(t: string, c: Career, amount?: number): string {
   const team = c.contract?.team ?? '팀';
-  return fixJosa(t.replaceAll('{name}', c.driver.name).replaceAll('{team}', team).replaceAll('{amount}', amount !== undefined ? eurText(amount) : ''), [c.driver.name, team]);
+  const h = [...c.history].reverse().find((r) => r.h2h)?.h2h;
+  const mate = h?.mate ?? '팀메이트';
+  const h2h = h ? `결승 ${h.race[0]}-${h.race[1]}, 퀄리파잉 ${h.quali[0]}-${h.quali[1]}, 포인트 ${h.points[0]}-${h.points[1]}` : '';
+  return fixJosa(t.replaceAll('{name}', c.driver.name).replaceAll('{team}', team).replaceAll('{mate}', mate).replaceAll('{h2h}', h2h)
+    .replaceAll('{amount}', amount !== undefined ? eurText(amount) : ''), [c.driver.name, team, mate]);
 }
 
 // ── 기자회견 변수(SPEC §6 v0.30): 어느 매체가, 어떤 분위기에서 묻느냐에 따라 같은 답도 결과가 달라진다 ──
