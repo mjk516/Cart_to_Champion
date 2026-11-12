@@ -8,6 +8,11 @@ import { defineConfig, type Plugin } from 'vite';
  * - macOS는 80번 포트를 '모든 주소'로 열 때만 관리자 권한 없이 허용해서 host가 0.0.0.0이다.
  *   같은 네트워크의 기기도 IP로 접속할 수 있으므로 allowedHosts로 이름 접속을 제한하고 Vite는 보안 패치된 버전을 쓴다.
  */
+// 공유 미리보기 이미지 주소: GitHub Actions는 SITE_URL 변수, Vercel은 프로덕션 주소를 쓴다(없으면 상대 경로)
+if (!process.env.VITE_SITE_URL && process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+  process.env.VITE_SITE_URL = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}/`;
+}
+
 const HOST_NAME = 'cart-to-champion';
 const PORT = 80;
 const OLD_PORT = 5173;

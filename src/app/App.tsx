@@ -9,6 +9,7 @@ import { Retired } from './Retired';
 import { Weekend } from './Weekend';
 import { Home } from './Home';
 import { Settings } from './Screens';
+import { onOldSite, SITE_URL } from './site';
 import { requestPersistentStorage, useGame } from './store';
 
 export function App() {
@@ -32,6 +33,12 @@ export function App() {
           <button onClick={() => go('settings')} className="text-xs text-zinc-400 hover:text-zinc-200">설정</button>
         </div>
       </nav>
+      {onOldSite() && (
+        <div role="status" className="border-b border-amber-400/30 bg-amber-400/10 px-4 py-2 text-center text-xs leading-relaxed text-amber-100">
+          새 주소로 옮겼어요: <a href={SITE_URL} className="font-bold underline">{SITE_URL.replace(/^https:\/\//, '').replace(/\/$/, '')}</a>
+          {' '}· 커리어는 <button onClick={() => go('settings')} className="underline">설정 → 내보내기</button>로 받아 새 주소에서 가져오세요.
+        </div>
+      )}
       {effective === 'home' && <Home />}
       {effective === 'create' && <Create />}
       {effective === 'dashboard' && <Dashboard />}
