@@ -10,6 +10,7 @@ export * from './growth';
 export * from './media';
 export * from './career';
 export * from './endurance';
+export * from './coach';
 export * from './form';
 export * from './events';
 export * from './feed';

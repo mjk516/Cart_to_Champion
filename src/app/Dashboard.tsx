@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  circuitById, enduranceOffer, inMilitary, seasonChatter, isF1RaceSeason, managerOf, MANAGER_STYLE_LABEL, ovr, PERSONALITIES, recommendedPlan, seriesLabel, STAT_KEYS, superLicencePoints, TRAINING, TRAINING_SLOTS,
+  circuitById, coachAdvice, enduranceOdds, enduranceOffer, followsCoach, inMilitary, seasonChatter, isF1RaceSeason, managerOf, MANAGER_STYLE_LABEL, ovr, PERSONALITIES, recommendedPlan, seriesLabel, STAT_KEYS, superLicencePoints, TRAINING, TRAINING_SLOTS,
   TRAINING_SLOTS_RESERVE, xpNeeded, type TrainingId,
 } from '../engine';
 import { formatMoney } from './format';
@@ -35,18 +35,22 @@ function TrainingEffect({ id }: { id: TrainingId }) {
 }
 
 export function Dashboard() {
-  const { career: c, showKrw, playSeason, live, startLive, finishLive, retire, go } = useGame();
+  const { career: c, showKrw, playSeason, live, startLive, finishLive, retire, go, planDraft, setPlanDraft } = useGame();
   const [running, setRunning] = useState(false);
   const confirmBox = useConfirm();
   const slots = c?.contract?.seat === 'race' || !c?.contract ? TRAINING_SLOTS : TRAINING_SLOTS_RESERVE;
-  const [plan, setPlan] = useState<TrainingId[]>(() => (c ? recommendedPlan(c.driver.stats, 'weakness', slots, c.driver.focus) : []));
+  // 짜던 훈련 계획은 저장해 두었다가 다시 열면 그대로 보여 준다(같은 시즌일 때만)
+  const draftFor = (year: number | undefined) => (planDraft && planDraft.year === year && planDraft.plan.length >= slots ? planDraft : null);
+  const [plan, setPlanState] = useState<TrainingId[]>(() => draftFor(c?.year)?.plan ?? (c ? recommendedPlan(c.driver.stats, 'weakness', slots, c.driver.focus) : []));
+  const [endurance, setEnduranceState] = useState(() => draftFor(c?.year)?.endurance ?? false);
   useEffect(() => {
-    if (c) setPlan(recommendedPlan(c.driver.stats, 'weakness', slots, c.driver.focus));
+    const d = draftFor(c?.year);
+    if (c) setPlanState(d?.plan ?? recommendedPlan(c.driver.stats, 'weakness', slots, c.driver.focus));
+    setEnduranceState(d?.endurance ?? false);
     setRunning(false);
   }, [c?.year, slots]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const [endurance, setEndurance] = useState(false);
-  useEffect(() => setEndurance(false), [c?.year]);
+  const setPlan = (p: TrainingId[]) => { setPlanState(p); if (c) setPlanDraft({ year: c.year, plan: p, endurance }); };
+  const setEndurance = (v: boolean) => { setEnduranceState(v); if (c) setPlanDraft({ year: c.year, plan, endurance: v }); };
   const planCost = useMemo(() => plan.reduce((a, id) => a + TRAINING[id].cost, 0), [plan]);
   if (!c || c.retired) return null;
 
@@ -161,6 +165,36 @@ export function Dashboard() {
           ))}
         </div>
       }>
+        {(() => {
+          const adv = coachAdvice(c);
+          const following = followsCoach(c, plan);
+          const locked = !!live && live.year === c.year;
+          const person = (role: string, p: { name: string; skill: number }, lines: string[]) => (
+            <div className="flex gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-sm font-black text-emerald-200" aria-hidden>{p.name.slice(0, 1)}</div>
+              <div className="min-w-0">
+                <div className="text-xs text-zinc-400"><b className="text-zinc-200">{role} {p.name}</b> · 실력 {'★'.repeat(p.skill)}{'☆'.repeat(5 - p.skill)}</div>
+                {lines.map((l, i) => <p key={i} className="mt-0.5 text-sm text-zinc-100">“{l}”</p>)}
+              </div>
+            </div>
+          );
+          return (
+            <div aria-label="코치 조언" className={`mb-3 rounded-xl border p-3 ${following ? 'border-emerald-400/50 bg-emerald-400/10' : 'border-white/10 bg-white/5'}`}>
+              <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+                <span className="font-bold text-zinc-200">코치진</span><span>{adv.staff.source}</span>
+                {following ? <Pill tone="green">조언대로 짠 계획</Pill> : <Pill tone="zinc">조언과 다른 계획</Pill>}
+              </div>
+              <div className="space-y-2">
+                {person('드라이빙 코치', adv.staff.coach, adv.coachLines)}
+                {person('피지컬 트레이너', adv.staff.trainer, adv.trainerLines)}
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+                <span>조언대로 하면 손해 보지 않습니다: 과훈련·압박 실수·자금 부족으로 인한 훈련 축소가 없고, 훈련 효과 +{Math.round((adv.bonus - 1) * 100)}%.</span>
+                {!following && !locked && <Button className="ml-auto !px-3 !py-1.5 text-xs" onClick={() => setPlan([...adv.plan])}>코치 조언대로 짜기</Button>}
+              </div>
+            </div>
+          );
+        })()}
         <div className="grid gap-2 sm:grid-cols-3">
           {plan.map((id, i) => (
             <div key={i} className="flex flex-col gap-1">
@@ -197,7 +231,7 @@ export function Dashboard() {
                 <b>🏁 {offer.when} · {offer.name} 출전</b>
                 <span className="mt-0.5 block text-xs leading-relaxed text-zinc-400">
                   이 팀에서 {offer.teamSeasons}시즌을 보내며 팀메이트를 앞섰고, 입지가 단단해져서 팀이 그랑프리 사이 내구레이스 출전을 허락했습니다.
-                  클래스 우승 45%(레이스크래프트·우천·일관성 ▲, 팬 +15%) · 완주 43%(일관성·타이어 ▲) · 사고 12%(압박 +, 방출 위험 +).
+                  지금 실력이면 포디움 약 {Math.round((1 - enduranceOdds(ovr(d.stats)).dnf) * enduranceOdds(ovr(d.stats)).podium * 100)}%. 포디움에 오르면 능력치가 실제로 오릅니다(우승: 레이스크래프트 +2·우천·일관성·타이어 +1, 2·3위: 일관성·타이어 +1 등). 포디움 밖이면 능력치는 그대로, 사고 10%(압박 +, 방출 위험 +).
                   {locked ? ' 시즌이 시작되어 바꿀 수 없습니다.' : ''}
                 </span>
               </span>

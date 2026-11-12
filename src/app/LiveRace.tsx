@@ -13,9 +13,17 @@ import { Pill } from './ui';
 
 const ME = 'player';
 const TYRE_COLOR: Record<string, string> = { S: '#ef4444', M: '#facc15', H: '#e5e7eb', I: '#22c55e' };
-/** 재생 배속. ×1이면 실제 레이스 속도(한 랩이 실제 랩타임만큼 걸린다) */
-const SPEEDS = [1, 5, 10, 30] as const;
+/** 재생 배속. ×1이면 실제 레이스 속도(한 랩이 실제 랩타임만큼 걸린다). ×1은 너무 느려 빼고 ×60을 둔다 */
+const SPEEDS = [5, 10, 30, 60] as const;
 const DEFAULT_SPEED = 10;
+const SPEED_KEY = 'kart-to-champion-speed';
+/** 마지막으로 고른 배속을 기억한다(이 기기에서만) */
+function loadSpeed(): number {
+  try {
+    const v = Number(localStorage.getItem(SPEED_KEY));
+    return (SPEEDS as readonly number[]).includes(v) ? v : DEFAULT_SPEED;
+  } catch { return DEFAULT_SPEED; }
+}
 
 interface Ctx { codeOf: (id: string) => string; colorOf: (id: string) => string }
 
@@ -227,8 +235,12 @@ function raceChats(seed: number, incidents: Incident[], started: boolean, upto: 
   return out;
 }
 
-export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant, chat, onRadio, onDone }: {
+export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant, chat, onRadio, onDone, startAt = 0, onProgress }: {
   input: RaceInput;
+  /** 이어 보기: 이 랩부터 시작한다(중간에 닫았던 레이스) */
+  startAt?: number;
+  /** 본 랩 수를 저장한다(몇 랩마다, 그리고 화면을 떠날 때) */
+  onProgress?: (lap: number) => void;
   /** 실시간 댓글. 없으면 댓글 칸을 그리지 않는다 */
   chat?: ChatContext;
   /** true면 실제 서킷 모양(F1 그랑프리 전용) */
@@ -242,9 +254,10 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
   const outcome = useMemo(() => runRace(instant ? { ...input, autoRadio: true } : input), [input, instant]);
   const laps = outcome.laps;
   // 지금까지 달린 랩 수(소수). 프레임마다 배속 × 실제 속도만큼 늘어난다
-  const [progress, setProgress] = useState(instant ? Number.MAX_SAFE_INTEGER : 0);
+  const [progress, setProgress] = useState(instant ? Number.MAX_SAFE_INTEGER : Math.max(0, Math.min(startAt, laps.length)));
   const [playing, setPlaying] = useState(!instant);
-  const [speed, setSpeed] = useState<number>(DEFAULT_SPEED);
+  const [speed, setSpeedState] = useState<number>(loadSpeed);
+  const setSpeed = (v: number) => { setSpeedState(v); try { localStorage.setItem(SPEED_KEY, String(v)); } catch { /* 무시 */ } };
   const done = useRef(false);
   const byId = useMemo(() => new Map(cars.map((c) => [c.id, c])), [cars]);
   const x: Ctx = { codeOf: (id) => byId.get(id)?.code ?? id, colorOf: (id) => colorOfTeam(byId.get(id)?.teamId ?? '') };
@@ -286,6 +299,28 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [playing, laps.length, p >= laps.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 이어 보기 저장: 3랩마다, 그리고 탭을 숨기거나 닫거나 화면을 떠날 때
+  const progressRef = useRef(p);
+  progressRef.current = p;
+  const savedLap = useRef(Math.floor(startAt));
+  const onProgressRef = useRef(onProgress);
+  onProgressRef.current = onProgress;
+  useEffect(() => {
+    if (instant || !onProgressRef.current) return;
+    if (cur - savedLap.current >= 3) { savedLap.current = cur; onProgressRef.current(cur); }
+  }, [cur, instant]);
+  useEffect(() => {
+    if (instant) return;
+    const flush = () => {
+      const lap = Math.floor(progressRef.current);
+      if (lap !== savedLap.current) { savedLap.current = lap; onProgressRef.current?.(lap); }
+    };
+    const onVis = () => { if (document.visibilityState === 'hidden') flush(); };
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('pagehide', flush);
+    return () => { document.removeEventListener('visibilitychange', onVis); window.removeEventListener('pagehide', flush); flush(); };
+  }, [instant]);
 
   const finished = outcome.status === 'finished' && p >= laps.length;
   useEffect(() => {

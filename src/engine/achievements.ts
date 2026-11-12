@@ -32,8 +32,12 @@ function cumulative(c: Career, value: (h: SeasonRecord) => number, target: numbe
   return null;
 }
 
-/** 실제 F1 최연소 기록(만 나이, 정수로 내림). 게임 나이는 정수라 "이보다 어리면" 기록 경신으로 본다 */
-export const REAL_YOUNGEST = { winner: 18, pole: 21, champion: 23 } as const;
+/**
+ * 실제 F1 최연소 기록(만 나이, 정수로 내림, 2026 시즌 기준). 게임 나이는 정수라 "이보다 어리면" 기록 경신으로 본다.
+ * 폴: 안토넬리 19세(2026 중국 GP), 챔피언: 안토넬리 20세(2026). 우승·포디움: 페르스타펜 18세(2016 스페인 GP, 안토넬리는 19세 우승·18세 포디움으로 2위)
+ */
+export const REAL_YOUNGEST = { winner: 18, podium: 18, pole: 19, champion: 20 } as const;
+export const REAL_YOUNGEST_HOLDER = { winner: '막스 페르스타펜', podium: '막스 페르스타펜', pole: '키미 안토넬리', champion: '키미 안토넬리' } as const;
 
 export const ACHIEVEMENTS: AchievementDef[] = [
   // 하부 리그
@@ -102,7 +106,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'rich', group: 'special', title: '1억 유로 드라이버', desc: '통산 수입 €100M', check: (c) => cumulative(c, (h) => h.income, 100_000_000) },
   { id: 'star', group: 'special', title: '글로벌 스타', desc: '팔로워 100만 명', check: (c) => (c.media.followers >= 1_000_000 ? 0 : null) },
   { id: 'three_peat', group: 'special', title: '3연패', desc: 'F1 챔피언 3시즌 연속', check: (c) => { const s = titleStreak(c); return s && s.count >= 3 ? s.from + 2 : null; } },
-  { id: 'youngest_champ', group: 'special', title: '역대 최연소 챔피언', desc: `실제 F1 최연소 챔피언 기록(${REAL_YOUNGEST.champion}세)보다 어린 나이에 월드 챔피언`, check: (c) => first(c, (h) => h.series === 'f1' && h.champion && h.age < REAL_YOUNGEST.champion) },
+  { id: 'youngest_champ', group: 'special', title: '역대 최연소 챔피언', desc: `실제 F1 최연소 챔피언 기록(${REAL_YOUNGEST_HOLDER.champion} ${REAL_YOUNGEST.champion}세)보다 어린 나이에 월드 챔피언`, check: (c) => first(c, (h) => h.series === 'f1' && h.champion && h.age < REAL_YOUNGEST.champion) },
   { id: 'endurance_win', group: 'special', title: '24시간의 승자', desc: 'F1 시즌 사이 내구레이스에서 클래스 우승', check: (c) => (c.eventLog ?? []).find((e) => e.id === 'endurance_race' && e.text.includes('클래스 우승'))?.year ?? null },
   { id: 'legend', group: 'special', title: '팀 레전드', desc: '한 팀에서 8시즌 이상 뛰며 챔피언. 차 번호가 영구결번된다', check: (c) => teamLegend(c)?.year ?? null },
 ];
@@ -147,6 +151,7 @@ export function teamLegend(c: Career): { team: string; seasons: number; titles: 
 
 export interface CareerRecordsSummary {
   youngestWin: { age: number; year: number; beatsReal: boolean } | null;
+  youngestPodium: { age: number; year: number; beatsReal: boolean } | null;
   youngestPole: { age: number; year: number; beatsReal: boolean } | null;
   youngestChampion: { age: number; year: number; beatsReal: boolean } | null;
   mostWinsSeason: { wins: number; races: number; year: number; team: string | null } | null;
@@ -173,6 +178,7 @@ export function careerRecords(c: Career): CareerRecordsSummary {
   }
   return {
     youngestWin: youngest((h) => h.wins > 0, REAL_YOUNGEST.winner),
+    youngestPodium: youngest((h) => h.podiums > 0, REAL_YOUNGEST.podium),
     youngestPole: youngest((h) => h.poles > 0, REAL_YOUNGEST.pole),
     youngestChampion: youngest((h) => h.champion, REAL_YOUNGEST.champion),
     mostWinsSeason: most && most.wins > 0 ? { wins: most.wins, races: most.races, year: most.year, team: most.team } : null,
