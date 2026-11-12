@@ -68,6 +68,23 @@ function seatPlan(c: Career): SeatPlan {
   return { retiring, released, open };
 }
 
+/** 처음 F1에 올라가는 신인이 레이스 시트를 받는 팀(SPEC §7 v0.33). 이 안에서는 확률이 같다 */
+export const ROOKIE_TEAMS = ['racing_bulls', 'haas', 'williams', 'audi', 'aston_martin', 'alpine', 'cadillac'] as const;
+/** 이 아카데미 소속이면 해당 팀으로 올라갈 확률이 오른다(가중치 ×ROOKIE_ACADEMY_WEIGHT). 다른 아카데미는 반영하지 않는다 */
+export const ROOKIE_ACADEMY_TEAM: Record<string, string> = { 'Red Bull Junior Team': 'racing_bulls', 'Ferrari Driver Academy': 'haas' };
+export const ROOKIE_ACADEMY_WEIGHT = 3;
+/** 신인이 한 오프시즌에 받는 F1 레이스 제안 수 상한 */
+export const ROOKIE_MAX_OFFERS = 2;
+
+/** 신인 데뷔 팀 후보와 가중치. 목록의 팀이 3개 미만만 남아 있으면 차 성능 하위 7팀으로 대신한다 */
+export function rookieTeamWeights(c: Career): Array<{ teamId: string; weight: number }> {
+  const teams = c.world.teams.teams;
+  let ids: string[] = ROOKIE_TEAMS.filter((id) => teams.some((t) => t.id === id));
+  if (ids.length < 3) ids = [...teams].sort((a, b) => a.quality - b.quality).slice(0, 7).map((t) => t.id);
+  const boosted = c.academy ? ROOKIE_ACADEMY_TEAM[c.academy] : undefined;
+  return ids.map((teamId) => ({ teamId, weight: teamId === boosted ? ROOKIE_ACADEMY_WEIGHT : 1 }));
+}
+
 function maxYears(age: number): number {
   return age >= 39 ? 1 : age >= 36 ? 2 : 3;
 }
@@ -163,6 +180,8 @@ export function getOffseason(c: Career): Offseason {
     const homeMarket = c.f1Debut === null && hasHomeGp(c) ? HOME_MARKET_BONUS : 0;
     const rating = ovr(c.driver.stats) + f1Perf + c.media.reputation / 40 + graduate - agePenalty + homeMarket;
     const sortedTeams = [...c.world.teams.teams].sort((a, b) => b.quality - a.quality);
+    // 처음 F1에 올라가는 신인은 레이스 시트를 신인 팀 7곳에서 같은 확률로 받는다(아래에서 따로 만든다)
+    const rookie = c.f1Debut === null && !inF1Race;
     for (const t of sortedTeams) {
       const openSeats = plan.open.get(t.id) ?? 0;
       // 상위 4팀은 F1 경험이 없는 신인에게 더 높은 기준을 둔다(아카데미 소속이면 완화)
@@ -173,7 +192,7 @@ export function getOffseason(c: Career): Offseason {
       const req = teamRequirement(c, t.id) + rookiePenalty - rookieRelax - (academyTeams.includes(t.id) ? 2 : 0);
       const isMyTeam = inF1Race && c.contract?.teamId === t.id;
       const years = Math.max(1, Math.min(maxYears(nextAge), int(r, 1, 3)));
-      if (f1Eligible && openSeats > 0 && rating + normal(r) * 1.5 >= req - (isMyTeam ? 3 : 0)) {
+      if (!rookie && f1Eligible && openSeats > 0 && rating + normal(r) * 1.5 >= req - (isMyTeam ? 3 : 0)) {
         const salary = Math.round(clamp(1_000_000 + (rating - 76) * 1_400_000, 800_000, 45_000_000) * (0.6 + t.budget * 0.6));
         offers.push({
           id: `f1:${t.id}`, series: 'f1', team: t.name, teamId: t.id, seat: 'race', endYear: c.year + years, salary, seatCost: 0,
@@ -182,7 +201,7 @@ export function getOffseason(c: Career): Offseason {
         continue;
       }
       const bottom3 = sortedTeams.indexOf(t) >= sortedTeams.length - 3;
-      if (f1Eligible && openSeats > 0 && bottom3 && !isMyTeam && (c.driver.wealthTier >= 4 || c.funds >= 8_000_000) && rating >= req - 8) {
+      if (!rookie && f1Eligible && openSeats > 0 && bottom3 && !isMyTeam && (c.driver.wealthTier >= 4 || c.funds >= 8_000_000) && rating >= req - 8) {
         const cost = Math.round(5_000_000 + (t.quality - 0.75) * 50_000_000);
         offers.push({
           id: `f1pay:${t.id}`, series: 'f1', team: t.name, teamId: t.id, seat: 'race', endYear: nextYear, salary: 0, seatCost: cost,
@@ -204,7 +223,56 @@ export function getOffseason(c: Career): Offseason {
     const rookieGuarantee =
       f1Eligible && !inF1Race && nextAge <= 25 &&
       ((current === 'f2' && last.seat === 'race' && (last.position ?? 99) <= (homeMarket ? ROOKIE_GUARANTEE_POS_HOME : ROOKIE_GUARANTEE_POS)) || (current === 'f1' && last.seat === 'reserve'));
-    if (rookieGuarantee && !hasRaceOffer) {
+    if (rookie && f1Eligible) {
+      // 몇 곳에서 제안이 오는지는 실력(신인 팀 기준을 몇 곳이나 넘는지)으로, 어느 팀인지는 같은 확률 추첨으로 정한다
+      const weights = rookieTeamWeights(c);
+      const pool = weights.map((w) => sortedTeams.find((t) => t.id === w.teamId)!);
+      const reqOf = (id: string) => teamRequirement(c, id) - 3 - (academyTeams.includes(id) ? 2 : 0);
+      let count = pool.filter((t) => rating + normal(r) * 1.5 >= reqOf(t.id)).length;
+      if (rookieGuarantee) count = Math.max(count, 1);
+      count = Math.min(count, ROOKIE_MAX_OFFERS);
+      const rd = rngFor(c.seed, 'rookie-team', c.year);
+      const bag = [...weights];
+      const order: string[] = [];
+      while (bag.length) {
+        const total = bag.reduce((a, w) => a + w.weight, 0);
+        let x = rd() * total;
+        const i = Math.max(0, bag.findIndex((w) => (x -= w.weight) < 0));
+        order.push(bag.splice(i, 1)[0]!.teamId);
+      }
+      const seatAt = (id: string) => {
+        if ((plan.open.get(id) ?? 0) > 0) return { displace: undefined as string | undefined };
+        const d = c.world.drivers
+          .filter((x) => x.teamId === id && !x.retired && !plan.retiring.includes(x.id) && !plan.released.includes(x.id))
+          .sort((a, b) => ovr(a.stats) - ovr(b.stats))[0];
+        return d ? { displace: d.id, name: d.name } : null;
+      };
+      for (const id of order.slice(0, count)) {
+        const t = pool.find((x) => x.id === id)!;
+        const seat = seatAt(id);
+        if (!seat) continue;
+        const years = Math.max(1, Math.min(maxYears(nextAge), int(rd, 1, 2)));
+        const salary = Math.round(clamp(900_000 + (rating - 76) * 900_000, 800_000, 6_000_000) * (0.6 + t.budget * 0.6));
+        offers.push({
+          id: `f1:${t.id}`, series: 'f1', team: t.name, teamId: t.id, seat: 'race', endYear: c.year + years, salary, seatCost: 0,
+          teamQuality: t.quality, facility: t.budget, years, affordable: true, displaceDriverId: seat.displace,
+          note: seat.displace && 'name' in seat ? `F1 레이스 시트 · ${t.name}가 신인을 위해 ${seat.name}의 자리를 비웠다` : 'F1 레이스 시트(데뷔)',
+        });
+      }
+      // 레이스 제안이 없고 돈이 있으면 추첨 1순위 팀이 페이 시트를 내민다
+      const minReq = Math.min(...pool.map((t) => reqOf(t.id)));
+      if (count === 0 && (c.driver.wealthTier >= 4 || c.funds >= 8_000_000) && rating >= minReq - 8) {
+        const t = pool.find((x) => x.id === order[0])!;
+        const seat = seatAt(t.id);
+        if (seat) {
+          const cost = Math.round(5_000_000 + (t.quality - 0.75) * 50_000_000);
+          offers.push({
+            id: `f1pay:${t.id}`, series: 'f1', team: t.name, teamId: t.id, seat: 'race', endYear: nextYear, salary: 0, seatCost: cost,
+            teamQuality: t.quality, facility: t.budget, years: 1, affordable: cost <= c.funds, displaceDriverId: seat.displace, note: '페이 시트(스폰서 자금으로 시트 확보)',
+          });
+        }
+      }
+    } else if (rookieGuarantee && !hasRaceOffer) {
       const bottom = sortedTeams.slice(-4);
       const target = bottom
         .flatMap((t) => c.world.drivers.filter((d) => d.teamId === t.id && !d.retired && !plan.retiring.includes(d.id) && !plan.released.includes(d.id)).map((d) => ({ t, d })))
