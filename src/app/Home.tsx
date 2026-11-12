@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import { f1Calendar, seriesLabel, type Career } from '../engine';
 import { HelmetView } from './Helmet';
-import { listBackups, resumeScreen, useGame, type BackupEntry, type LiveSeason } from './store';
+import { deleteBackup, listBackups, resumeScreen, useGame, type BackupEntry, type LiveSeason } from './store';
 import { Button, Card, useConfirm } from './ui';
 
 const JOURNEY = [
@@ -104,6 +104,9 @@ export function Home() {
     if (active) confirmBox.ask(<>지금 커리어({active.driver.name})를 두고 <b>{b.name}</b>의 커리어를 불러올까요? 지금 커리어도 자동 백업에 남습니다.</>, run, { confirmLabel: '불러오기' });
     else run();
   };
+  const remove = (b: BackupEntry) => confirmBox.ask(
+    <><b>{b.name}</b>({b.year}년{b.retired ? ' · 은퇴' : ''})의 자동 백업을 지울까요? 지우면 되돌릴 수 없습니다. 필요하면 먼저 불러와서 설정 → 내보내기로 파일을 받아 두세요.</>,
+    () => setBackups(deleteBackup(b.seed)), { confirmLabel: '삭제', danger: true });
 
   return (
     <div className="mx-auto max-w-md space-y-3 px-4 pb-36 pt-5">
@@ -151,13 +154,21 @@ export function Home() {
           <p className="mb-2 text-xs text-zinc-400">커리어마다 마지막 상태가 이 기기에 자동으로 남습니다(최근 3개). 새 커리어를 시작했어도 지난 커리어를 다시 불러올 수 있습니다.</p>
           <div className="space-y-2">
             {others.map((b) => (
-              <button key={b.seed} onClick={() => restore(b)} className="flex w-full items-center gap-3 rounded-xl bg-white/5 p-3 text-left hover:bg-white/10">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-bold">{b.name}</div>
-                  <div className="text-xs text-zinc-400">{b.year}년{b.retired ? ' · 은퇴' : ''} · {ago(b.savedAt)} 저장</div>
-                </div>
-                <span className="text-sm font-bold text-racing">불러오기 ›</span>
-              </button>
+              <div key={b.seed} className="flex items-stretch gap-1.5">
+                <button onClick={() => restore(b)} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl bg-white/5 p-3 text-left hover:bg-white/10">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-bold">{b.name}</div>
+                    <div className="text-xs text-zinc-400">{b.year}년{b.retired ? ' · 은퇴' : ''} · {ago(b.savedAt)} 저장</div>
+                  </div>
+                  <span className="shrink-0 text-sm font-bold text-racing">불러오기 ›</span>
+                </button>
+                <button onClick={() => remove(b)} aria-label={`백업 삭제: ${b.name}`} title="백업 삭제"
+                  className="flex w-11 shrink-0 items-center justify-center rounded-xl bg-white/5 text-zinc-400 hover:bg-red-500/15 hover:text-red-300">
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
+                  </svg>
+                </button>
+              </div>
             ))}
           </div>
         </Card>

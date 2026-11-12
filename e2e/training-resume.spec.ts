@@ -89,9 +89,28 @@ test.describe('중간에 멈춘 곳부터 이어하기', () => {
     await page.getByRole('button', { name: '새 커리어 시작하기' }).click();
     await page.getByRole('alertdialog').getByRole('button', { name: '새로 시작' }).click();
     await page.getByRole('button', { name: '취소' }).click();
-    const backup = page.getByRole('button', { name: /백업왕/ });
+    const backup = page.getByRole('button', { name: /백업왕.*불러오기/ });
     await expect(backup).toBeVisible();
     await backup.click();
     await expect(page.getByText(/시즌 결과/).first()).toBeVisible();
+  });
+
+  test('자동 백업 삭제: 확인하면 목록과 저장소에서 지우고, 취소하면 남긴다', async ({ page }) => {
+    const c = createCareer({ seed: 7, name: '지울백업', nationality: 'GB', wealthTier: 3, personality: 'calm', candidateIndex: 0, focus: ['pace'] });
+    await page.goto('/');
+    await page.evaluate(([k, data]) => {
+      localStorage.setItem(k as string, JSON.stringify([{ seed: 7, name: '지울백업', year: 2026, retired: false, savedAt: new Date().toISOString(), data }]));
+    }, ['kart-to-champion-backups', JSON.stringify({ app: 'kart-to-champion', saveVersion: 1, career: c })] as const);
+    await page.reload();
+    const del = page.getByRole('button', { name: '백업 삭제: 지울백업' });
+    await del.click();
+    await expect(page.getByRole('alertdialog')).toContainText('되돌릴 수 없습니다');
+    await page.getByRole('alertdialog').getByRole('button', { name: '취소' }).click();
+    await expect(del).toBeVisible();
+    await del.click();
+    await page.getByRole('alertdialog').getByRole('button', { name: '삭제' }).click();
+    await expect(page.getByRole('button', { name: /지울백업/ })).toHaveCount(0);
+    const left = await page.evaluate(() => JSON.parse(localStorage.getItem('kart-to-champion-backups') ?? '[]').length);
+    expect(left).toBe(0);
   });
 });

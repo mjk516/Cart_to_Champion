@@ -197,6 +197,13 @@ export function listBackups(): BackupEntry[] {
   return readBackups();
 }
 
+/** 자동 백업 하나를 지운다(그 커리어의 백업만, 지금 저장된 커리어는 그대로) */
+export function deleteBackup(seed: number): BackupEntry[] {
+  const list = readBackups().filter((b) => b.seed !== seed);
+  try { localStorage.setItem(BACKUP_KEY, JSON.stringify(list)); } catch { /* 저장소를 못 쓰면 그대로 */ }
+  return list;
+}
+
 /** 커리어마다 최근 상태 하나씩, 최근 것 3개까지 따로 보관한다(새 커리어를 시작해도 지난 커리어를 되살릴 수 있게) */
 function writeBackup(data: string, c: Career): void {
   try {
