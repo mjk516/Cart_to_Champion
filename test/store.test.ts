@@ -57,3 +57,31 @@ describe('기자회견 자동 응답', () => {
 
 import { DEFAULT_POLICY, EVENT_BY_ID, getOffseason } from '../src/engine';
 function pendingFirstOption(id: string): string { return EVENT_BY_ID.get(id)!.options[0]!.id; }
+
+import { firstNameOf } from '../src/engine';
+
+describe('이전 저장 파일 이름 정리 (v0.39)', () => {
+  it('가져오면 겹치는 가상 드라이버 이름을 한 번만 새로 짓는다', () => {
+    useGame.getState().startCareer({ ...setup, seed: 77 }, { strokes: [] });
+    expect(useGame.getState().career!.flags?.namesV2).toBe(1);
+    const old = structuredClone(useGame.getState().career!);
+    delete old.flags!.namesV2;
+    const base = old.world.drivers.find((d) => d.real)!;
+    const fake = (id: string, name: string) => ({ ...structuredClone(base), id, name, code: 'XXX', nationality: 'KR', real: false });
+    old.world.drivers.push(fake('gen_a', 'Min-jun Park'), fake('gen_b', 'Min-jun Kim'), fake('gen_c', 'Min-jun Lee'));
+    old.world.champions.push({ year: 2030, driverId: 'gen_b', name: 'Min-jun Kim', teamId: base.teamId ?? '' });
+    expect(useGame.getState().importSave(JSON.stringify({ app: 'kart-to-champion', saveVersion: 1, career: old }))).toBe(true);
+    const c = useGame.getState().career!;
+    expect(c.flags?.namesV2).toBe(1);
+    const fic = c.world.drivers.filter((d) => !d.real);
+    const firsts = fic.map((d) => firstNameOf(d.name, d.nationality));
+    expect(new Set(firsts).size).toBe(firsts.length);
+    expect(fic.find((d) => d.id === 'gen_a')!.name).toBe('Min-jun Park');
+    const b = fic.find((d) => d.id === 'gen_b')!;
+    expect(b.name).not.toBe('Min-jun Kim');
+    expect(c.world.champions.at(-1)!.name).toBe(b.name);
+    // 플래그가 있으면 다시 가져와도 그대로
+    useGame.getState().importSave(JSON.stringify({ app: 'kart-to-champion', saveVersion: 1, career: c }));
+    expect(useGame.getState().career!.world.drivers.find((d) => d.id === 'gen_b')!.name).toBe(b.name);
+  });
+});

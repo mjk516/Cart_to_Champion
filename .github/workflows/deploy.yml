@@ -13,12 +13,13 @@ permissions:
 concurrency:
   group: pages
   cancel-in-progress: true
+# 액션은 Node 24 버전(checkout·setup-node v7, Pages v5), 러너는 ubuntu-24.04로 고정(ubuntu-latest가 26으로 바뀌어도 Playwright 의존성 설치가 깨지지 않게)
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -31,15 +32,15 @@ jobs:
       - run: npm run build
         env:
           VITE_SITE_URL: ${{ vars.SITE_URL || './' }}
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
   deploy:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

@@ -1,0 +1,115 @@
+// 화면 흐름 E2E: F1 라이브 주말·레이스·내구레이스·기사
+import {
+  applyOffseason, createCareer, DEFAULT_POLICY, enduranceOffer, f1WeekendFor, getOffseason, isF1RaceSeason, pendingEventCards, previewEndurance, resolveEvent, runRace, runSeason, type Career,
+} from '../src/engine';
+import { expect, f1Career, KEY, loadSave, resolveAllEvents, test, useCleanStorage } from './helpers';
+
+useCleanStorage();
+
+test('F1 라이브: 주말 진행 중 남은 시즌 자동 진행 → 오프시즌', async ({ page }) => {
+  const c = f1Career();
+  await loadSave(page, c);
+  await page.getByRole('button', { name: /시즌 라이브로 시작/ }).click();
+  await expect(page.getByText('이번 주말 전망')).toBeVisible();
+  await page.getByRole('button', { name: '다음 세션' }).click();
+  await page.getByRole('button', { name: '남은 시즌 자동 진행' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '남은 시즌 자동 진행' }).click();
+  await expect(page.getByText(`${c.year} 시즌 결과`)).toBeVisible();
+  const races = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)!).state.career.history.at(-1).races, KEY);
+  expect(races).toBeGreaterThanOrEqual(23);
+});
+
+test('F1 라이브 중 대시보드의 "남은 시즌 한 번에 진행"이 진행 상태를 이어받는다', async ({ page }) => {
+  const c = f1Career();
+  await loadSave(page, c);
+  await page.getByRole('button', { name: /시즌 라이브로 시작/ }).click();
+  await page.getByRole('button', { name: '다음 세션' }).click();
+  await page.getByRole('button', { name: /카트에서 챔피언까지/ }).first().click(); // 홈
+  await page.getByRole('button', { name: /이어하기/ }).first().click();
+  await page.getByRole('button', { name: '대시보드', exact: true }).click();
+  await page.getByRole('button', { name: '남은 시즌 한 번에 진행' }).click();
+  await expect(page.getByText(`${c.year} 시즌 결과`)).toBeVisible();
+  // 시즌 결과에 드라이버·컨스트럭터 최종 순위표
+  await expect(page.getByRole('region', { name: '드라이버 챔피언십 순위' }).locator('li').nth(9)).toBeVisible();
+  await expect(page.getByRole('region', { name: '컨스트럭터 챔피언십 순위' }).locator('li')).not.toHaveCount(0);
+  // 한 번에 진행한 시즌에도 주요 결승 기사
+  await expect(page.getByRole('region', { name: '시즌 주요 기사' }).locator('details').first()).toBeVisible();
+});
+
+test('F1 레이스: 첫 랩부터 트랙 뷰가 계속 보이고, 결과·댓글이 아래에 붙는다. 챔피언십 표는 주말 시작에만', async ({ page }) => {
+  const c = f1Career();
+  await loadSave(page, c);
+  await page.getByRole('button', { name: /시즌 라이브로 시작/ }).click();
+  await expect(page.getByRole('heading', { name: '챔피언십 순위' })).toBeVisible();
+  const track = page.locator('svg[aria-label^="트랙 뷰"]');
+  // 프랙티스·퀄리파잉을 넘기고 첫 레이스(스프린트 또는 결승)까지
+  for (let i = 0; i < 4 && !(await track.isVisible().catch(() => false)); i++) await page.getByRole('button', { name: '다음 세션' }).click();
+  await expect(track).toBeVisible();
+  await expect(page.getByRole('heading', { name: '챔피언십 순위' })).toHaveCount(0);
+  await expect(page.getByRole('group', { name: '트랙 뷰 배속' })).toBeVisible();
+  await expect(page.getByRole('group', { name: '트랙 뷰 배속' }).getByRole('button')).toHaveText(['×5', '×10', '×30', '×60']);
+  // 결과까지 넘기면(무전은 추천) 트랙 뷰는 체커기 장면으로 남는다
+  for (let i = 0; i < 12; i++) {
+    const radio = page.getByRole('dialog', { name: '엔지니어 무전' });
+    if (await radio.isVisible().catch(() => false)) await radio.getByRole('button').filter({ hasText: '추천' }).first().click();
+    const skip = page.getByRole('button', { name: '다음 결정·결과까지' });
+    if (!(await skip.isVisible().catch(() => false))) break;
+    await skip.click();
+  }
+  await expect(track).toHaveAttribute('aria-label', /체커기/);
+  await expect(page.getByText('결과', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('실시간 댓글').locator('li')).not.toHaveCount(0);
+});
+
+test('주말 시작에서 퀄리파잉으로 바로 갈 수 있다(프랙티스 건너뛰기)', async ({ page }) => {
+  await loadSave(page, f1Career());
+  await page.getByRole('button', { name: /시즌 라이브로 시작/ }).click();
+  await page.getByRole('button', { name: /퀄리파잉으로 바로 가기/ }).click();
+  await expect(page.getByText(/퀄리파잉 결과/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /퀄리파잉으로 바로 가기/ })).toHaveCount(0);
+});
+
+test('내구레이스: 팀 입지가 단단하면 훈련 계획에서 출전을 고르고, 휴식기 다음 주말에 결과가 나온다', async ({ page }) => {
+  const c = f1Career((x) => !!enduranceOffer(x), 5);
+  const offer = enduranceOffer(c)!;
+  await loadSave(page, c);
+  const box = page.getByRole('checkbox', { name: '내구레이스 출전' });
+  await expect(box).toBeVisible();
+  await expect(page.getByText(offer.name)).toBeVisible();
+  await box.check();
+  await page.getByRole('button', { name: /시즌 라이브로 시작/ }).click();
+  await expect(page.getByLabel('내구레이스')).toHaveCount(0);
+  // 휴식기 다음 라운드로 옮겨 결과 카드를 본다
+  await page.evaluate(([k, r]) => {
+    const s = JSON.parse(localStorage.getItem(k as string)!);
+    s.state.live.round = r; localStorage.setItem(k as string, JSON.stringify(s));
+  }, [KEY, offer.afterRound + 1] as const);
+  await page.reload();
+  await expect(page.getByLabel('내구레이스')).toContainText(previewEndurance(c)!);
+  await page.getByRole('button', { name: '남은 시즌 자동 진행' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '남은 시즌 자동 진행' }).click();
+  await expect(page.getByText(`${c.year} 시즌 결과`)).toBeVisible();
+  const log = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)!).state.career.choiceLog.at(-1), KEY);
+  expect(log.endurance).toBe(true);
+});
+
+test('결승 뒤 기사와 SNS 글 고르기, 리타이어한 차는 OUT', async ({ page }) => {
+  const c = f1Career();
+  await loadSave(page, c);
+  await page.getByRole('button', { name: /시즌 라이브로 시작/ }).click();
+  await page.getByRole('button', { name: '레이스 결과로 바로 가기' }).click();
+  const article = page.getByRole('article', { name: '레이스 기사' });
+  await expect(article).toBeVisible();
+  await expect(article.getByRole('heading')).toContainText(c.driver.name);
+  const sns = page.getByRole('region', { name: 'SNS 게시' });
+  await expect(sns.getByText('성격다운 글')).toBeVisible();
+  await sns.getByRole('button').first().click();
+  await expect(sns.getByText('시즌을 마칠 때 반영')).toBeVisible();
+  const saved = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)!).state.live.sns, KEY);
+  expect(saved).toEqual({ '0': 'signature' });
+  // 결과의 리타이어 수만큼 타이밍 타워에 OUT
+  const race = f1WeekendFor(c, DEFAULT_POLICY.training(c), 0).sessions.filter((s) => s.type === 'race').at(-1)!;
+  const out = race.type === 'race' ? runRace({ ...race.input, autoRadio: true }) : null;
+  const dnf = out && out.status === 'finished' ? out.classification.filter((r) => r.status === 'dnf').length : 0;
+  await expect(page.getByLabel('타이밍 타워').getByText('OUT', { exact: true })).toHaveCount(dnf);
+});

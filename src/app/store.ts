@@ -4,7 +4,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 import {
-  applyOffseason, createCareer, getOffseason, resolveEvent, runSeason,
+  applyOffseason, createCareer, getOffseason, renameDuplicateDrivers, resolveEvent, runSeason,
   type Career, type CareerSetup, type Offer, type RadioOptionId, type SeasonRecord, type TrainingId,
 } from '../engine';
 
@@ -160,6 +160,15 @@ const initial = {
   createDraft: null as CreateDraft | null,
 };
 
+/** 저장 파일을 열 때 한 번: 겹치는 가상 드라이버 이름을 새 이름 풀로 바꾼다(SPEC v0.39) */
+export function migrateCareer(c: Career | null): Career | null {
+  if (!c || c.flags?.namesV2) return c;
+  const next = structuredClone(c);
+  renameDuplicateDrivers(next);
+  next.flags = { ...(next.flags ?? {}), namesV2: 1 };
+  return next;
+}
+
 /** 진행 중인 커리어가 멈춘 곳 */
 export function resumeScreen(career: Career | null, live: LiveSeason | null): Screen {
   if (!career) return 'home';
@@ -235,7 +244,7 @@ export const useGame = create<State>()(
         set({ career: autoInterview(career, get().interviewAuto), lastRecord: record, live: null, screen: 'offseason' });
       },
       startCareer: (setup, signature) =>
-        set({ career: createCareer(setup), signature, firstF1Signature: null, contracts: [], lastRecord: null, screen: 'dashboard', createDraft: null, planDraft: null, live: null }),
+        set({ career: { ...createCareer(setup), flags: { namesV2: 1 } }, signature, firstF1Signature: null, contracts: [], lastRecord: null, screen: 'dashboard', createDraft: null, planDraft: null, live: null }),
       playSeason: (plan, endurance = false) => {
         const c = get().career;
         if (!c) return;
@@ -301,7 +310,7 @@ export const useGame = create<State>()(
           if (validSave(d)) return false;
           const live: LiveSeason | null = d.live && d.live.year === d.career.year ? d.live : null;
           set({
-            career: d.career, signature: d.signature ?? null, firstF1Signature: d.firstF1Signature ?? null,
+            career: migrateCareer(d.career), signature: d.signature ?? null, firstF1Signature: d.firstF1Signature ?? null,
             contracts: d.contracts ?? [], showKrw: d.showKrw ?? true, lastRecord: d.lastRecord ?? null, live,
             interviewAuto: d.interviewAuto ?? get().interviewAuto,
             screen: resumeScreen(d.career, live), planDraft: null,
@@ -322,7 +331,7 @@ export const useGame = create<State>()(
         interviewAuto: s.interviewAuto, seenTips: s.seenTips, planDraft: s.planDraft, createDraft: s.createDraft,
       }),
       // 이전 저장 파일에는 초안이 없다
-      merge: (persisted, current) => ({ ...current, ...(persisted as object), planDraft: (persisted as any)?.planDraft ?? null, createDraft: (persisted as any)?.createDraft ?? null }),
+      merge: (persisted, current) => ({ ...current, ...(persisted as object), career: migrateCareer((persisted as any)?.career ?? null), planDraft: (persisted as any)?.planDraft ?? null, createDraft: (persisted as any)?.createDraft ?? null }),
     },
   ),
 );
