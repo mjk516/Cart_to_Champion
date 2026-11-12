@@ -210,7 +210,7 @@ export function f1Calendar(c: Career): Circuit[] {
 }
 
 export type ChoiceLogEntry =
-  | { year: number; kind: 'training'; plan: TrainingId[]; radio?: Record<string, RadioOptionId> }
+  | { year: number; kind: 'training'; plan: TrainingId[]; radio?: Record<string, RadioOptionId>; endurance?: boolean }
   | { year: number; kind: 'event'; eventId: string; optionId: string }
   | { year: number; kind: 'offseason'; choice: OffseasonChoice };
 

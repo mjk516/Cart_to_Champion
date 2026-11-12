@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  circuitById, inMilitary, seasonChatter, isF1RaceSeason, managerOf, MANAGER_STYLE_LABEL, ovr, PERSONALITIES, recommendedPlan, seriesLabel, STAT_KEYS, superLicencePoints, TRAINING, TRAINING_SLOTS,
+  circuitById, enduranceOffer, inMilitary, seasonChatter, isF1RaceSeason, managerOf, MANAGER_STYLE_LABEL, ovr, PERSONALITIES, recommendedPlan, seriesLabel, STAT_KEYS, superLicencePoints, TRAINING, TRAINING_SLOTS,
   TRAINING_SLOTS_RESERVE, xpNeeded, type TrainingId,
 } from '../engine';
 import { formatMoney } from './format';
@@ -45,6 +45,8 @@ export function Dashboard() {
     setRunning(false);
   }, [c?.year, slots]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const [endurance, setEndurance] = useState(false);
+  useEffect(() => setEndurance(false), [c?.year]);
   const planCost = useMemo(() => plan.reduce((a, id) => a + TRAINING[id].cost, 0), [plan]);
   if (!c || c.retired) return null;
 
@@ -183,6 +185,25 @@ export function Dashboard() {
             ))}
           </ul>
         </details>
+        {(() => {
+          const offer = enduranceOffer(c);
+          if (!offer) return null;
+          const locked = !!live && live.year === c.year;
+          const on = locked ? !!live.endurance : endurance;
+          return (
+            <label className={`mt-3 flex items-start gap-3 rounded-xl border p-3 text-sm ${on ? 'border-amber-400/50 bg-amber-400/10' : 'border-white/10 bg-white/5'}`}>
+              <input type="checkbox" className="mt-1 h-4 w-4 accent-amber-400" checked={on} disabled={locked} onChange={(e) => setEndurance(e.target.checked)} aria-label="내구레이스 출전" />
+              <span>
+                <b>🏁 {offer.when} · {offer.name} 출전</b>
+                <span className="mt-0.5 block text-xs leading-relaxed text-zinc-400">
+                  이 팀에서 {offer.teamSeasons}시즌을 보내며 팀메이트를 앞섰고, 입지가 단단해져서 팀이 그랑프리 사이 내구레이스 출전을 허락했습니다.
+                  클래스 우승 45%(레이스크래프트·우천·일관성 ▲, 팬 +15%) · 완주 43%(일관성·타이어 ▲) · 사고 12%(압박 +, 방출 위험 +).
+                  {locked ? ' 시즌이 시작되어 바꿀 수 없습니다.' : ''}
+                </span>
+              </span>
+            </label>
+          );
+        })()}
         <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
           <span className="text-zinc-400">훈련 비용 {formatMoney(planCost, showKrw)}</span>
           {!plan.includes('rest') && <Pill tone="amber">휴식이 없으면 컨디션이 떨어지고 부상 위험이 커진다</Pill>}
@@ -191,19 +212,19 @@ export function Dashboard() {
               {live && live.year === c.year ? (
                 <Button onClick={() => go('weekend')}>진행 중인 시즌 이어하기 (라운드 {live.round + 1})</Button>
               ) : (
-                <Button onClick={() => startLive(plan)}>{c.year} 시즌 라이브로 시작</Button>
+                <Button onClick={() => startLive(plan, endurance)}>{c.year} 시즌 라이브로 시작</Button>
               )}
               {/* 라이브 시즌을 진행하던 중이면 지금까지의 무전 선택을 살려 남은 라운드를 마저 진행한다 */}
               <Button variant="ghost" disabled={running} onClick={() => {
                 const inLive = live && live.year === c.year;
                 setRunning(true);
-                setTimeout(() => (inLive ? finishLive() : playSeason(plan)), 30);
+                setTimeout(() => (inLive ? finishLive() : playSeason(plan, endurance)), 30);
               }}>
                 {running ? '시즌 진행 중…' : live && live.year === c.year ? '남은 시즌 한 번에 진행' : '한 번에 진행'}
               </Button>
             </div>
           ) : (
-            <Button className="ml-auto" disabled={running} onClick={() => { setRunning(true); setTimeout(() => playSeason(plan), 30); }}>
+            <Button className="ml-auto" disabled={running} onClick={() => { setRunning(true); setTimeout(() => playSeason(plan, endurance), 30); }}>
               {running ? '시즌 진행 중…' : `${c.year} 시즌 진행`}
             </Button>
           )}
