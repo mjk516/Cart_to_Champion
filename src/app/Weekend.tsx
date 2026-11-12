@@ -94,7 +94,7 @@ export function Weekend() {
       {confirmBox.dialog}
       <header className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <div className="text-xs text-zinc-400">{c.year} F1 · 라운드 {live.round + 1}/{rounds}</div>
+          <div className="flex items-center gap-2 text-xs text-zinc-400"><span>{c.year} F1 · 라운드 {live.round + 1}/{rounds}</span><button onClick={() => go('dashboard')} className="rounded-md border border-white/15 px-1.5 py-0.5 hover:bg-white/5">대시보드</button></div>
           <h1 className="text-2xl font-black">{wk.circuit.name}</h1>
           <div className="mt-1 flex flex-wrap gap-1">
             <Pill>{TYPE_LABEL[circuitType(wk.circuit)]}</Pill>
@@ -187,6 +187,8 @@ export function Weekend() {
                 cars={displayCars}
                 colorOfTeam={teamColor}
                 instant={skipped}
+                startAt={live.raceLap?.key === `${live.round}:${live.step}` ? live.raceLap.lap : 0}
+                onProgress={(lap) => updateLive({ raceLap: { key: `${live.round}:${live.step}`, lap } })}
                 chat={{
                   kr: c.driver.nationality === 'KR', name: c.driver.name,
                   hadPoints: c.history.some((h) => h.series === 'f1' && h.points > 0) || (live.points[ME] ?? 0) > 0,

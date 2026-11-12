@@ -8,12 +8,14 @@ import { Retired } from './Retired';
 import { Weekend } from './Weekend';
 import { Home } from './Home';
 import { Settings } from './Screens';
-import { useGame } from './store';
+import { requestPersistentStorage, useGame } from './store';
 
 export function App() {
   const { screen, career, go } = useGame();
   // 은퇴한 커리어는 항상 은퇴 화면으로
   const effective = career?.retired && (screen === 'dashboard' || screen === 'offseason') ? 'retired' : screen;
+  // 휴대폰 브라우저가 저장 데이터를 지우지 않게 요청(한 번)
+  useEffect(() => { requestPersistentStorage(); }, []);
   // 화면이나 시즌이 바뀌면 맨 위부터 보여 준다
   useEffect(() => { window.scrollTo(0, 0); }, [effective, career?.year]);
   return (

@@ -35,18 +35,22 @@ function TrainingEffect({ id }: { id: TrainingId }) {
 }
 
 export function Dashboard() {
-  const { career: c, showKrw, playSeason, live, startLive, finishLive, retire, go } = useGame();
+  const { career: c, showKrw, playSeason, live, startLive, finishLive, retire, go, planDraft, setPlanDraft } = useGame();
   const [running, setRunning] = useState(false);
   const confirmBox = useConfirm();
   const slots = c?.contract?.seat === 'race' || !c?.contract ? TRAINING_SLOTS : TRAINING_SLOTS_RESERVE;
-  const [plan, setPlan] = useState<TrainingId[]>(() => (c ? recommendedPlan(c.driver.stats, 'weakness', slots, c.driver.focus) : []));
+  // 짜던 훈련 계획은 저장해 두었다가 다시 열면 그대로 보여 준다(같은 시즌일 때만)
+  const draftFor = (year: number | undefined) => (planDraft && planDraft.year === year && planDraft.plan.length >= slots ? planDraft : null);
+  const [plan, setPlanState] = useState<TrainingId[]>(() => draftFor(c?.year)?.plan ?? (c ? recommendedPlan(c.driver.stats, 'weakness', slots, c.driver.focus) : []));
+  const [endurance, setEnduranceState] = useState(() => draftFor(c?.year)?.endurance ?? false);
   useEffect(() => {
-    if (c) setPlan(recommendedPlan(c.driver.stats, 'weakness', slots, c.driver.focus));
+    const d = draftFor(c?.year);
+    if (c) setPlanState(d?.plan ?? recommendedPlan(c.driver.stats, 'weakness', slots, c.driver.focus));
+    setEnduranceState(d?.endurance ?? false);
     setRunning(false);
   }, [c?.year, slots]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const [endurance, setEndurance] = useState(false);
-  useEffect(() => setEndurance(false), [c?.year]);
+  const setPlan = (p: TrainingId[]) => { setPlanState(p); if (c) setPlanDraft({ year: c.year, plan: p, endurance }); };
+  const setEndurance = (v: boolean) => { setEnduranceState(v); if (c) setPlanDraft({ year: c.year, plan, endurance: v }); };
   const planCost = useMemo(() => plan.reduce((a, id) => a + TRAINING[id].cost, 0), [plan]);
   if (!c || c.retired) return null;
 

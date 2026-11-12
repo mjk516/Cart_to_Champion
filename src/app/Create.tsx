@@ -1,6 +1,6 @@
 // 드라이버 생성(SPEC §3): 기본 정보 → 헬멧·번호 → 자산 규모 → 성격 → 후보 → 집중 육성 → 서명
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ALL_F1_CIRCUITS, CALENDAR_2026, CALENDAR_2027_SLOTS, carNumberProblem, circuitById, DEFAULT_HELMET, defaultCarNumber, generateCandidates, HELMET_COLORS, HELMET_PATTERNS, RETURNING_CIRCUITS, ovr, PERSONALITIES, recommendedFocus, STAT_KEYS, WEALTH_TIERS,
   type Helmet, type Personality, type StatKey, type WealthTier,
@@ -43,18 +43,25 @@ const MAYBE_HOME_GP = new Set([...RETURNING_CIRCUITS, ...ALL_F1_CIRCUITS].map((x
 const STEPS = ['기본 정보', '헬멧·번호', '자산 규모', '성격', '후보 선택', '서명'];
 
 export function Create() {
-  const { startCareer, showKrw, go } = useGame();
-  const [seed] = useState(randomSeed);
-  const [step, setStep] = useState(0);
-  const [name, setName] = useState('');
-  const [nationality, setNationality] = useState('KR');
-  const [wealth, setWealth] = useState<WealthTier>(3);
-  const [personality, setPersonality] = useState<Personality>('fighter');
-  const [reroll, setReroll] = useState(0);
-  const [candidate, setCandidate] = useState(0);
-  const [focus, setFocus] = useState<StatKey[]>(recommendedFocus('fighter'));
-  const [helmet, setHelmet] = useState<Helmet>(DEFAULT_HELMET);
-  const [numberText, setNumberText] = useState(() => String(defaultCarNumber(seed)));
+  const { startCareer, showKrw, go, createDraft, setCreateDraft } = useGame();
+  // 만들던 드라이버가 있으면 그 상태에서 이어 만든다
+  const [draft] = useState(() => createDraft);
+  const [seed] = useState(() => draft?.seed ?? randomSeed());
+  const [step, setStep] = useState(draft?.step ?? 0);
+  const [name, setName] = useState(draft?.name ?? '');
+  const [nationality, setNationality] = useState(draft?.nationality ?? 'KR');
+  const [wealth, setWealth] = useState<WealthTier>((draft?.wealth as WealthTier) ?? 3);
+  const [personality, setPersonality] = useState<Personality>((draft?.personality as Personality) ?? 'fighter');
+  const [reroll, setReroll] = useState(draft?.reroll ?? 0);
+  const [candidate, setCandidate] = useState(draft?.candidate ?? 0);
+  const [focus, setFocus] = useState<StatKey[]>((draft?.focus as StatKey[]) ?? recommendedFocus('fighter'));
+  const [helmet, setHelmet] = useState<Helmet>((draft?.helmet as Helmet) ?? DEFAULT_HELMET);
+  const [numberText, setNumberText] = useState(() => draft?.numberText ?? String(defaultCarNumber(seed)));
+  useEffect(() => {
+    // 이름을 쓰거나 다음 단계로 넘어간 뒤부터 저장한다
+    if (!name.trim() && step === 0) return;
+    setCreateDraft({ seed, step, name, nationality, wealth, personality, reroll, candidate, focus, helmet, numberText });
+  }, [seed, step, name, nationality, wealth, personality, reroll, candidate, focus, helmet, numberText]); // eslint-disable-line react-hooks/exhaustive-deps
   const carNumber = Number(numberText);
   const numberError = numberText.trim() === '' ? '번호를 입력해 주세요' : carNumberProblem(carNumber);
   const candidates = useMemo(() => generateCandidates(seed, personality, reroll), [seed, personality, reroll]);
@@ -251,7 +258,7 @@ export function Create() {
       )}
 
       <div className="flex justify-between">
-        <Button variant="ghost" onClick={() => (step === 0 ? go('home') : setStep(step - 1))}>{step === 0 ? '취소' : '이전'}</Button>
+        <Button variant="ghost" onClick={() => { if (step === 0) { setCreateDraft(null); go('home'); } else setStep(step - 1); }}>{step === 0 ? '취소' : '이전'}</Button>
         {step < 5 && <Button onClick={() => setStep(step + 1)} disabled={!canNext}>다음</Button>}
       </div>
     </div>

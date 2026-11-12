@@ -2,9 +2,9 @@
 // 레이아웃 흐름만 장르 관례를 따르고, 그림·문구·색은 이 게임의 것이다(SPEC §11: 참고작 디자인은 복제하지 않는다).
 
 import { useEffect, useState } from 'react';
-import { seriesLabel } from '../engine';
+import { f1Calendar, seriesLabel, type Career } from '../engine';
 import { HelmetView } from './Helmet';
-import { useGame } from './store';
+import { listBackups, resumeScreen, useGame, type BackupEntry, type LiveSeason } from './store';
 import { Button, Card, useConfirm } from './ui';
 
 const JOURNEY = [
@@ -66,16 +66,44 @@ const FEATURES = [
   { icon: '✍️', title: '계약서에 직접 서명', text: '매니저 조언을 듣고 팀을 고르고, 기자회견에서 한마디로 여론을 바꾼다.' },
 ];
 
+/** 이어하기 버튼 아래에 보여 줄 "멈춘 곳" */
+function stoppedAt(career: Career, live: LiveSeason | null, hasPlanDraft: boolean): string {
+  const where = resumeScreen(career, live);
+  if (where === 'weekend' && live) {
+    const circuit = f1Calendar(career)[live.round];
+    const lap = live.raceLap && live.raceLap.key === `${live.round}:${live.step}` && live.raceLap.lap > 0 ? ` · 레이스 ${live.raceLap.lap}랩째` : '';
+    return `${career.year} 시즌 ${live.round + 1}라운드${circuit ? ` ${circuit.name}` : ''} · ${live.step === 0 ? '주말 시작' : `세션 ${live.step}`}${lap}`;
+  }
+  if (where === 'offseason') return `${career.year} 시즌을 마치고 오프시즌`;
+  return `${career.year} 시즌 시작 전 · 훈련 계획${hasPlanDraft ? '(짜던 계획 저장됨)' : ''}`;
+}
+
+function ago(iso: string): string {
+  const min = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (min < 60) return `${min}분 전`;
+  if (min < 60 * 24) return `${Math.round(min / 60)}시간 전`;
+  return `${Math.round(min / 60 / 24)}일 전`;
+}
+
 export function Home() {
-  const { career, go, reset } = useGame();
+  const { career, go, reset, live, planDraft, createDraft, resume, importSave } = useGame();
   const confirmBox = useConfirm();
   const active = career && !career.retired ? career : null;
   const startNew = () => {
     const start = () => { reset(); go('create'); };
-    if (active) confirmBox.ask('진행 중인 커리어가 사라집니다. 새로 시작할까요? (설정에서 저장 파일을 내보내 두면 나중에 다시 불러올 수 있습니다)', start, { confirmLabel: '새로 시작', danger: true });
+    if (active) confirmBox.ask('진행 중인 커리어가 사라집니다. 새로 시작할까요? (지금 커리어는 자동 백업에 남아 이 화면에서 다시 불러올 수 있습니다)', start, { confirmLabel: '새로 시작', danger: true });
+    else if (createDraft) confirmBox.ask('만들던 드라이버를 버리고 처음부터 만들까요?', start, { confirmLabel: '처음부터', danger: true });
     else start();
   };
   const last = career?.history[career.history.length - 1];
+  const [backups, setBackups] = useState<BackupEntry[]>([]);
+  useEffect(() => setBackups(listBackups()), [career?.seed]);
+  const others = backups.filter((b) => b.seed !== career?.seed);
+  const restore = (b: BackupEntry) => {
+    const run = () => { if (!importSave(b.data)) confirmBox.ask('백업을 읽을 수 없습니다.', () => {}, { confirmLabel: '확인' }); };
+    if (active) confirmBox.ask(<>지금 커리어({active.driver.name})를 두고 <b>{b.name}</b>의 커리어를 불러올까요? 지금 커리어도 자동 백업에 남습니다.</>, run, { confirmLabel: '불러오기' });
+    else run();
+  };
 
   return (
     <div className="mx-auto max-w-md space-y-3 px-4 pb-36 pt-5">
@@ -92,7 +120,7 @@ export function Home() {
 
       {career && (
         <Card title={active ? '진행 중인 커리어' : '지난 커리어'}>
-          <button onClick={() => go(active ? 'dashboard' : 'retired')} className="flex w-full items-center gap-3 rounded-xl bg-white/5 p-3 text-left hover:bg-white/10">
+          <button onClick={() => (active ? resume() : go('retired'))} className="flex w-full items-center gap-3 rounded-xl bg-white/5 p-3 text-left hover:bg-white/10">
             {career.driver.helmet && <HelmetView helmet={career.driver.helmet} size={48} />}
             <div className="min-w-0 flex-1">
               <div className="truncate font-black">{career.driver.name}{career.driver.number ? <span className="ml-1 text-zinc-400">#{career.driver.number}</span> : null}</div>
@@ -102,6 +130,36 @@ export function Home() {
             </div>
             <span className="text-sm font-bold text-racing">{active ? '이어하기 ›' : '기록 보기 ›'}</span>
           </button>
+          {active && <p className="mt-2 text-xs text-zinc-400" aria-label="멈춘 곳">⏸ 멈춘 곳: {stoppedAt(active, live, !!planDraft && planDraft.year === active.year)}</p>}
+        </Card>
+      )}
+
+      {!career && createDraft && (
+        <Card title="만들던 드라이버">
+          <button onClick={resume} className="flex w-full items-center gap-3 rounded-xl bg-white/5 p-3 text-left hover:bg-white/10">
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-black">{createDraft.name || '이름 없음'}</div>
+              <div className="text-xs text-zinc-400">커리어 만들기 {createDraft.step + 1}단계에서 멈춤</div>
+            </div>
+            <span className="text-sm font-bold text-racing">이어 만들기 ›</span>
+          </button>
+        </Card>
+      )}
+
+      {others.length > 0 && (
+        <Card title="자동 백업">
+          <p className="mb-2 text-xs text-zinc-400">커리어마다 마지막 상태가 이 기기에 자동으로 남습니다(최근 3개). 새 커리어를 시작했어도 지난 커리어를 다시 불러올 수 있습니다.</p>
+          <div className="space-y-2">
+            {others.map((b) => (
+              <button key={b.seed} onClick={() => restore(b)} className="flex w-full items-center gap-3 rounded-xl bg-white/5 p-3 text-left hover:bg-white/10">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-bold">{b.name}</div>
+                  <div className="text-xs text-zinc-400">{b.year}년{b.retired ? ' · 은퇴' : ''} · {ago(b.savedAt)} 저장</div>
+                </div>
+                <span className="text-sm font-bold text-racing">불러오기 ›</span>
+              </button>
+            ))}
+          </div>
         </Card>
       )}
 
@@ -121,12 +179,13 @@ export function Home() {
         <button onClick={() => go('guide')} className="hover:text-zinc-200">게임 방법</button>
         <button onClick={() => go('settings')} className="hover:text-zinc-200">설정 · 저장 파일</button>
       </div>
-      <p className="text-center text-[11px] leading-relaxed text-zinc-500">진행 상황은 이 브라우저에만 저장됩니다. 설정에서 저장 파일을 내보내 두세요.</p>
+      <p className="text-center text-[11px] leading-relaxed text-zinc-500">진행 상황은 이 기기 브라우저에 자동 저장되어, 중간에 닫아도 멈춘 곳부터 이어집니다(레이스는 보던 랩부터). 다른 기기로 옮기려면 설정에서 저장 파일을 내보내 그 기기에서 가져오세요.</p>
 
       {/* 하단 고정 시작 버튼 */}
       <div className="fixed inset-x-0 bottom-0 z-30 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent px-4 pb-5 pt-8">
         <div className="mx-auto flex max-w-md flex-col gap-2">
-          {active && <Button className="w-full !py-3.5 text-base" onClick={() => go('dashboard')}>이어하기 · {active.driver.name}</Button>}
+          {active && <Button className="w-full !py-3.5 text-base" onClick={resume}>이어하기 · {active.driver.name}</Button>}
+          {!career && createDraft && <Button className="w-full !py-3.5 text-base" onClick={resume}>만들던 드라이버 이어 만들기</Button>}
           <Button variant={active ? 'ghost' : 'primary'} className="w-full !py-3.5 text-base" onClick={startNew}>새 커리어 시작하기</Button>
         </div>
       </div>
