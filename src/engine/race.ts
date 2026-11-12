@@ -7,13 +7,16 @@ import { NEUTRAL_RACE, PERSONALITIES } from './creation';
 import { CAR_WEIGHT, ovr, POINTS_RACE, POINTS_SPRINT } from './data';
 import { hashSeed, int, normal, rngFor, weightedPick, type Rng } from './rng';
 import type { Circuit, Compound, Driver, Personality, Stats, Team } from './types';
+import { circuitTyreData, COMPOUND_OFFSET, DEG, isWetTyre, LIFE, raceForecast, strategyStyleOf, teamStrategies, TYRE_NAME, weatherPlan, type Weather } from './strategy';
 
 export type Phase = 'green' | 'sc' | 'vsc' | 'red';
-export type RadioTrigger = 'sc' | 'vsc' | 'rain_start' | 'rain_stop';
+export type RadioTrigger = 'sc' | 'vsc' | 'rain_start' | 'rain_stop' | 'pit_window';
 export type RadioOptionId =
   | 'pit_hard' | 'pit_medium' | 'stay_out' | 'pit'
   | 'inters_now' | 'one_more_lap' | 'stay_slicks'
-  | 'slicks_now' | 'stay_inters';
+  | 'slicks_now' | 'stay_inters'
+  // v0.40: 풀웻, 피트 창(계획한 피트스톱 2랩 전), 성격 전략(도박·데이터)
+  | 'wets_now' | 'pit_plan' | 'pit_now' | 'extend' | 'gamble_soft' | 'data_optimal' | 'pit_soft' | 'pit_data' | 'radar_wait' | 'slicks_soft';
 
 export interface RadioOption {
   id: RadioOptionId; label: string; recommended: boolean;
@@ -79,6 +82,10 @@ export interface RaceInput {
   points?: readonly number[];
   /** 결과 규칙(F1): 우승 가능한 팀, 팀별 최고 순위 제한(신생팀) */
   rules?: ResultRules;
+  /** 내 차 전략(전략 회의, SPEC v0.40): teamStrategies의 선택지 id. 없으면 예전처럼 팀이 알아서 */
+  myPlan?: string;
+  /** 내 차 출발 타이어(없으면 고른 전략의 출발 타이어) */
+  myStart?: Compound;
 }
 
 export interface ResultRules {
@@ -151,9 +158,6 @@ export type RaceOutcome =
   | { status: 'pending'; totalLaps: number; decision: RadioDecision; laps: LapRecord[]; incidents: Incident[] };
 
 // ── 상수(초기값, 밸런스 스크립트로 조정) ─────────────────────────────
-const COMPOUND_OFFSET: Record<Compound, number> = { S: 0, M: 0.35, H: 0.7, I: 0 };
-const DEG: Record<Compound, number> = { S: 0.085, M: 0.055, H: 0.038, I: 0.03 };
-const LIFE: Record<Compound, number> = { S: 18, M: 28, H: 40, I: 35 };
 /** 레이스당 기대 발생 횟수 λ (SPEC §5.5: SC 45%, VSC 30%, 레드 8% 안팎이 목표) */
 const HAZARD = { red: 0.1, sc: 0.5, vsc: 0.3, crash: 0.3, mech: 0.45 };
 const PACE_SPREAD = 0.11;
@@ -188,6 +192,14 @@ interface CarState {
   holdRain: boolean;
   holdDryUntil: number;
   lostPositionLap: number;
+  /** 젖은 타이어(인터·풀웻)를 썼다: 의무 피트스톱(두 컴파운드) 규칙이 없어진다 */
+  usedWet: boolean;
+  /** 계획한 피트에서 끼울 타이어(순서대로, 내 차 전략) */
+  nextQueue: Compound[];
+  /** 이 랩에 들어와 이 타이어로(레이더 대기 등) */
+  pitAt?: { lap: number; c: Compound };
+  /** 피트 창 무전을 이미 물어본 스톱 번호 */
+  windowStop?: number;
 }
 
 export function carFromDriver(driver: Driver, team: Team): RaceCar {
@@ -217,21 +229,17 @@ export function raceLaps(circuit: Circuit, kind: 'race' | 'sprint'): number {
   return kind === 'race' ? circuit.laps : Math.ceil(100 / circuit.lengthKm);
 }
 
-interface Weather { start: number; end: number }
-
-function weatherPlan(seed: number, circuit: Circuit, totalLaps: number): Weather | null {
-  const r = rngFor(seed, 'weather', circuit.id, totalLaps);
-  if (r() >= circuit.rainChance) return null;
-  const start = Math.max(2, Math.floor(totalLaps * (0.15 + 0.6 * r())));
-  const end = Math.min(totalLaps + 1, start + int(r, 6, 22));
-  return { start, end };
-}
 
 function clamp(x: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, x));
 }
 
 const RADIO_OPTIONS: Record<RadioTrigger, Array<{ id: RadioOptionId; label: string }>> = {
+  pit_window: [
+    { id: 'pit_plan', label: '계획대로 들어간다' },
+    { id: 'pit_now', label: '지금 들어간다(언더컷)' },
+    { id: 'extend', label: '3랩 더 버틴다(오버컷)' },
+  ],
   sc: [
     { id: 'pit_hard', label: '피트 인 (하드)' },
     { id: 'pit_medium', label: '피트 인 (미디엄)' },
@@ -243,6 +251,7 @@ const RADIO_OPTIONS: Record<RadioTrigger, Array<{ id: RadioOptionId; label: stri
   ],
   rain_start: [
     { id: 'inters_now', label: '인터로 바로 교체' },
+    { id: 'wets_now', label: '풀웻으로 바로 교체' },
     { id: 'one_more_lap', label: '한 랩 더 버티기' },
     { id: 'stay_slicks', label: '슬릭으로 끝까지' },
   ],
@@ -250,6 +259,22 @@ const RADIO_OPTIONS: Record<RadioTrigger, Array<{ id: RadioOptionId; label: stri
     { id: 'slicks_now', label: '슬릭으로 교체' },
     { id: 'stay_inters', label: '인터 유지' },
   ],
+};
+
+/** 성격 전략 선택지(공격형·본능형: 도박, 분석형·침착형: 데이터) */
+const STYLE_OPTIONS: Record<'gamble' | 'data', Partial<Record<RadioTrigger, { id: RadioOptionId; label: string }>>> = {
+  gamble: {
+    sc: { id: 'pit_soft', label: '도박: 소프트로 갈아 끼우고 재시작 공격' },
+    vsc: { id: 'pit_soft', label: '도박: 소프트로 갈아 끼우고 몰아친다' },
+    pit_window: { id: 'gamble_soft', label: '도박: 지금 소프트로, 남은 랩은 몰아친다' },
+    rain_stop: { id: 'slicks_soft', label: '도박: 바로 소프트로' },
+  },
+  data: {
+    sc: { id: 'pit_data', label: '데이터: 남은 랩에 맞춘 타이어로 피트' },
+    vsc: { id: 'pit_data', label: '데이터: 남은 랩에 맞춘 타이어로 피트' },
+    pit_window: { id: 'data_optimal', label: '데이터: 타이어 수명 모델의 최적 랩에' },
+    rain_start: { id: 'radar_wait', label: '데이터: 레이더 보고 2랩 뒤 교체' },
+  },
 };
 
 export function runRace(input: RaceInput): RaceOutcome {
@@ -260,6 +285,8 @@ export function runRace(input: RaceInput): RaceOutcome {
   const weather = weatherPlan(planSeed, circuit, L);
   const isWetLap = (lap: number) => !!weather && lap >= weather.start && lap < weather.end + 2;
   const isRainLap = (lap: number) => !!weather && lap >= weather.start && lap < weather.end;
+  const isHeavyLap = (lap: number) => isRainLap(lap) && !!weather?.heavy;
+  const wetTyre = (): Compound => (weather?.heavy ? 'W' : 'I');
   const mandatoryStop = input.mandatoryStop ?? input.kind === 'race';
 
   const byId = new Map(input.cars.map((c) => [c.id, c]));
@@ -273,11 +300,27 @@ export function runRace(input: RaceInput): RaceOutcome {
       : mandatoryStop
         ? [Math.round(L * (0.38 + 0.22 * rs()))]
         : [];
-    const compound: Compound = twoStop ? 'S' : 'M';
+    const wetStart = !!weather && weather.start <= 1;
+    let compound: Compound = wetStart ? wetTyre() : twoStop ? 'S' : circuitTyreData(circuit.id).start === 'S' && !mandatoryStop ? 'S' : 'M';
+    let stops = wetStart ? [] : planned;
+    let nextQueue: Compound[] = [];
+    let holdRain = false;
+    // 내 차: 전략 회의에서 고른 전략·출발 타이어
+    if (id === input.myCarId && (input.myPlan || input.myStart)) {
+      const opts = teamStrategies(circuit, input.kind, L, raceForecast(planSeed, circuit, L), car.personality);
+      const plan = opts.find((o) => o.id === input.myPlan) ?? opts[0]!;
+      compound = input.myStart ?? plan.start;
+      stops = mandatoryStop ? [...plan.stops] : [];
+      nextQueue = mandatoryStop ? [...plan.next] : [];
+      // 출발 타이어를 바꿔서 계획한 타이어가 모두 같아지면 두 컴파운드 규칙에 맞게 하나를 바꾼다
+      if (mandatoryStop && !isWetTyre(compound) && nextQueue.length && nextQueue.every((c) => c === compound)) nextQueue[0] = compound === 'H' ? 'M' : 'H';
+      if (wetStart && !isWetTyre(compound)) holdRain = true; // 슬릭 도박
+    }
     return {
       car, beh: behaviorOf(car), grid: i + 1, time: i * 0.22, compound, tyreAge: 0, stops: 0,
-      dryUsed: new Set<Compound>([compound]), planned, out: false, lapsDone: 0, lastPitLap: 0,
-      pitThisLap: null, pitNextLap: null, radioLap: -1, holdRain: false, holdDryUntil: 0, lostPositionLap: -99,
+      dryUsed: new Set<Compound>(isWetTyre(compound) ? [] : [compound]), planned: stops, out: false, lapsDone: 0, lastPitLap: 0,
+      pitThisLap: null, pitNextLap: null, radioLap: -1, holdRain, holdDryUntil: 0, lostPositionLap: -99,
+      usedWet: isWetTyre(compound), nextQueue,
     };
   });
   if (states.length !== input.cars.length) throw new Error('grid and cars length differ');
@@ -341,7 +384,8 @@ export function runRace(input: RaceInput): RaceOutcome {
       : rngFor(input.seed, 'lap', lap);
     const wet = isWetLap(lap);
     const raining = isRainLap(lap);
-    const rainStartNow = !!weather && lap === weather.start;
+    const heavy = isHeavyLap(lap);
+    const rainStartNow = !!weather && lap === weather.start && weather.start > 1;
     const rainStopNow = !!weather && lap === weather.end;
     if (rainStartNow) incidents.push({ type: 'rain_start', lap });
     if (rainStopNow) {
@@ -415,19 +459,23 @@ export function runRace(input: RaceInput): RaceOutcome {
 
     // ── 2. 무전(내 차만) ──
     if (my && !my.out && lap < L) {
+      // 피트 창: 계획한 피트스톱 2랩 전에 한 번(스톱마다 한 번만 묻는다)
+      const pitWindow = phase === 'green' && !deployedNow && !wet && !isWetTyre(my.compound) && my.planned[0] !== undefined
+        && my.planned[0] - lap === 2 && lap - my.lastPitLap > 3 && !my.pitNextLap && my.windowStop !== my.stops;
+      if (pitWindow) my.windowStop = my.stops;
       const trigger: RadioTrigger | null =
         deployedNow === 'sc' ? 'sc' : deployedNow === 'vsc' ? 'vsc'
-          : rainStartNow ? 'rain_start' : rainStopNow && my.compound === 'I' ? 'rain_stop' : null;
+          : rainStartNow ? 'rain_start' : rainStopNow && isWetTyre(my.compound) ? 'rain_stop' : pitWindow ? 'pit_window' : null;
       if (trigger) {
         const pos = Math.max(1, order.filter((x) => !x.out).indexOf(my) + 1);
-        const decision = buildDecision(trigger, lap, my, L, mandatoryStop, circuit, pos, (trigger === 'sc' || trigger === 'vsc') ? neutral ?? undefined : undefined);
+        const decision = buildDecision(trigger, lap, my, L, mandatoryStop, circuit, pos, (trigger === 'sc' || trigger === 'vsc') ? neutral ?? undefined : undefined, !!weather?.heavy);
         const recommended = decision.options.find((o) => o.recommended)?.id;
         // 급박한 상황(의무 피트스톱이 코앞, 타이어가 한계를 넘음)이면 팀이 바로 부른다
         const choice = decision.urgent ? recommended : input.radio?.[decision.id] ?? (input.autoRadio ? recommended : undefined);
         if (!choice) {
           return { status: 'pending', totalLaps: L, decision, laps, incidents };
         }
-        applyRadio(my, choice, lap, L, mandatoryStop);
+        applyRadio(my, choice, lap, L, mandatoryStop, !!weather?.heavy, circuit);
         incidents.push(decision.urgent ? { type: 'radio', lap, decisionId: decision.id, choice, forced: decision.urgent } : { type: 'radio', lap, decisionId: decision.id, choice });
       }
     }
@@ -438,18 +486,23 @@ export function runRace(input: RaceInput): RaceOutcome {
         s.pitThisLap = s.pitNextLap;
         s.pitNextLap = null;
       }
+      if (s.pitAt && lap >= s.pitAt.lap && !s.pitThisLap) {
+        s.pitThisLap = s.pitAt.c;
+        s.pitAt = undefined;
+        s.holdRain = false;
+      }
       if (s.pitThisLap || s.radioLap === lap || phase === 'red') continue;
-      s.pitThisLap = aiPit(s, lap, L, rng, { wet, raining, deployedNow, mandatoryStop, weather, circuit });
+      s.pitThisLap = aiPit(s, lap, L, rng, { wet, raining, heavy, deployedNow, mandatoryStop, weather, circuit });
     }
 
     // 레드 플래그: 모든 차가 피트레인에서 무료로 타이어 교체
     if (phase === 'red') {
       for (const s of running()) {
         const remaining = L - lap;
-        const next: Compound = wet ? 'I' : pickDry(remaining, s, mandatoryStop);
+        const next: Compound = wet ? (heavy ? 'W' : 'I') : pickDry(remaining, s, mandatoryStop);
         s.compound = next;
         s.tyreAge = 0;
-        if (next !== 'I') s.dryUsed.add(next);
+        if (isWetTyre(next)) s.usedWet = true; else s.dryUsed.add(next);
       }
     }
 
@@ -463,7 +516,7 @@ export function runRace(input: RaceInput): RaceOutcome {
     const run = running();
     if (phase === 'green') {
       for (const s of run) {
-        let t = paceLap(s, lap, L, wet, rng, w, circuit);
+        let t = paceLap(s, lap, L, wet, rng, w, circuit, heavy);
         if ((prevGapAhead.get(s.car.id) ?? 9) < 1.0) t += 0.2;
         s.time += t;
       }
@@ -483,7 +536,7 @@ export function runRace(input: RaceInput): RaceOutcome {
       const stationary = 2.2 + (1 - s.car.ops) * 1.5 + Math.abs(normal(rng)) * 0.35 * (1.2 - s.car.ops);
       s.time += circuit.pitLoss * factor + stationary;
       s.compound = s.pitThisLap;
-      if (s.compound !== 'I') s.dryUsed.add(s.compound);
+      if (isWetTyre(s.compound)) s.usedWet = true; else s.dryUsed.add(s.compound);
       s.tyreAge = 0;
       s.stops += 1;
       s.lastPitLap = lap;
@@ -588,23 +641,28 @@ export function runRace(input: RaceInput): RaceOutcome {
   return { status: 'finished', totalLaps: L, laps, incidents, classification };
 }
 
-function paceLap(s: CarState, lap: number, L: number, wet: boolean, rng: Rng, w: number, circuit: Circuit): number {
+function paceLap(s: CarState, lap: number, L: number, wet: boolean, rng: Rng, w: number, circuit: Circuit, heavy = false): number {
   const st = s.car.stats;
   const perf = w * s.car.teamQuality + (1 - w) * (ovr(st) / 100);
   let t = circuit.baseLap * (1 + (1 - perf) * PACE_SPREAD);
-  if (s.compound !== 'I') {
+  if (!isWetTyre(s.compound)) {
     const life = LIFE[s.compound] / circuit.deg;
     t += COMPOUND_OFFSET[s.compound];
     t += DEG[s.compound] * circuit.deg * s.tyreAge * (1.25 - (st.tyre / 100) * 0.5);
     if (s.tyreAge > life) t += (s.tyreAge - life) * 0.25;
   } else {
-    t += DEG.I * s.tyreAge;
+    t += DEG[s.compound] * s.tyreAge;
   }
   t += 1.6 * (1 - lap / L);
-  if (wet) t += s.compound === 'I' ? 3.5 - ((st.wet - 75) / 25) * 0.6 : 7;
-  else if (s.compound === 'I') t += 4;
+  const wetSkill = ((st.wet - 75) / 25) * 0.6;
+  if (heavy) {
+    // 폭우: 풀웻이 맞는 타이어, 인터는 물을 못 빼서 미끄럽고, 슬릭은 거의 못 달린다
+    t += s.compound === 'W' ? 4.5 - wetSkill : s.compound === 'I' ? 6.5 - wetSkill * 0.6 : 12;
+  } else if (wet) {
+    t += s.compound === 'I' ? 3.5 - wetSkill : s.compound === 'W' ? 5 - wetSkill : 7;
+  } else if (isWetTyre(s.compound)) t += s.compound === 'W' ? 7 : 4;
   t += normal(rng) * (0.15 + (100 - st.consistency) / 300) * s.beh.lapVariance;
-  if (rng() < 0.004 * s.beh.mistake * (1.4 - st.consistency / 100) * (wet ? 2.5 : 1)) t += 2 + rng() * 3;
+  if (rng() < 0.004 * s.beh.mistake * (1.4 - st.consistency / 100) * (heavy ? 3.5 : wet ? 2.5 : 1)) t += 2 + rng() * 3;
   if (lap === 1) t += normal(rng) * 0.6 * (1.2 - st.racecraft / 100);
   return t;
 }
@@ -620,6 +678,7 @@ function pickDry(remaining: number, s: CarState, mandatoryStop: boolean): Compou
 interface PitContext {
   wet: boolean;
   raining: boolean;
+  heavy: boolean;
   deployedNow: Phase | null;
   mandatoryStop: boolean;
   weather: Weather | null;
@@ -628,22 +687,27 @@ interface PitContext {
 
 function aiPit(s: CarState, lap: number, L: number, rng: Rng, ctx: PitContext): Compound | null {
   const remaining = L - lap;
-  // 비
-  if (ctx.raining && s.compound !== 'I') {
+  // 비: 약한 비는 인터, 폭우는 풀웻
+  const target: Compound = ctx.weather?.heavy ? 'W' : 'I';
+  if (ctx.raining && !isWetTyre(s.compound)) {
     if (s.holdRain) return null;
-    if (rng() < 0.45 || (ctx.weather && lap > ctx.weather.start + 2)) return 'I';
+    if (rng() < 0.45 || (ctx.weather && lap > ctx.weather.start + 2)) return target;
     return null;
   }
-  if (!ctx.wet && s.compound === 'I') {
+  if (ctx.raining && isWetTyre(s.compound) && s.compound !== target && lap - s.lastPitLap > 3) {
+    return rng() < (target === 'W' ? 0.35 : 0.25) ? target : null;
+  }
+  if (!ctx.wet && isWetTyre(s.compound)) {
     if (lap < s.holdDryUntil) return null;
     if (rng() < 0.5 || (ctx.weather && lap > ctx.weather.end + 4)) return remaining > 20 ? 'M' : 'S';
     return null;
   }
-  if (s.compound === 'I') return null;
+  if (isWetTyre(s.compound)) return null;
   if (remaining <= 2) return null;
 
   const life = LIFE[s.compound] / ctx.circuit.deg;
-  const needsCompound = ctx.mandatoryStop && s.dryUsed.size < 2;
+  const needsCompound = ctx.mandatoryStop && !s.usedWet && s.dryUsed.size < 2;
+  const nextDry = () => s.nextQueue.shift() ?? pickDry(remaining, s, ctx.mandatoryStop);
   const dropPlanned = () => { s.planned = s.planned.filter((p) => p > lap + 8); };
 
   if (ctx.deployedNow === 'sc' || ctx.deployedNow === 'vsc') {
@@ -656,21 +720,20 @@ function aiPit(s: CarState, lap: number, L: number, rng: Rng, ctx: PitContext): 
   }
   const plannedNow = s.planned[0];
   if (plannedNow !== undefined && lap >= plannedNow) {
-    dropPlanned();
     s.planned = s.planned.filter((p) => p > lap);
-    return pickDry(remaining, s, ctx.mandatoryStop);
+    return nextDry();
   }
   if (s.tyreAge > life && remaining > 5) {
     dropPlanned();
-    return pickDry(remaining, s, ctx.mandatoryStop);
+    return nextDry();
   }
   if (needsCompound && remaining === 3) return pickDry(remaining, s, ctx.mandatoryStop);
   return null;
 }
 
-function recommend(trigger: RadioTrigger, s: CarState, lap: number, L: number, mandatoryStop: boolean): RadioOptionId {
+function recommend(trigger: RadioTrigger, s: CarState, lap: number, L: number, mandatoryStop: boolean, heavy = false): RadioOptionId {
   const remaining = L - lap;
-  const needsCompound = mandatoryStop && s.dryUsed.size < 2;
+  const needsCompound = mandatoryStop && !s.usedWet && s.dryUsed.size < 2;
   switch (trigger) {
     case 'sc':
       if ((s.tyreAge >= 8 && remaining > 6) || (needsCompound && remaining < 30)) {
@@ -680,9 +743,11 @@ function recommend(trigger: RadioTrigger, s: CarState, lap: number, L: number, m
     case 'vsc':
       return (s.tyreAge >= 12 && remaining > 8) || (needsCompound && remaining < 25) ? 'pit' : 'stay_out';
     case 'rain_start':
-      return 'inters_now';
+      return heavy ? 'wets_now' : 'inters_now';
     case 'rain_stop':
       return 'slicks_now';
+    case 'pit_window':
+      return 'pit_plan';
   }
 }
 
@@ -690,21 +755,26 @@ function recommend(trigger: RadioTrigger, s: CarState, lap: number, L: number, m
 function urgency(trigger: RadioTrigger, s: CarState, lap: number, L: number, mandatoryStop: boolean, circuit: Circuit): string | undefined {
   if (trigger !== 'sc' && trigger !== 'vsc') return undefined;
   const remaining = L - lap;
-  const needsCompound = mandatoryStop && s.dryUsed.size < 2;
+  const needsCompound = mandatoryStop && !s.usedWet && s.dryUsed.size < 2;
   const life = LIFE[s.compound] / circuit.deg;
   if (needsCompound && remaining <= 20 && remaining > 2) return `의무 피트스톱이 남았는데 ${remaining}랩밖에 안 남았다. 팀이 바로 불러들였다`;
-  if (s.compound !== 'I' && s.tyreAge >= life * 0.95 && remaining > 4) return `타이어가 ${s.tyreAge}랩째로 수명이 다했다. 팀이 바로 불러들였다`;
+  if (!isWetTyre(s.compound) && s.tyreAge >= life * 0.95 && remaining > 4) return `타이어가 ${s.tyreAge}랩째로 수명이 다했다. 팀이 바로 불러들였다`;
   const planned = s.planned[0];
   if (planned !== undefined && planned - lap <= 2 && remaining > 4) return `원래 ${planned}랩에 들어올 계획이었다. 팀이 바로 불러들였다`;
   return undefined;
 }
 
-const TYRE_NAME: Record<Compound, string> = { S: '소프트', M: '미디엄', H: '하드', I: '인터' };
 
-function buildDecision(trigger: RadioTrigger, lap: number, s: CarState, L: number, mandatoryStop: boolean, circuit?: Circuit, pos = 0, neutral?: Neutralization): RadioDecision {
-  const rec = recommend(trigger, s, lap, L, mandatoryStop);
+/** 데이터 전략의 최적 피트 랩: 타이어 수명의 90%에 맞춘다(지금부터 0~6랩 뒤) */
+function dataOptimalLap(s: CarState, lap: number, circuit: Circuit): number {
+  const life = LIFE[s.compound] / circuit.deg;
+  return lap + Math.max(0, Math.min(6, Math.round(life * 0.9 - s.tyreAge)));
+}
+
+function buildDecision(trigger: RadioTrigger, lap: number, s: CarState, L: number, mandatoryStop: boolean, circuit?: Circuit, pos = 0, neutral?: Neutralization, heavy = false): RadioDecision {
+  const rec = recommend(trigger, s, lap, L, mandatoryStop, heavy);
   const remaining = L - lap;
-  const needsCompound = mandatoryStop && s.dryUsed.size < 2;
+  const needsCompound = mandatoryStop && !s.usedWet && s.dryUsed.size < 2;
   const deg = circuit?.deg ?? 1;
   const life = Math.round(LIFE[s.compound] / deg);
   const lifeOf = (c: Compound) => Math.round(LIFE[c] / deg);
@@ -726,6 +796,8 @@ function buildDecision(trigger: RadioTrigger, lap: number, s: CarState, L: numbe
       notes.pit_hard = `하드: ${fresh('H')}. 느리지만 안정적. ${lose}`;
       notes.pit_medium = `미디엄: ${fresh('M')}. 하드보다 빠르다. ${lose}`;
       notes.pit = `새 타이어(${TYRE_NAME[pickDry(remaining, s, mandatoryStop)]}). ${lose}`;
+      notes.pit_soft = `소프트(수명 약 ${lifeOf('S')}랩)로 재시작부터 몰아친다. ${lifeOf('S') < remaining ? '끝까지 못 버텨 한 번 더 들어와야 한다' : '끝까지 버틸 수 있다'}`;
+      notes.pit_data = `남은 ${remaining}랩과 수명(소프트 ${lifeOf('S')}·미디엄 ${lifeOf('M')}·하드 ${lifeOf('H')}랩)으로 고른 ${TYRE_NAME[pickDry(remaining, s, mandatoryStop)]}`;
       notes.stay_out = needsCompound
         ? `자리는 지키지만 의무 피트스톱이 아직 남아 있다. 나중에 그린 플래그에서 들어가면 손해가 크다`
         : s.tyreAge + remaining > life
@@ -733,15 +805,31 @@ function buildDecision(trigger: RadioTrigger, lap: number, s: CarState, L: numbe
           : `자리를 지킨다. 이 타이어로 끝까지 갈 수 있다`;
       break;
     }
+    case 'pit_window': {
+      const planned = s.planned[0] ?? lap + 2;
+      const nextC = s.nextQueue[0] ?? pickDry(remaining, s, mandatoryStop);
+      advice = `${where}${tyre}. 계획한 피트스톱(L${planned})이 2랩 남았어. 다음 타이어는 ${TYRE_NAME[nextC]}.`;
+      notes.pit_plan = `L${planned}에 ${TYRE_NAME[nextC]}로. 팀이 짠 계획 그대로`;
+      notes.pit_now = '앞차보다 먼저 들어가 새 타이어로 따라잡는다(언더컷). 피트 뒤 트래픽에 걸릴 수 있다';
+      notes.extend = s.tyreAge + 5 > life ? `타이어가 수명(약 ${life}랩)을 넘긴다. 막판 랩타임이 떨어진다` : '앞차가 먼저 들어가면 빈 트랙에서 시간을 번다(오버컷)';
+      notes.gamble_soft = `소프트(수명 약 ${lifeOf('S')}랩)로 몰아친다. 남은 ${remaining}랩을 버티지 못하면 한 번 더 들어와야 한다`;
+      notes.data_optimal = circuit ? `타이어 수명의 90% 지점 L${dataOptimalLap(s, lap, circuit)}. 랩타임 손실이 가장 적다` : '';
+      break;
+    }
     case 'rain_start':
-      advice = `${where}비가 시작됐다. 굵어지면 슬릭으론 못 버텨. 언제 바꿀지는 네가 정해.`;
-      notes.inters_now = '가장 안전하다. 비가 금방 그치면 다시 들어와야 한다';
+      advice = heavy
+        ? `${where}폭우다. 인터로는 물을 다 못 뺀다. 풀웻이 맞아.`
+        : `${where}비가 시작됐다. 굵어지면 슬릭으론 못 버텨. 언제 바꿀지는 네가 정해.`;
+      notes.wets_now = heavy ? '폭우엔 가장 빠르고 안전하다' : '약한 비에선 인터보다 느리다';
+      notes.radar_wait = '레이더상 비가 굵어지는 2랩 뒤에 맞는 타이어로 들어간다. 그사이 슬릭으로 버틴다';
+      notes.inters_now = heavy ? '폭우엔 미끄럽다. 풀웻보다 랩당 2초쯤 느리다' : '가장 안전하다. 비가 금방 그치면 다시 들어와야 한다';
       notes.one_more_lap = '한 랩 더 버티며 상황을 본다. 비가 굵어지면 그 랩에 크게 잃는다';
       notes.stay_slicks = '비가 금방 그친다는 데 거는 도박. 맞으면 크게 번다';
       break;
     case 'rain_stop':
       advice = `${where}트랙이 마르고 있어. 라인이 생기면 슬릭이 훨씬 빠르다.`;
       notes.slicks_now = '먼저 바꾸면 크게 벌 수 있다. 다시 젖으면 위험';
+      notes.slicks_soft = '가장 빠른 슬릭으로 바로. 남은 랩이 길면 한 번 더 들어와야 한다';
       notes.stay_inters = '몇 랩 더 지켜본다. 마르는 게 빠르면 손해';
       break;
   }
@@ -749,14 +837,15 @@ function buildDecision(trigger: RadioTrigger, lap: number, s: CarState, L: numbe
     id: `${trigger}@${lap}`,
     lap,
     trigger,
-    options: RADIO_OPTIONS[trigger].map((o) => ({ ...o, recommended: o.id === rec, note: notes[o.id] })),
+    options: [...RADIO_OPTIONS[trigger], ...(() => { const st = strategyStyleOf(s.car.personality); const extra = st ? STYLE_OPTIONS[st][trigger] : undefined; return extra ? [extra] : []; })()]
+      .map((o) => ({ ...o, recommended: o.id === rec, note: notes[o.id] })),
     ...(neutral ? { neutral } : {}),
     advice,
     ...(circuit ? (() => { const u = urgency(trigger, s, lap, L, mandatoryStop, circuit); return u && rec !== 'stay_out' ? { urgent: u } : {}; })() : {}),
   };
 }
 
-function applyRadio(s: CarState, choice: RadioOptionId, lap: number, L: number, mandatoryStop: boolean): void {
+function applyRadio(s: CarState, choice: RadioOptionId, lap: number, L: number, mandatoryStop: boolean, heavy = false, circuit?: Circuit): void {
   s.radioLap = lap;
   const remaining = L - lap;
   const pitDry = (c: Compound) => {
@@ -769,7 +858,22 @@ function applyRadio(s: CarState, choice: RadioOptionId, lap: number, L: number, 
     case 'pit': pitDry(pickDry(remaining, s, mandatoryStop)); break;
     case 'stay_out': break;
     case 'inters_now': s.pitThisLap = 'I'; break;
-    case 'one_more_lap': s.pitNextLap = 'I'; break;
+    case 'wets_now': s.pitThisLap = 'W'; break;
+    case 'one_more_lap': s.pitNextLap = heavy ? 'W' : 'I'; break;
+    case 'radar_wait': s.holdRain = true; s.pitAt = { lap: lap + 2, c: heavy ? 'W' : 'I' }; break;
+    case 'slicks_soft': s.pitThisLap = 'S'; break;
+    case 'pit_soft': pitDry('S'); break;
+    case 'pit_data': pitDry(pickDry(remaining, s, mandatoryStop)); break;
+    case 'pit_plan': break;
+    case 'pit_now': s.pitThisLap = s.nextQueue.shift() ?? pickDry(remaining, s, mandatoryStop); s.planned = s.planned.slice(1); break;
+    case 'extend': if (s.planned[0] !== undefined) s.planned[0] += 3; break;
+    case 'gamble_soft': s.pitThisLap = 'S'; s.nextQueue.shift(); s.planned = s.planned.slice(1); break;
+    case 'data_optimal': {
+      const at = circuit ? dataOptimalLap(s, lap, circuit) : lap + 2;
+      if (at <= lap) { s.pitThisLap = s.nextQueue.shift() ?? pickDry(remaining, s, mandatoryStop); s.planned = s.planned.slice(1); }
+      else if (s.planned.length) s.planned[0] = at;
+      break;
+    }
     case 'stay_slicks': s.holdRain = true; break;
     case 'slicks_now': s.pitThisLap = remaining > 20 ? 'M' : 'S'; break;
     case 'stay_inters': s.holdDryUntil = lap + 3; break;

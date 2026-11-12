@@ -90,7 +90,7 @@ export function replayCareer(setup: CareerSetup, log: ChoiceLogEntry[]): Career 
   for (const entry of log) {
     if (c.retired) throw new Error(`log continues after retirement (year ${entry.year})`);
     if (entry.year !== c.year) throw new Error(`log year ${entry.year} does not match career year ${c.year}`);
-    if (entry.kind === 'training') c = runSeason(c, entry.plan, entry.radio ?? {}, { endurance: entry.endurance, sns: entry.sns }).career;
+    if (entry.kind === 'training') c = runSeason(c, entry.plan, entry.radio ?? {}, { endurance: entry.endurance, sns: entry.sns, strategy: entry.strategy }).career;
     else if (entry.kind === 'event') c = resolveEvent(c, entry.eventId, entry.optionId).career;
     else c = applyOffseason(c, entry.choice);
   }

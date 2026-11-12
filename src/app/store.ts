@@ -5,7 +5,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 import {
   applyOffseason, createCareer, getOffseason, renameDuplicateDrivers, resolveEvent, runSeason,
-  type Career, type CareerSetup, type Offer, type RadioOptionId, type SeasonRecord, type TrainingId,
+  type Career, type CareerSetup, type Offer, type RadioOptionId, type SeasonRecord, type StrategyMap, type TrainingId,
 } from '../engine';
 
 /** 획: [x, y, t, pressure] 목록. x·y는 0~1로 정규화(SPEC §3.3) */
@@ -52,6 +52,9 @@ export interface LiveSeason {
   raceLap?: { key: string; lap: number };
   /** 그랑프리 결승 뒤 올린 SNS 글(라운드 → 선택지 id) */
   sns?: Record<string, string>;
+  /** 전략 회의 선택(라운드:종류 → 전략·출발 타이어)과 확정한 레이스 */
+  strategy?: StrategyMap;
+  strategyDone?: string[];
 }
 
 /** 대시보드에서 짜던 훈련 계획(시즌 시작 전에 닫아도 남는다) */
@@ -240,7 +243,7 @@ export const useGame = create<State>()(
         const c = get().career;
         const l = get().live;
         if (!c || !l) return;
-        const { career, record } = runSeason(c, l.plan, l.radio, { endurance: l.endurance, sns: l.sns });
+        const { career, record } = runSeason(c, l.plan, l.radio, { endurance: l.endurance, sns: l.sns, strategy: l.strategy });
         set({ career: autoInterview(career, get().interviewAuto), lastRecord: record, live: null, screen: 'offseason' });
       },
       startCareer: (setup, signature) =>

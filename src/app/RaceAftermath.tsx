@@ -21,8 +21,8 @@ function effectPills(e: { followersMul: number; sentiment: number; pressure: num
   return out;
 }
 
-export function RaceAftermath({ c, round, gp, rows, incidents, cars, chosen, onPick }: {
-  c: Career; round: number; gp: string; rows: Classified[]; incidents: Incident[]; cars: RaceCar[];
+export function RaceAftermath({ c, round, kind = 'race', gp, rows, incidents, cars, chosen, onPick }: {
+  c: Career; round: number; kind?: 'race' | 'sprint'; gp: string; rows: Classified[]; incidents: Incident[]; cars: RaceCar[];
   chosen: string | undefined; onPick: (id: string) => void;
 }) {
   const mateId = cars.find((x) => x.teamId === c.contract?.teamId && x.id !== ME)?.id;
@@ -30,7 +30,7 @@ export function RaceAftermath({ c, round, gp, rows, incidents, cars, chosen, onP
   if (!res) return null;
   const nameOf = (id: string) => (id === ME ? c.driver.name : c.world.drivers.find((d) => d.id === id)?.name ?? id);
   const article = raceArticle(c, res, {
-    gp, round, name: c.driver.name, team: c.contract?.team ?? '', winnerName: nameOf(res.winnerId),
+    gp: kind === 'sprint' ? `${gp} 스프린트` : gp, round, kind, name: c.driver.name, team: c.contract?.team ?? '', winnerName: nameOf(res.winnerId),
     mateName: mateId ? nameOf(mateId) : undefined,
     neutralizations: incidents.filter((i) => i.type === 'sc_deploy' || i.type === 'vsc_deploy' || i.type === 'red_flag').length,
     retired: incidents.flatMap((i) => ((i.type === 'crash' || i.type === 'mech_dnf') && i.car !== ME ? [nameOf(i.car)] : [])),
@@ -39,13 +39,13 @@ export function RaceAftermath({ c, round, gp, rows, incidents, cars, chosen, onP
   const picked = chosen ? options.find((o) => o.id === chosen) : undefined;
   const reaction = picked ? snsReaction(c, res, picked.id) : null;
   return (
-    <div className="mt-4 grid gap-3 md:grid-cols-2">
-      <article aria-label="레이스 기사" className="rounded-xl border border-white/10 bg-[#f6f1e7] p-4 text-zinc-900">
+    <div className={`mt-4 grid gap-3 ${kind === 'race' ? 'md:grid-cols-2' : ''}`}>
+      <article aria-label={kind === 'sprint' ? '스프린트 기사' : '레이스 기사'} className="rounded-xl border border-white/10 bg-[#f6f1e7] p-4 text-zinc-900">
         <div className="text-[11px] font-bold tracking-widest text-zinc-500">📰 {article.outlet}</div>
         <h3 className="mt-1 text-lg font-black leading-snug">{article.headline}</h3>
         <div className="mt-2 space-y-1.5 text-sm leading-relaxed text-zinc-700">{article.body.map((p, i) => <p key={i}>{p}</p>)}</div>
       </article>
-      <section aria-label="SNS 게시" className="rounded-xl border border-white/10 bg-white/5 p-3">
+      {kind === 'race' && <section aria-label="SNS 게시" className="rounded-xl border border-white/10 bg-white/5 p-3">
         <div className="mb-2 text-sm font-bold">📱 레이스 소감을 SNS에 올릴까?</div>
         {picked && reaction ? (
           <div>
@@ -67,7 +67,7 @@ export function RaceAftermath({ c, round, gp, rows, incidents, cars, chosen, onP
             ))}
           </div>
         )}
-      </section>
+      </section>}
     </div>
   );
 }

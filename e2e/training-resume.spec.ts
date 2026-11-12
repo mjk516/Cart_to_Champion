@@ -2,7 +2,7 @@
 import {
   applyOffseason, createCareer, DEFAULT_POLICY, enduranceOffer, f1WeekendFor, getOffseason, isF1RaceSeason, pendingEventCards, previewEndurance, resolveEvent, runRace, runSeason, type Career,
 } from '../src/engine';
-import { expect, f1Career, KEY, loadSave, resolveAllEvents, test, useCleanStorage } from './helpers';
+import { expect, f1Career, goToFirstRace, KEY, loadSave, resolveAllEvents, test, useCleanStorage } from './helpers';
 
 useCleanStorage();
 
@@ -29,7 +29,7 @@ test.describe('중간에 멈춘 곳부터 이어하기', () => {
     await loadSave(page, f1Career());
     await page.getByRole('button', { name: /시즌 라이브로 시작/ }).click();
     const track = page.locator('svg[aria-label^="트랙 뷰"]');
-    for (let i = 0; i < 4 && !(await track.isVisible().catch(() => false)); i++) await page.getByRole('button', { name: '다음 세션' }).click();
+    await goToFirstRace(page);
     await page.getByRole('group', { name: '트랙 뷰 배속' }).getByRole('button', { name: '×60' }).click();
     const lapNow = async () => Number((await track.getAttribute('aria-label'))?.match(/L(\d+)\//)?.[1] ?? 0);
     // 무전이 뜨면 추천을 고르며 7랩까지 기다린다

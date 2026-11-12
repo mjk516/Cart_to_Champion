@@ -13,7 +13,7 @@ import { type RaceCar, type RadioOptionId } from './race';
 import { type MyRaceResult } from './raceNews';
 import { type SeriesId } from './series';
 import { type TeamNews, type TeamWorld } from './teams';
-import { STAT_KEYS, type Circuit, type Personality, type StatKey, type Stats, type WealthTier } from './types';
+import { STAT_KEYS, type Circuit, type Compound, type Personality, type StatKey, type Stats, type WealthTier } from './types';
 
 export const ENGINE_VERSION = '0.2.0';
 export const PLAYER_ID = 'player';
@@ -248,7 +248,7 @@ export function f1Calendar(c: Career): Circuit[] {
 }
 
 export type ChoiceLogEntry =
-  | { year: number; kind: 'training'; plan: TrainingId[]; radio?: Record<string, RadioOptionId>; endurance?: boolean; sns?: Record<string, string> }
+  | { year: number; kind: 'training'; plan: TrainingId[]; radio?: Record<string, RadioOptionId>; endurance?: boolean; sns?: Record<string, string>; strategy?: Record<string, { plan?: string; tyre?: Compound }> }
   | { year: number; kind: 'event'; eventId: string; optionId: string }
   | { year: number; kind: 'offseason'; choice: OffseasonChoice };
 

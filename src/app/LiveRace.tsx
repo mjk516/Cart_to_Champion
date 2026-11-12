@@ -12,7 +12,7 @@ import { ChatLine } from './FeedList';
 import { Pill } from './ui';
 
 const ME = 'player';
-const TYRE_COLOR: Record<string, string> = { S: '#ef4444', M: '#facc15', H: '#e5e7eb', I: '#22c55e' };
+export const TYRE_COLOR: Record<string, string> = { S: '#ef4444', M: '#facc15', H: '#e5e7eb', I: '#22c55e', W: '#3b82f6' };
 /** 재생 배속. ×1이면 실제 레이스 속도(한 랩이 실제 랩타임만큼 걸린다). ×1은 너무 느려 빼고 ×60을 둔다 */
 const SPEEDS = [5, 10, 30, 60] as const;
 const DEFAULT_SPEED = 10;
@@ -30,6 +30,8 @@ interface Ctx { codeOf: (id: string) => string; colorOf: (id: string) => string 
 const RADIO_LABEL: Record<string, string> = {
   pit_hard: '피트 인(하드)', pit_medium: '피트 인(미디엄)', stay_out: '스테이 아웃', pit: '피트 인',
   inters_now: '인터로 교체', one_more_lap: '한 랩 더', stay_slicks: '슬릭 유지', slicks_now: '슬릭으로 교체', stay_inters: '인터 유지',
+  wets_now: '풀웻으로 교체', pit_plan: '계획대로 피트', pit_now: '언더컷', extend: '오버컷(3랩 더)', gamble_soft: '도박: 소프트',
+  data_optimal: '데이터 최적 랩', pit_soft: '도박: 소프트로 피트', pit_data: '데이터: 맞춤 타이어', radar_wait: '레이더 보고 교체', slicks_soft: '도박: 바로 소프트',
 };
 
 function describe(inc: Incident, x: Ctx): string | null {
@@ -172,7 +174,7 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
 }
 
 function RadioModal({ decision, onPick }: { decision: RadioDecision; onPick: (o: RadioOptionId) => void }) {
-  const title = { sc: '세이프티카 출동!', vsc: 'VSC 발령!', rain_start: '비가 오기 시작했다.', rain_stop: '트랙이 마르고 있다.' }[decision.trigger];
+  const title = { sc: '세이프티카 출동!', vsc: 'VSC 발령!', rain_start: '비가 오기 시작했다.', rain_stop: '트랙이 마르고 있다.', pit_window: '피트 창이 열렸다.' }[decision.trigger];
   const n = decision.neutral;
   return (
     <div className="rounded-xl border border-racing/60 bg-racing/10 p-4" role="dialog" aria-label="엔지니어 무전">

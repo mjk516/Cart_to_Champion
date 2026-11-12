@@ -13,6 +13,7 @@ export * from './endurance';
 export * from './coach';
 export * from './raceNews';
 export * from './josa';
+export * from './strategy';
 export * from './form';
 export * from './events';
 export * from './feed';

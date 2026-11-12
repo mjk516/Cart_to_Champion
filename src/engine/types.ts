@@ -6,7 +6,7 @@ export type Personality = 'aggressive' | 'calm' | 'analytical' | 'instinctive' |
 export type WealthTier = 1 | 2 | 3 | 4 | 5;
 
 /** S/M/H = 슬릭, I = 인터미디어트 */
-export type Compound = 'S' | 'M' | 'H' | 'I';
+export type Compound = 'S' | 'M' | 'H' | 'I' | 'W';
 
 export interface Team {
   id: string;

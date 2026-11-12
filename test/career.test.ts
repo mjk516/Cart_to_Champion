@@ -175,8 +175,9 @@ describe('성격 기질과 잠재력(SPEC §3.4 v0.11)', () => {
     const pots = (p: 'aggressive' | 'calm') => Array.from({ length: 300 }, (_, i) => generateHidden(i, p).potential);
     const bad = pots('aggressive');
     const good = pots('calm');
-    expect(Math.max(...bad)).toBeGreaterThanOrEqual(Math.max(...good) + 5);
-    expect(Math.max(...good)).toBeLessThanOrEqual(88);
+    // v0.40: 성격별 챔피언 확률 차이를 줄이려고 상한 차이를 좁혔다(나쁜 성격 91, 좋은 성격 89)
+    expect(Math.max(...bad)).toBeGreaterThanOrEqual(Math.max(...good) + 2);
+    expect(Math.max(...good)).toBeLessThanOrEqual(89);
     const spread = (xs: number[]) => Math.max(...xs) - Math.min(...xs);
     expect(spread(bad)).toBeGreaterThan(spread(good));
   });
@@ -878,5 +879,21 @@ describe('가상 드라이버 이름·시즌 주요 기사 (v0.38)', () => {
       }
     }
     expect(found).toBeGreaterThan(0);
+  });
+});
+
+describe('전략 회의 선택 재생 (v0.40)', () => {
+  it('전략 회의 선택이 선택 기록에 남고 그대로 재현된다', () => {
+    let c = createCareer(setup(11, { wealthTier: 5 }));
+    for (let i = 0; i < 30 && !isF1RaceSeason(c); i++) {
+      c = runSeason(c, DEFAULT_POLICY.training(c)).career;
+      for (const card of pendingEventCards(c)) c = resolveEvent(c, card.id, card.options[0]!.id).career;
+      c = applyOffseason(c, DEFAULT_POLICY.offseason(c, getOffseason(c)));
+    }
+    expect(isF1RaceSeason(c)).toBe(true);
+    const strategy = { '0:race': { plan: 'hard_first' }, '1:race': { plan: 'team', tyre: 'S' as const } };
+    const yes = runSeason(c, DEFAULT_POLICY.training(c), {}, { strategy });
+    expect(yes.career.choiceLog.at(-1)).toMatchObject({ kind: 'training', strategy });
+    expect(replayCareer(yes.career.setup, yes.career.choiceLog)).toEqual(yes.career);
   });
 });

@@ -2,7 +2,7 @@
 import {
   applyOffseason, createCareer, DEFAULT_POLICY, enduranceOffer, f1WeekendFor, getOffseason, isF1RaceSeason, pendingEventCards, previewEndurance, resolveEvent, runRace, runSeason, type Career,
 } from '../src/engine';
-import { expect, f1Career, KEY, loadSave, resolveAllEvents, test, useCleanStorage } from './helpers';
+import { expect, f1Career, goToFirstRace, KEY, loadSave, resolveAllEvents, test, useCleanStorage } from './helpers';
 
 useCleanStorage();
 
@@ -43,7 +43,7 @@ test('F1 레이스: 첫 랩부터 트랙 뷰가 계속 보이고, 결과·댓글
   await expect(page.getByRole('heading', { name: '챔피언십 순위' })).toBeVisible();
   const track = page.locator('svg[aria-label^="트랙 뷰"]');
   // 프랙티스·퀄리파잉을 넘기고 첫 레이스(스프린트 또는 결승)까지
-  for (let i = 0; i < 4 && !(await track.isVisible().catch(() => false)); i++) await page.getByRole('button', { name: '다음 세션' }).click();
+  await goToFirstRace(page);
   await expect(track).toBeVisible();
   await expect(page.getByRole('heading', { name: '챔피언십 순위' })).toHaveCount(0);
   await expect(page.getByRole('group', { name: '트랙 뷰 배속' })).toBeVisible();
@@ -112,4 +112,22 @@ test('결승 뒤 기사와 SNS 글 고르기, 리타이어한 차는 OUT', async
   const out = race.type === 'race' ? runRace({ ...race.input, autoRadio: true }) : null;
   const dnf = out && out.status === 'finished' ? out.classification.filter((r) => r.status === 'dnf').length : 0;
   await expect(page.getByLabel('타이밍 타워').getByText('OUT', { exact: true })).toHaveCount(dnf);
+});
+
+test('팀 전략 회의: 출발 타이어와 피트 전략을 고르고 확정하면 레이스가 시작된다', async ({ page }) => {
+  await loadSave(page, f1Career());
+  await page.getByRole('button', { name: /시즌 라이브로 시작/ }).click();
+  const meeting = page.getByRole('region', { name: '팀 전략 회의' });
+  for (let i = 0; i < 6 && !(await meeting.isVisible().catch(() => false)); i++) await page.getByRole('button', { name: '다음 세션' }).click();
+  await expect(meeting).toBeVisible();
+  await expect(meeting.getByText('★팀')).toBeVisible();
+  await expect(meeting.getByRole('radio').first()).toHaveAttribute('aria-checked', 'true');
+  await meeting.getByRole('group', { name: '출발 타이어' }).getByRole('button', { name: /하드/ }).click();
+  await meeting.getByRole('button', { name: '전략 확정하고 출발' }).click();
+  await expect(page.locator('svg[aria-label^="트랙 뷰"]')).toBeVisible();
+  const live = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)!).state.live, KEY);
+  const key = Object.keys(live.strategy)[0]!;
+  expect(live.strategyDone).toContain(key);
+  // 고른 출발 타이어가 팀 추천과 같으면 tyre가 없고, 다르면 H
+  expect([undefined, 'H']).toContain(live.strategy[key].tyre);
 });
