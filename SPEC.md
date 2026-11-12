@@ -789,6 +789,7 @@ type Career = {
 - **정리**: `career.ts`(1,352줄)를 `careerCore`(타입·공통 규칙), `careerCreate`(생성), `season`(시즌·F1 주말), `offseason`(오프시즌·세계 진행), `careerInternal`(내부 도우미)로 나눴다. `career.ts`는 이것들을 내보내고 자동 진행·리플레이만 둔다. 나누기 전후로 30시즌 커리어 5개의 결과가 바이트 단위로 같다
 - **화면 흐름 E2E**(`npm run e2e`, Playwright, `e2e/flows.spec.ts` 8개): 생성(번호 경고 포함), 시즌 → 오프시즌 → 은퇴(게임 안 확인 창), 무소속 은퇴, F1 라이브 중 자동 진행, 대시보드에서 남은 시즌 이어서 진행, 업적·기록과 저장 파일 내보내기·가져오기, 휴대폰 폭, 첫 안내. 배포 워크플로가 E2E를 통과해야 배포한다. E2E가 찾은 버그: 1번을 넣으면 챔피언 전용 안내 대신 범위 안내가 나오던 것
 - **공개 배포**: GitHub 공개 저장소 `mjk516/Cart_to_Champion`, GitHub Pages(Actions) https://mjk516.github.io/Cart_to_Champion/ . main에 푸시하면 엔진 테스트 → E2E → 빌드 → 배포. 커밋 작성자 이메일은 GitHub noreply 주소로 바꿔서 올렸다
+- **새 주소**(2026-11-12): Vercel https://cart-to-champion.vercel.app/ (GitHub 저장소 연결, main 푸시마다 자동 배포, `vercel.json`). 공유 미리보기 이미지는 `VERCEL_PROJECT_PRODUCTION_URL`로 절대 주소. 예전 GitHub Pages 주소는 유지하고 맨 위에 새 주소 안내 띠(`src/app/site.ts`). 브라우저 저장은 주소마다 따로라 설정의 내보내기·가져오기로 옮긴다
 - **처음 안내**: 대시보드·오프시즌·그랑프리 주말에 한 번만 뜨는 안내 카드(닫으면 저장, 설정의 "처음 안내 다시 보기"로 되살림). 상단 메뉴·홈·설정에서 여는 **게임 방법** 페이지(목표, 사다리와 슈퍼 라이선스, 훈련, 라이브 레이스와 무전, 오프시즌, 성격, 돈·언론, 홈 그랑프리와 캘린더, 기록과 저장)
 
 ### v0.42 추가 (내구레이스 하이라이트 중계)

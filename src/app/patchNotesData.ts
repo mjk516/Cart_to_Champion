@@ -9,6 +9,7 @@ export const PATCH_NOTES: PatchDay[] = [
   {
     date: '2026-11-12',
     items: [
+      { tag: '기타', title: '새 주소: cart-to-champion.vercel.app', details: ['사이트 주소를 cart-to-champion.vercel.app 으로 옮겼다. 예전 주소에서는 새 주소 안내가 뜬다.', '커리어는 예전 주소의 설정 → 내보내기로 받아 새 주소의 설정 → 가져오기로 옮긴다.'] },
       {
         tag: '새 기능', title: '내구레이스 하이라이트 중계',
         details: [
