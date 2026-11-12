@@ -109,6 +109,9 @@ test('F1 라이브 중 대시보드의 "남은 시즌 한 번에 진행"이 진�
   await page.getByRole('button', { name: /이어하기/ }).first().click();
   await page.getByRole('button', { name: '남은 시즌 한 번에 진행' }).click();
   await expect(page.getByText(`${c.year} 시즌 결과`)).toBeVisible();
+  // 시즌 결과에 드라이버·컨스트럭터 최종 순위표
+  await expect(page.getByRole('region', { name: '드라이버 챔피언십 순위' }).locator('li').nth(9)).toBeVisible();
+  await expect(page.getByRole('region', { name: '컨스트럭터 챔피언십 순위' }).locator('li')).not.toHaveCount(0);
 });
 
 test('업적·기록과 설정(내보내기 → 가져오기 확인 창)', async ({ page }) => {
@@ -175,6 +178,7 @@ test('F1 레이스: 첫 랩부터 트랙 뷰가 계속 보이고, 결과·댓글
   await expect(track).toBeVisible();
   await expect(page.getByRole('heading', { name: '챔피언십 순위' })).toHaveCount(0);
   await expect(page.getByRole('group', { name: '트랙 뷰 배속' })).toBeVisible();
+  await expect(page.getByRole('group', { name: '트랙 뷰 배속' }).getByRole('button')).toHaveText(['×5', '×10', '×30', '×60']);
   // 결과까지 넘기면(무전은 추천) 트랙 뷰는 체커기 장면으로 남는다
   for (let i = 0; i < 12; i++) {
     const radio = page.getByRole('dialog', { name: '엔지니어 무전' });
@@ -193,6 +197,17 @@ test('훈련 계획: 칸마다 오르는 능력치가 보이고, 프로그램 �
   await page.getByText('훈련 프로그램별로 오르는 능력치').click();
   await expect(page.getByText('가상 주행으로 한계 속도를 다듬는다')).toBeVisible();
   await expect(page.getByText(/순간 속도 ▲/).first()).toBeVisible();
+});
+
+test('코치진 조언: 조언대로 짜기를 누르면 조언대로 짠 계획 표시', async ({ page }) => {
+  await loadSave(page, createCareer({ seed: 7, name: 'E2E', nationality: 'GB', wealthTier: 3, personality: 'calm', candidateIndex: 0, focus: ['pace'] }));
+  const card = page.getByLabel('코치 조언');
+  await expect(card).toBeVisible();
+  await page.getByLabel('훈련 1칸').selectOption('wet');
+  await page.getByLabel('훈련 2칸').selectOption('wet');
+  await expect(card.getByText('조언과 다른 계획')).toBeVisible();
+  await card.getByRole('button', { name: '코치 조언대로 짜기' }).click();
+  await expect(card.getByText('조언대로 짠 계획')).toBeVisible();
 });
 
 test('주말 시작에서 퀄리파잉으로 바로 갈 수 있다(프랙티스 건너뛰기)', async ({ page }) => {

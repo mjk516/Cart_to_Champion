@@ -13,8 +13,8 @@ import { Pill } from './ui';
 
 const ME = 'player';
 const TYRE_COLOR: Record<string, string> = { S: '#ef4444', M: '#facc15', H: '#e5e7eb', I: '#22c55e' };
-/** 재생 배속. ×1이면 실제 레이스 속도(한 랩이 실제 랩타임만큼 걸린다) */
-const SPEEDS = [1, 5, 10, 30] as const;
+/** 재생 배속. ×1이면 실제 레이스 속도(한 랩이 실제 랩타임만큼 걸린다). ×1은 너무 느려 빼고 ×60을 둔다 */
+const SPEEDS = [5, 10, 30, 60] as const;
 const DEFAULT_SPEED = 10;
 
 interface Ctx { codeOf: (id: string) => string; colorOf: (id: string) => string }

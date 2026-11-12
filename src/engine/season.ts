@@ -1,9 +1,10 @@
 // 시즌 진행(SPEC §4·§5): 카트·하부 리그·F1 시즌 계산, F1 그랑프리 주말(라이브용), runSeason.
 
-import { type Career, type F1Driver, PLAYER_ID, type SeasonRecord, f1Calendar, homeGpEffect, inMilitary, playerBehavior, withHomeGp } from './careerCore';
+import { type Career, type F1Driver, type F1Standings, PLAYER_ID, type SeasonRecord, f1Calendar, homeGpEffect, inMilitary, playerBehavior, withHomeGp } from './careerCore';
 import { clamp, juniorTeams, lerp, statsAround } from './careerInternal';
 import { WEALTH_TIERS } from './creation';
-import { applyEndurance, enduranceOffer } from './endurance';
+import { coachAdvice, followsCoach } from './coach';
+import { applyEndurance, enduranceResult } from './endurance';
 import { pickEvents } from './events';
 import { seasonFeed } from './feed';
 import { CAR_WEIGHT, F1_WINNER_TEAMS, ovr, POINTS_RACE } from './data';
@@ -38,6 +39,7 @@ interface SeasonSim {
   prize: number;
   /** 홈 그랑프리(F1 레이스) 우승 수 */
   homeWins: number;
+  f1Standings?: F1Standings;
 }
 
 const emptySim = (fieldSize: number): SeasonSim => ({
@@ -298,6 +300,7 @@ function simulateF1(c: Career, stats: Stats, seed: number, radio: Record<string,
   const best = new Map<string, number>();
   const exp = racing ? expectedRank(cars, w, PLAYER_ID) : 0;
   const mateId = racing ? cars.find((x) => x.teamId === c.contract!.teamId && x.id !== PLAYER_ID)?.id : undefined;
+  const winCount = new Map<string, number>();
   let finishSum = 0;
   let finished = 0;
   let beat = 0;
@@ -318,6 +321,7 @@ function simulateF1(c: Career, stats: Stats, seed: number, radio: Record<string,
       if (out.status !== 'finished') continue;
       for (const row of out.classification) {
         points.set(row.id, (points.get(row.id) ?? 0) + row.points);
+        if (sess.kind === 'race' && row.position === 1 && row.status === 'finished') winCount.set(row.id, (winCount.get(row.id) ?? 0) + 1);
         best.set(row.id, Math.min(best.get(row.id) ?? 99, row.position));
       }
       if (!racing) continue;
@@ -349,6 +353,14 @@ function simulateF1(c: Career, stats: Stats, seed: number, radio: Record<string,
   for (const car of cars) teamPts.set(car.teamId, (teamPts.get(car.teamId) ?? 0) + (points.get(car.id) ?? 0));
   const teamOrder = [...teamPts.keys()].sort((a, b) => (teamPts.get(b) ?? 0) - (teamPts.get(a) ?? 0));
   for (const t of c.world.teams.teams) t.standings.push(teamOrder.indexOf(t.id) + 1);
+  // 시즌 최종 순위표(화면용)
+  sim.f1Standings = {
+    drivers: table.map((id) => ({
+      id, name: id === PLAYER_ID ? c.driver.name : c.world.drivers.find((d) => d.id === id)?.name ?? id,
+      teamId: cars.find((x) => x.id === id)?.teamId ?? '', points: points.get(id) ?? 0, wins: winCount.get(id) ?? 0,
+    })),
+    teams: teamOrder.map((teamId) => ({ teamId, name: c.world.teams.teams.find((t) => t.id === teamId)?.name ?? teamId, points: teamPts.get(teamId) ?? 0 })),
+  };
 
   if (racing) {
     sim.position = table.indexOf(PLAYER_ID) + 1;
@@ -397,15 +409,17 @@ export function superLicencePoints(c: Career, uptoYear = c.year): number {
 }
 
 /** 시즌 동안 쓰는 능력치(압박·과훈련 반영). runSeason과 화면용 주말이 같은 값을 쓴다 */
-export function seasonStatsFor(c: Career, plan: TrainingId[]): { stats: Stats; pressured: boolean; overtrained: boolean } {
+export function seasonStatsFor(c: Career, plan: TrainingId[]): { stats: Stats; pressured: boolean; overtrained: boolean; coached: boolean } {
   const seat = c.contract?.seat ?? 'none';
   const slots = seat === 'race' ? TRAINING_SLOTS : TRAINING_SLOTS_RESERVE;
   const stats = { ...c.driver.stats };
-  const pressured = c.media.pressure > c.driver.hidden.pressureResist;
-  const overtrained = trainingOutcome(plan.slice(0, slots), false).overtrained;
+  // 코치 조언대로 짠 계획이면 압박 실수·과훈련 손해가 없다(SPEC v0.34)
+  const coached = plan.length > 0 && !inMilitary(c) && followsCoach(c, plan);
+  const pressured = !coached && c.media.pressure > c.driver.hidden.pressureResist;
+  const overtrained = !coached && trainingOutcome(plan.slice(0, slots), false).overtrained;
   if (pressured) stats.consistency = Math.max(20, stats.consistency - 3);
   if (overtrained) stats.consistency = Math.max(20, stats.consistency - 2);
-  return { stats, pressured, overtrained };
+  return { stats, pressured, overtrained, coached };
 }
 
 /**
@@ -424,7 +438,9 @@ export function runSeason(input: Career, plan: TrainingId[], radio: Record<strin
   // 군 복무 중에는 레이싱 훈련을 할 수 없다
   const serving = inMilitary(c);
   const cleanPlan = serving ? [] : plan.slice(0, slots);
-  const endurance = !serving && !!opts.endurance && !!enduranceOffer(c);
+  // 결과는 시즌 시작 때의 상태로 정한다(라이브 주말에 미리 보여 준 결과와 같게)
+  const enduranceOut = !serving && opts.endurance ? enduranceResult(c) : null;
+  const endurance = !!enduranceOut;
   c.choiceLog.push({ year: c.year, kind: 'training', plan: cleanPlan, ...(Object.keys(radio).length ? { radio } : {}), ...(endurance ? { endurance: true } : {}) });
 
   const notes: string[] = [];
@@ -443,8 +459,9 @@ export function runSeason(input: Career, plan: TrainingId[], radio: Record<strin
 
   // 훈련(돈이 모자라면 유료 프로그램을 무료 롱런으로 바꾼다)
   const freeSim = !!c.academy || series === 'f1' || (contract?.facility ?? 0) >= 0.8;
+  const ss = seasonStatsFor(c, cleanPlan);
   let training = trainingOutcome(cleanPlan, freeSim);
-  if (c.funds + income - expenses - training.cost < 0) {
+  if (!ss.coached && c.funds + income - expenses - training.cost < 0) {
     const downgraded = cleanPlan.map((id) => (TRAINING[id].cost > 0 && !(id === 'sim' && freeSim) ? 'longrun' : id));
     training = trainingOutcome(downgraded, freeSim);
     notes.push('자금이 부족해 유료 훈련을 줄였다');
@@ -452,8 +469,9 @@ export function runSeason(input: Career, plan: TrainingId[], radio: Record<strin
   expenses += training.cost;
 
   // 압박이 압박 내성보다 높으면 이번 시즌 Consistency −3
-  const ss = seasonStatsFor(c, cleanPlan);
   const seasonStats = ss.stats;
+  const coachBonus = ss.coached ? coachAdvice(c).bonus : 1;
+  if (ss.coached) notes.push(`코치진 조언대로 훈련했다: 훈련 효과 +${Math.round((coachBonus - 1) * 100)}%, 과훈련·압박 실수 없음`);
   if (ss.pressured) notes.push('압박 속에 실수가 늘었다');
   if (ss.overtrained) notes.push('휴식 없는 훈련으로 컨디션이 떨어졌다');
 
@@ -480,7 +498,7 @@ export function runSeason(input: Career, plan: TrainingId[], radio: Record<strin
   const trainGain: Partial<Stats> = {};
   const raceGain: Partial<Stats> = {};
   for (const k of STAT_KEYS) {
-    trainGain[k] = (training.xp[k] ?? 0) * eff * envMult * focusMult(k);
+    trainGain[k] = (training.xp[k] ?? 0) * eff * envMult * focusMult(k) * coachBonus;
     raceGain[k] = (sim.raceXp[k] ?? 0) * eff * focusMult(k);
   }
   const total: Partial<Stats> = {};
@@ -546,7 +564,7 @@ export function runSeason(input: Career, plan: TrainingId[], radio: Record<strin
   c.totals.bestOvr = Math.max(c.totals.bestOvr, Math.round(ovr(c.driver.stats)));
   if (Object.keys(aging).length) notes.push('나이가 들며 반응 속도가 떨어지기 시작했다');
   // 여름·가을 내구레이스: 시즌 기록을 만들기 전에 적용해 능력치·팬·압박이 이번 시즌에 반영된다
-  if (endurance) applyEndurance(c, notes);
+  const endur = enduranceOut ? applyEndurance(c, notes, enduranceOut) : null;
 
   const record: SeasonRecord = {
     year: c.year, age: c.age, series, team: contract?.team ?? null, seat, races: sim.races, wins: sim.wins, homeWins: sim.homeWins,
@@ -562,6 +580,8 @@ export function runSeason(input: Career, plan: TrainingId[], radio: Record<strin
     actualAvg: Math.round(sim.actualAvg * 10) / 10, teammateBeat: Math.round(sim.teammateBeat * 100) / 100,
     headline: serving ? `${c.driver.name}, 군 복무 중` : mediaOut.headline, notes, statsEnd: { ...c.driver.stats },
     ...(serving ? { military: true } : {}),
+    ...(endur ? { endurance: endur } : {}),
+    ...(sim.f1Standings ? { f1Standings: sim.f1Standings } : {}),
   };
   record.feed = seasonFeed(c, record);
   c.history.push(record);

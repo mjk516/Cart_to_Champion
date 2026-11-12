@@ -110,6 +110,25 @@ export interface SeasonRecord {
   homeWins?: number;
   /** 군 복무로 보낸 시즌(SPEC §2.4 v0.30) */
   military?: boolean;
+  /** F1 시즌 최종 순위(드라이버·컨스트럭터, SPEC v0.34). F1 시즌에만 있다 */
+  f1Standings?: F1Standings;
+  /** 시즌 중 내구레이스 결과(SPEC v0.34) */
+  endurance?: EnduranceResult;
+}
+
+export interface F1Standings {
+  drivers: { id: string; name: string; teamId: string; points: number; wins: number }[];
+  teams: { teamId: string; name: string; points: number }[];
+}
+
+export interface EnduranceResult {
+  name: string;
+  when: string;
+  /** 종합 순위(1~3 포디움). 리타이어면 null */
+  position: number | null;
+  classCars: number;
+  /** 포디움 보너스로 오른 능력치 */
+  gains: Partial<Record<StatKey, number>>;
 }
 
 export interface F1Driver {

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import {
-  circuitType, enduranceOffer, f1Calendar, previewEndurance, f1WeekendFor, homeGpEffect, forecastFinish, ovr, radioKey, runRace,
+  circuitType, enduranceLine, enduranceOffer, enduranceResult, f1Calendar, previewEndurance, f1WeekendFor, homeGpEffect, forecastFinish, ovr, radioKey, runRace,
   type Classified, type F1Weekend, type F1WeekendSession,
 } from '../engine';
 import { LiveRace } from './LiveRace';
@@ -130,6 +130,7 @@ export function Weekend() {
                 <div className={`rounded-xl border p-3 text-sm ${live.endurance ? 'border-amber-400/40 bg-amber-400/5' : 'border-white/10 bg-white/5'}`} aria-label="내구레이스">
                   <div className="font-bold">🏁 {endurHere.when} · {endurHere.name}</div>
                   <div className="mt-1 text-zinc-300">{live.endurance ? previewEndurance(c) : '이번에는 나가지 않고 F1 준비에 집중했다.'}</div>
+                  {live.endurance && (() => { const res = enduranceResult(c); return res ? <div className="mt-1 font-bold text-amber-200">{enduranceLine(res)}</div> : null; })()}
                   {live.endurance && <div className="mt-1 text-xs text-zinc-500">능력치·팬·압박 변화는 시즌을 마칠 때 반영됩니다.</div>}
                 </div>
               )}

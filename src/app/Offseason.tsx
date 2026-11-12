@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import {
   EVENT_CATEGORY_LABEL, LADDER, MANAGER_STYLE_LABEL, managerAdvice, newAchievements, pendingEventCards, seriesLabel, VERDICT_LABEL,
-  type ManagerAdvice, type Offer, type OfferAdvice, type SeasonRecord,
+  type ManagerAdvice, type Offer, type OfferAdvice, type SeasonRecord, type F1Standings, type EnduranceResult, enduranceLine, PLAYER_ID,
   draftedNext, seasonChatter,
 } from '../engine';
 import { FeedList, RollingComments } from './FeedList';
@@ -24,6 +24,70 @@ function effectTone(s: string): 'green' | 'amber' | 'zinc' {
   if (up) return inverted ? 'amber' : 'green';
   if (down) return inverted ? 'green' : 'amber';
   return 'zinc';
+}
+
+/** F1 시즌 최종 순위: 월드 챔피언십(드라이버)·컨스트럭터 (SPEC v0.34) */
+function StandingsTables({ st, me }: { st: F1Standings; me: string }) {
+  const [all, setAll] = useState(false);
+  const drivers = all ? st.drivers : st.drivers.slice(0, 10);
+  const myRow = st.drivers.findIndex((d) => d.id === me);
+  const mine = st.drivers[myRow];
+  return (
+    <div className="mt-4 grid gap-3 md:grid-cols-2">
+      <section aria-label="드라이버 챔피언십 순위" className="rounded-xl border border-white/10 bg-white/5 p-3">
+        <h3 className="mb-2 text-sm font-bold">🏆 드라이버 월드 챔피언십</h3>
+        <ol className="space-y-1 text-sm">
+          {drivers.map((d, i) => (
+            <li key={d.id} className={`flex items-center gap-2 rounded-lg px-2 py-1 ${d.id === me ? 'bg-racing/20 font-bold' : ''}`}>
+              <span className="w-6 text-right text-zinc-400">{i + 1}</span>
+              <F1TeamBadge teamId={d.teamId} size={18} />
+              <span className="min-w-0 flex-1 truncate">{i === 0 ? '👑 ' : ''}{d.name}</span>
+              {d.wins > 0 && <span className="text-[11px] text-zinc-400">{d.wins}승</span>}
+              <span className="w-12 text-right tabular-nums">{d.points}</span>
+            </li>
+          ))}
+          {!all && mine && myRow >= 10 && (
+            <li className="flex items-center gap-2 rounded-lg bg-racing/20 px-2 py-1 font-bold">
+              <span className="w-6 text-right text-zinc-400">{myRow + 1}</span>
+              <F1TeamBadge teamId={mine.teamId} size={18} />
+              <span className="min-w-0 flex-1 truncate">{mine.name}</span>
+              <span className="w-12 text-right tabular-nums">{mine.points}</span>
+            </li>
+          )}
+        </ol>
+        {st.drivers.length > 10 && (
+          <button onClick={() => setAll(!all)} className="mt-2 text-xs text-zinc-400 underline">{all ? '10위까지만 보기' : `전체 ${st.drivers.length}명 보기`}</button>
+        )}
+      </section>
+      <section aria-label="컨스트럭터 챔피언십 순위" className="rounded-xl border border-white/10 bg-white/5 p-3">
+        <h3 className="mb-2 text-sm font-bold">🏭 컨스트럭터 챔피언십</h3>
+        <ol className="space-y-1 text-sm">
+          {st.teams.map((t, i) => (
+            <li key={t.teamId} className={`flex items-center gap-2 rounded-lg px-2 py-1 ${t.teamId === mine?.teamId ? 'bg-racing/20 font-bold' : ''}`}>
+              <span className="w-6 text-right text-zinc-400">{i + 1}</span>
+              <F1TeamBadge teamId={t.teamId} size={18} />
+              <span className="min-w-0 flex-1 truncate">{i === 0 ? '👑 ' : ''}{t.name}</span>
+              <span className="w-12 text-right tabular-nums">{t.points}</span>
+            </li>
+          ))}
+        </ol>
+      </section>
+    </div>
+  );
+}
+
+function EnduranceCard({ e }: { e: EnduranceResult }) {
+  const podium = e.position !== null && e.position <= 3;
+  const medal = e.position === 1 ? '🥇' : e.position === 2 ? '🥈' : e.position === 3 ? '🥉' : '🏁';
+  const gained = Object.keys(e.gains).length > 0;
+  return (
+    <div aria-label="내구레이스 결과" className={`mt-3 rounded-xl border p-3 text-sm ${podium ? 'border-amber-400/50 bg-amber-400/10' : 'border-white/10 bg-white/5'}`}>
+      <div className="font-bold">{medal} {e.when} · {e.name}</div>
+      <div className="mt-1 text-zinc-200">{enduranceLine(e)}</div>
+      {podium && gained && <div className="mt-1 text-xs text-amber-200">포디움에 올라 능력치가 실제로 올랐습니다.</div>}
+      {podium && !gained && <div className="mt-1 text-xs text-zinc-400">이미 최고치라 더 오를 능력치가 없었습니다.</div>}
+    </div>
+  );
 }
 
 function SeasonSummary({ r }: { r: SeasonRecord }) {
@@ -63,6 +127,8 @@ function SeasonSummary({ r }: { r: SeasonRecord }) {
       <div className="mt-1 text-sm text-zinc-400">
         수입 {formatMoney(r.income, showKrw)} · 지출 {formatMoney(r.expenses, showKrw)} · 슈퍼 라이선스 +{r.superLicence}
       </div>
+      {r.endurance && <EnduranceCard e={r.endurance} />}
+      {r.f1Standings && <StandingsTables st={r.f1Standings} me={PLAYER_ID} />}
       {r.notes.length > 0 && <ul className="mt-2 list-disc pl-5 text-sm text-zinc-400">{r.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>}
       {r.feed && r.feed.length > 0 && <div className="mt-4"><FeedList items={r.feed} />{career && <RollingComments comments={seasonChatter(career, r)} />}</div>}
     </Card>
@@ -72,8 +138,8 @@ function SeasonSummary({ r }: { r: SeasonRecord }) {
 function ContractModal({ offer, name, firstF1, signature, onCancel, onSigned }: {
   offer: Offer; name: string; firstF1: boolean; signature: Signature; onCancel: () => void; onSigned: (s: Signature) => void;
 }) {
-  const { showKrw, career } = useGame();
-  const [sig, setSig] = useState<Signature | null>(firstF1 ? null : null);
+  const { showKrw, career, firstF1Signature } = useGame();
+  const [sig, setSig] = useState<Signature | null>(null);
   const [stamped, setStamped] = useState(false);
   const year = (career?.year ?? 0) + 1;
   return (
@@ -118,7 +184,7 @@ function ContractModal({ offer, name, firstF1, signature, onCancel, onSigned }: 
                   <span className="mb-2 text-sm text-racing">여기를 눌러 서명 ✍️</span>
                 )}
               </button>
-              <div className="mt-1 text-xs text-zinc-500">드라이버</div>
+              <div className="mt-1 text-xs text-zinc-500">{!firstF1 && firstF1Signature ? '드라이버 · 첫 F1 계약 때의 서명' : '드라이버'}</div>
             </div>
           </div>
         )}
@@ -197,7 +263,7 @@ function OfferCard({ o, onPick, advice }: { o: Offer; onPick: () => void; advice
 }
 
 export function Offseason() {
-  const { career: c, lastRecord, signature, acceptOffer, skipSeat, retire, chooseEvent } = useGame();
+  const { career: c, lastRecord, signature, firstF1Signature, acceptOffer, skipSeat, retire, chooseEvent } = useGame();
   const confirmBox = useConfirm();
   const off = useMemo(() => (c ? currentOffseason(c) : null), [c]);
   const pending = useMemo(() => (c ? pendingEventCards(c) : []), [c]);
@@ -211,7 +277,8 @@ export function Offseason() {
   const rank = (o: Offer) => (o.series === 'f1' && o.seat === 'race' ? 100 : 0) + LADDER.indexOf(o.series) * 10 + (o.seat === 'race' ? 5 : 0) + o.teamQuality;
   const offers = [...off.offers].sort((a, b) => rank(b) - rank(a));
   const firstF1 = (o: Offer) => o.series === 'f1' && o.seat === 'race' && c.f1Debut === null;
-  const sig = signature ?? { strokes: [], typed: c.driver.name };
+  // 첫 F1 계약서에 한 서명이 이후 모든 계약서에 그대로 쓰인다
+  const sig = firstF1Signature ?? signature ?? { strokes: [], typed: c.driver.name };
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 px-4 py-6">

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyOffseason, autoplayCareer, createCareer, DEFAULT_POLICY, getOffseason, MAX_TEAMS, MIN_TEAMS, replayCareer,
   CALENDAR_2026, f1WeekendFor, isF1RaceSeason, radioKey, type RadioOptionId, EVENTS, managerAdvice, MAJOR_FLOOR, OTHERS_CAP, feedTemplateCount, pendingEventCards, resolveEvent, F1_WINNER_TEAMS, f1Rules, generateHidden, initialWorld, NEW_TEAM_START, PERSONALITIES, runOffseason, TEAMS_2026, runSeason, STAT_KEYS, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, superLicencePoints, type CareerSetup,
-  evolveCalendar, RETURNING_CIRCUITS, CALENDAR_2027_SLOTS, ALL_F1_CIRCUITS, CALENDAR_CHANGE_FROM, CALENDAR_COOLDOWN, f1Calendar, type CalendarChange, hasHomeGp, homeGpEffect, type Personality, achievements, ACHIEVEMENTS, newAchievements, careerRecords, playerNumber, DRIVERS_2026, carNumberProblem, defaultCarNumber, FAMILY_BEHAVIOR, militaryDraftAge, enduranceOffer, previewEndurance, ROOKIE_TEAMS, ROOKIE_ACADEMY_WEIGHT, rookieTeamWeights,
+  evolveCalendar, RETURNING_CIRCUITS, CALENDAR_2027_SLOTS, ALL_F1_CIRCUITS, CALENDAR_CHANGE_FROM, CALENDAR_COOLDOWN, f1Calendar, type CalendarChange, hasHomeGp, homeGpEffect, type Personality, achievements, ACHIEVEMENTS, newAchievements, careerRecords, playerNumber, DRIVERS_2026, carNumberProblem, defaultCarNumber, FAMILY_BEHAVIOR, militaryDraftAge, enduranceOffer, previewEndurance, ROOKIE_TEAMS, ROOKIE_ACADEMY_WEIGHT, rookieTeamWeights, coachAdvice, followsCoach, enduranceResult, PLAYER_ID, TRAINING,
 } from '../src/engine';
 import { CIRCUIT_PATHS } from '../src/app/circuitPaths';
 
@@ -688,5 +688,101 @@ describe('신인 F1 데뷔 팀과 에이전트 재방문 (v0.33)', () => {
       }
     }
     expect(found).toBeGreaterThan(0);
+  });
+});
+
+describe('시즌 순위표·코치·내구레이스 포디움 (v0.34)', () => {
+  function f1Season() {
+    for (let seed = 1; seed <= 200; seed++) {
+      let c = createCareer(setup(seed, { wealthTier: 5 }));
+      for (let i = 0; i < 30 && !c.retired; i++) {
+        if (isF1RaceSeason(c)) return c;
+        c = runSeason(c, DEFAULT_POLICY.training(c)).career;
+        for (const card of pendingEventCards(c)) c = resolveEvent(c, card.id, card.options[0]!.id).career;
+        c = applyOffseason(c, DEFAULT_POLICY.offseason(c, getOffseason(c)));
+      }
+    }
+    throw new Error('no F1 season');
+  }
+
+  it('F1 시즌 기록에 드라이버·컨스트럭터 최종 순위가 남고, 내 순위·챔피언과 맞는다', () => {
+    const c = f1Season();
+    const { career, record } = runSeason(c, DEFAULT_POLICY.training(c));
+    const st = record.f1Standings!;
+    expect(st.drivers.length).toBeGreaterThanOrEqual(20);
+    for (let i = 1; i < st.drivers.length; i++) expect(st.drivers[i - 1]!.points).toBeGreaterThanOrEqual(st.drivers[i]!.points);
+    for (let i = 1; i < st.teams.length; i++) expect(st.teams[i - 1]!.points).toBeGreaterThanOrEqual(st.teams[i]!.points);
+    expect(st.drivers.findIndex((d) => d.id === PLAYER_ID) + 1).toBe(record.position);
+    expect(st.drivers[0]!.id === PLAYER_ID ? PLAYER_ID : st.drivers[0]!.id).toBe(career.world.champions.at(-1)!.driverId);
+    const sumD = st.drivers.reduce((a, d) => a + d.points, 0);
+    const sumT = st.teams.reduce((a, t) => a + t.points, 0);
+    expect(sumT).toBe(sumD);
+    expect(st.drivers.find((d) => d.id === PLAYER_ID)!.wins).toBe(record.wins);
+    // 하부 리그 시즌에는 없다
+    const kart = runSeason(createCareer(setup(3)), DEFAULT_POLICY.training(createCareer(setup(3)))).record;
+    expect(kart.f1Standings).toBeUndefined();
+  });
+
+  it('코치 조언대로 하면 손해가 없다: 압박 실수·과훈련·훈련 축소 없음, 훈련 효과 보너스', () => {
+    for (let seed = 1; seed <= 15; seed++) {
+      const c = createCareer(setup(seed));
+      c.media.pressure = 100; // 압박 한계를 넘긴 상태
+      c.funds = 0; // 유료 훈련을 할 돈이 없다
+      const adv = coachAdvice(c);
+      expect(followsCoach(c, adv.plan)).toBe(true);
+      expect(followsCoach(c, [...adv.plan].reverse())).toBe(true);
+      expect(adv.plan).toContain('rest');
+      expect(adv.plan).toContain('mental');
+      const coached = runSeason(c, adv.plan).record;
+      expect(coached.notes.some((n) => n.includes('코치진 조언'))).toBe(true);
+      expect(coached.notes.some((n) => n.includes('압박 속에') || n.includes('휴식 없는') || n.includes('자금이 부족'))).toBe(false);
+      const rogue = Array.from({ length: adv.plan.length }, () => 'wet' as const);
+      const bad = runSeason(c, rogue).record;
+      expect(bad.notes.some((n) => n.includes('압박 속에'))).toBe(true);
+      expect(bad.notes.some((n) => n.includes('코치진 조언'))).toBe(false);
+    }
+  });
+
+  it('조언대로 하면 같은 계획을 코치 없이 한 것보다 훈련 성장이 작지 않다', () => {
+    const c = createCareer(setup(7));
+    const adv = coachAdvice(c);
+    const withCoach = runSeason(c, adv.plan).record;
+    // 같은 계획에서 한 칸만 바꾸면 조언과 달라진다
+    const other = [...adv.plan];
+    other[other.length - 1] = other[other.length - 1] === 'data' ? 'longrun' : 'data';
+    expect(followsCoach(c, other)).toBe(false);
+    expect(adv.bonus).toBeGreaterThan(1);
+    expect(withCoach.growth.training).toBeGreaterThanOrEqual(0);
+    expect(TRAINING.rest).toBeDefined();
+  });
+
+  it('내구레이스 포디움이면 능력치가 실제로 오르고, 포디움 밖이면 그대로다', () => {
+    let podium = 0;
+    let outside = 0;
+    for (let seed = 1; seed <= 400 && (podium < 2 || outside < 2); seed++) {
+      let c = createCareer(setup(seed, { wealthTier: 5 }));
+      for (let i = 0; i < 30 && !c.retired; i++) {
+        const out = enduranceResult(c);
+        if (out) {
+          const plan = DEFAULT_POLICY.training(c);
+          const yes = runSeason(c, plan, {}, { endurance: true });
+          const no = runSeason(c, plan);
+          const e = yes.record.endurance!;
+          expect(e.position).toBe(out.position);
+          for (const k of STAT_KEYS) {
+            const diff = yes.career.driver.stats[k] - no.career.driver.stats[k];
+            expect(diff).toBe(e.gains[k] ?? 0);
+          }
+          if (e.position !== null && e.position <= 3) { podium++; expect(Object.keys(out.gains).length).toBeGreaterThan(0); }
+          else { outside++; expect(e.gains).toEqual({}); }
+          break;
+        }
+        c = runSeason(c, DEFAULT_POLICY.training(c)).career;
+        for (const card of pendingEventCards(c)) c = resolveEvent(c, card.id, card.options[0]!.id).career;
+        c = applyOffseason(c, DEFAULT_POLICY.offseason(c, getOffseason(c)));
+      }
+    }
+    expect(podium).toBeGreaterThan(0);
+    expect(outside).toBeGreaterThan(0);
   });
 });
