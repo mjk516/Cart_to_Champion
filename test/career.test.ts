@@ -476,6 +476,7 @@ describe('커리어 기록과 팀 레전드 (SPEC §9 v0.23)', () => {
     const r = careerRecords(c);
     const f1 = c.history.filter((h) => h.series === 'f1' && h.seat === 'race');
     if (r.youngestWin) expect(r.youngestWin.age).toBe(f1.find((h) => h.wins > 0)!.age);
+    if (r.youngestPodium) expect(r.youngestPodium.age).toBe(f1.find((h) => h.podiums > 0)!.age);
     if (r.mostWinsSeason) expect(r.mostWinsSeason.wins).toBe(Math.max(...f1.map((h) => h.wins)));
     if (r.titleStreak) expect(r.titleStreak.count).toBeLessThanOrEqual(c.totals.f1Titles);
     if (r.legend) {

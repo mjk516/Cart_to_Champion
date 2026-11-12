@@ -1,9 +1,16 @@
 // 업적·기록 화면(SPEC §9 v0.22): 통산 기록, 리그별 최고 성적, 업적 목록.
 
-import { ACHIEVEMENT_GROUP_LABEL, achievements, careerRecords, LADDER, REAL_YOUNGEST, seriesLabel, type AchievementGroup } from '../engine';
+import { ACHIEVEMENT_GROUP_LABEL, achievements, careerRecords, LADDER, REAL_YOUNGEST, REAL_YOUNGEST_HOLDER, seriesLabel, type AchievementGroup } from '../engine';
 import { formatMoney } from './format';
 import { useGame } from './store';
 import { Button, Card } from './ui';
+
+type YoungKey = keyof typeof REAL_YOUNGEST;
+/** 최연소 기록 한 줄: 내 기록과 실제 F1 기준(보유자·나이) */
+function youngRow(label: string, r: { age: number; year: number; beatsReal: boolean } | null, key: YoungKey): [string, string, string] {
+  const real = `${REAL_YOUNGEST_HOLDER[key]} ${REAL_YOUNGEST[key]}세`;
+  return [label, r ? `${r.age}세 (${r.year})` : '—', r?.beatsReal ? `실제 기록(${real})보다 어림 🏅` : `실제 기록 ${real}`];
+}
 
 export function Records() {
   const { career: c, showKrw, go } = useGame();
@@ -12,9 +19,10 @@ export function Records() {
   const list = achievements(c);
   const rec = careerRecords(c);
   const recRows: Array<[string, string, string?]> = [
-    ['최연소 F1 우승', rec.youngestWin ? `${rec.youngestWin.age}세 (${rec.youngestWin.year})` : '—', rec.youngestWin?.beatsReal ? `실제 기록 ${REAL_YOUNGEST.winner}세보다 어림` : undefined],
-    ['최연소 폴 포지션', rec.youngestPole ? `${rec.youngestPole.age}세 (${rec.youngestPole.year})` : '—', rec.youngestPole?.beatsReal ? `실제 기록 ${REAL_YOUNGEST.pole}세보다 어림` : undefined],
-    ['최연소 월드 챔피언', rec.youngestChampion ? `${rec.youngestChampion.age}세 (${rec.youngestChampion.year})` : '—', rec.youngestChampion?.beatsReal ? `실제 기록 ${REAL_YOUNGEST.champion}세보다 어림` : undefined],
+    youngRow('최연소 F1 우승', rec.youngestWin, 'winner'),
+    youngRow('최연소 F1 포디움', rec.youngestPodium, 'podium'),
+    youngRow('최연소 폴 포지션', rec.youngestPole, 'pole'),
+    youngRow('최연소 월드 챔피언', rec.youngestChampion, 'champion'),
     ['단일 시즌 최다 우승', rec.mostWinsSeason ? `${rec.mostWinsSeason.wins}승 / ${rec.mostWinsSeason.races}경기 (${rec.mostWinsSeason.year} ${rec.mostWinsSeason.team ?? ''})` : '—'],
     ['최다 연속 챔피언', rec.titleStreak ? `${rec.titleStreak.count}연패 (${rec.titleStreak.from}${rec.titleStreak.to !== rec.titleStreak.from ? `~${rec.titleStreak.to}` : ''})` : '—'],
     ['한 팀 최장 기간', rec.longestStint ? `${rec.longestStint.team} ${rec.longestStint.seasons}시즌 (${rec.longestStint.from}~${rec.longestStint.to})` : '—'],
