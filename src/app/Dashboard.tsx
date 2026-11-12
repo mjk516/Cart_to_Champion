@@ -5,7 +5,7 @@ import {
   circuitById, coachAdvice, enduranceOdds, enduranceOffer, followsCoach, inMilitary, seasonChatter, isF1RaceSeason, managerOf, MANAGER_STYLE_LABEL, ovr, PERSONALITIES, recommendedPlan, seriesLabel, STAT_KEYS, superLicencePoints, TRAINING, TRAINING_SLOTS,
   TRAINING_SLOTS_RESERVE, xpNeeded, type TrainingId,
 } from '../engine';
-import { formatMoney } from './format';
+import { formatMoney, nameAside } from './format';
 import { FeedList, RollingComments } from './FeedList';
 import { useGame } from './store';
 import { F1TeamBadge } from './TeamBadge';
@@ -72,6 +72,7 @@ export function Dashboard() {
         <div>
           <div className="text-xs text-zinc-400">{c.year} 시즌 · {c.age}세</div>
           <h1 className="flex items-center gap-2 text-2xl font-black">{d.helmet && <HelmetView helmet={d.helmet} size={44} />}{d.name}{d.number && <span className="text-base font-black text-zinc-400">#{d.number}</span>}</h1>
+          {nameAside(d) && <div className="text-xs text-zinc-400" aria-label="본명·별명">{nameAside(d)}</div>}
           <div className="mt-1 flex flex-wrap gap-2">
             <Pill>{pdef.label}</Pill>
             <Pill tone={temper.tone}>{temper.label}</Pill>

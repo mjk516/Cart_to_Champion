@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ALL_F1_CIRCUITS, CALENDAR_2026, CALENDAR_2027_SLOTS, carNumberProblem, circuitById, DEFAULT_HELMET, defaultCarNumber, generateCandidates, HELMET_COLORS, HELMET_PATTERNS, RETURNING_CIRCUITS, ovr, PERSONALITIES, recommendedFocus, STAT_KEYS, WEALTH_TIERS,
+  ALL_F1_CIRCUITS, calledName, driverCode, FAMILY_FIRST_NATIONS, formatFullName, CALENDAR_2026, CALENDAR_2027_SLOTS, carNumberProblem, circuitById, DEFAULT_HELMET, defaultCarNumber, generateCandidates, HELMET_COLORS, HELMET_PATTERNS, RETURNING_CIRCUITS, ovr, PERSONALITIES, recommendedFocus, STAT_KEYS, WEALTH_TIERS,
   type Helmet, type Personality, type StatKey, type WealthTier,
 } from '../engine';
 import { formatMoney, pct } from './format';
@@ -48,7 +48,11 @@ export function Create() {
   const [draft] = useState(() => createDraft);
   const [seed] = useState(() => draft?.seed ?? randomSeed());
   const [step, setStep] = useState(draft?.step ?? 0);
-  const [name, setName] = useState(draft?.name ?? '');
+  // 성·이름은 둘 다 적고, 별명은 자유. 별명으로 불리길 원하면 경기·기사에서 별명으로 부른다
+  const [surname, setSurname] = useState(draft?.surname ?? '');
+  const [given, setGiven] = useState(draft?.given ?? draft?.name ?? '');
+  const [nickname, setNickname] = useState(draft?.nickname ?? '');
+  const [useNickname, setUseNickname] = useState(draft?.useNickname ?? false);
   const [nationality, setNationality] = useState(draft?.nationality ?? 'KR');
   const [wealth, setWealth] = useState<WealthTier>((draft?.wealth as WealthTier) ?? 3);
   const [personality, setPersonality] = useState<Personality>((draft?.personality as Personality) ?? 'fighter');
@@ -57,11 +61,13 @@ export function Create() {
   const [focus, setFocus] = useState<StatKey[]>((draft?.focus as StatKey[]) ?? recommendedFocus('fighter'));
   const [helmet, setHelmet] = useState<Helmet>((draft?.helmet as Helmet) ?? DEFAULT_HELMET);
   const [numberText, setNumberText] = useState(() => draft?.numberText ?? String(defaultCarNumber(seed)));
+  const fullName = formatFullName(surname, given, nationality);
+  const name = calledName({ surname, given, nationality, nickname, useNickname });
   useEffect(() => {
     // 이름을 쓰거나 다음 단계로 넘어간 뒤부터 저장한다
-    if (!name.trim() && step === 0) return;
-    setCreateDraft({ seed, step, name, nationality, wealth, personality, reroll, candidate, focus, helmet, numberText });
-  }, [seed, step, name, nationality, wealth, personality, reroll, candidate, focus, helmet, numberText]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!surname.trim() && !given.trim() && step === 0) return;
+    setCreateDraft({ seed, step, name, surname, given, nickname, useNickname, nationality, wealth, personality, reroll, candidate, focus, helmet, numberText });
+  }, [seed, step, surname, given, nickname, useNickname, nationality, wealth, personality, reroll, candidate, focus, helmet, numberText]); // eslint-disable-line react-hooks/exhaustive-deps
   const carNumber = Number(numberText);
   const numberError = numberText.trim() === '' ? '번호를 입력해 주세요' : carNumberProblem(carNumber);
   const candidates = useMemo(() => generateCandidates(seed, personality, reroll), [seed, personality, reroll]);
@@ -71,7 +77,8 @@ export function Create() {
     setFocus(recommendedFocus(p));
     setCandidate(0);
   };
-  const canNext = step === 0 ? name.trim().length > 0 : step === 1 ? !numberError : true;
+  const nameOk = surname.trim().length > 0 && given.trim().length > 0 && (!useNickname || nickname.trim().length > 0);
+  const canNext = step === 0 ? nameOk : step === 1 ? !numberError : true;
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 px-4 py-6">
@@ -86,13 +93,33 @@ export function Create() {
       {step === 0 && (
         <Card title="기본 정보">
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="space-y-1">
-              <span className="text-xs text-zinc-400">이름</span>
-              <input
-                aria-label="이름" value={name} onChange={(e) => setName(e.target.value.slice(0, 16))} placeholder="예: 김민준"
-                className="w-full rounded-xl border border-white/15 bg-zinc-950 px-3 py-2.5 outline-none focus:border-racing"
-              />
-            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="space-y-1">
+                <span className="text-xs text-zinc-400">성</span>
+                <input
+                  aria-label="성" value={surname} onChange={(e) => setSurname(e.target.value.slice(0, 12))} placeholder={FAMILY_FIRST_NATIONS.has(nationality) ? '예: 김' : '예: Rossi'}
+                  className="w-full rounded-xl border border-white/15 bg-zinc-950 px-3 py-2.5 outline-none focus:border-racing"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs text-zinc-400">이름</span>
+                <input
+                  aria-label="이름" value={given} onChange={(e) => setGiven(e.target.value.slice(0, 12))} placeholder={FAMILY_FIRST_NATIONS.has(nationality) ? '예: 민준' : '예: Luca'}
+                  className="w-full rounded-xl border border-white/15 bg-zinc-950 px-3 py-2.5 outline-none focus:border-racing"
+                />
+              </label>
+              <label className="col-span-2 space-y-1">
+                <span className="text-xs text-zinc-400">별명 (선택)</span>
+                <input
+                  aria-label="별명" value={nickname} onChange={(e) => { setNickname(e.target.value.slice(0, 12)); if (!e.target.value.trim()) setUseNickname(false); }} placeholder="예: 번개, The Rocket"
+                  className="w-full rounded-xl border border-white/15 bg-zinc-950 px-3 py-2.5 outline-none focus:border-racing"
+                />
+              </label>
+              <label className={`col-span-2 flex items-center gap-2 text-sm ${nickname.trim() ? '' : 'opacity-50'}`}>
+                <input type="checkbox" className="h-4 w-4 accent-racing" checked={useNickname} disabled={!nickname.trim()} onChange={(e) => setUseNickname(e.target.checked)} aria-label="별명으로 불리기" />
+                별명으로 불리고 싶어요 <span className="text-xs text-zinc-500">(끄면 본명으로 불립니다)</span>
+              </label>
+            </div>
             <label className="space-y-1">
               <span className="text-xs text-zinc-400">국적</span>
               <select aria-label="국적" value={nationality} onChange={(e) => setNationality(e.target.value)} className="w-full rounded-xl border border-white/15 bg-zinc-950 px-3 py-2.5">
@@ -113,6 +140,15 @@ export function Create() {
               </span>
             </label>
           </div>
+          {(surname.trim() || given.trim()) && (
+            <div aria-label="이름 미리 보기" className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3 text-sm">
+              <div>불리는 이름 <b className="text-base">{name || '—'}</b>{useNickname && nickname.trim() && <span className="ml-2 text-xs text-zinc-400">본명 {fullName}</span>}</div>
+              <div className="mt-1 text-xs text-zinc-400">
+                {FAMILY_FIRST_NATIONS.has(nationality) ? `${nationName(nationality)}에서는 성을 먼저 부릅니다.` : `${nationName(nationality)}에서는 이름을 먼저, 성을 뒤에 부릅니다.`}
+                {' '}타이밍 타워 코드 <b className="text-zinc-200">{driverCode(surname, fullName)}</b>
+              </div>
+            </div>
+          )}
           <p className="mt-4 text-sm text-zinc-400">12세, 첫 카트 시즌부터 시작합니다.</p>
         </Card>
       )}
@@ -251,7 +287,7 @@ export function Create() {
             name={name.trim()}
             doneLabel="커리어 시작"
             onDone={(sig) =>
-              startCareer({ seed, name: name.trim(), nationality, wealthTier: wealth, personality, candidateIndex: candidate, reroll, focus, number: carNumber, helmet }, sig)
+              startCareer({ seed, name: name.trim(), surname: surname.trim(), givenName: given.trim(), ...(nickname.trim() ? { nickname: nickname.trim() } : {}), useNickname: useNickname && !!nickname.trim(), nationality, wealthTier: wealth, personality, candidateIndex: candidate, reroll, focus, number: carNumber, helmet }, sig)
             }
           />
         </Card>

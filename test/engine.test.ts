@@ -313,3 +313,22 @@ describe('엔지니어 무전(SPEC §5.5 v0.31)', () => {
     expect(forced).toBeGreaterThan(0);
   });
 });
+
+import { calledName, driverCode, formatFullName } from '../src/engine';
+
+describe('플레이어 이름 (v0.37)', () => {
+  it('국적에 맞는 성명 순서, 별명 선택, 코드', () => {
+    expect(formatFullName('김', '민준', 'KR')).toBe('김민준');
+    expect(formatFullName('Kim', 'Minjun', 'KR')).toBe('Kim Minjun');
+    expect(formatFullName('佐藤', '健', 'JP')).toBe('佐藤健');
+    expect(formatFullName('Nguyen', 'Van An', 'VN')).toBe('Nguyen Van An');
+    expect(formatFullName('Rossi', 'Luca', 'IT')).toBe('Luca Rossi');
+    expect(formatFullName('Silva', 'Ana', 'BR')).toBe('Ana Silva');
+    expect(calledName({ surname: 'Rossi', given: 'Luca', nationality: 'IT', nickname: 'The Rocket', useNickname: true })).toBe('The Rocket');
+    expect(calledName({ surname: 'Rossi', given: 'Luca', nationality: 'IT', nickname: 'The Rocket', useNickname: false })).toBe('Luca Rossi');
+    expect(calledName({ surname: 'Rossi', given: 'Luca', nationality: 'IT', nickname: '  ', useNickname: true })).toBe('Luca Rossi');
+    expect(driverCode('Rossi', 'The Rocket')).toBe('ROS');
+    expect(driverCode('김', '김민준')).toBe('김민준');
+    expect(driverCode(undefined, 'Alex Moreau')).toBe('ALE');
+  });
+});

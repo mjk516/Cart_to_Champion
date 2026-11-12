@@ -66,6 +66,10 @@ export interface CreateDraft {
   seed: number;
   step: number;
   name: string;
+  surname?: string;
+  given?: string;
+  nickname?: string;
+  useNickname?: boolean;
   nationality: string;
   wealth: number;
   personality: string;

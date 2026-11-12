@@ -23,3 +23,10 @@ export function formatMoney(eur: number, showKrw: boolean): string {
 }
 
 export const pct = (x: number) => `${Math.round(x * 100)}%`;
+
+/** 부르는 이름 옆에 붙이는 한 줄: 별명으로 불리면 본명, 본명으로 불리면 별명 */
+export function nameAside(d: { name: string; fullName?: string; nickname?: string }): string | null {
+  if (d.fullName && d.nickname && d.name === d.nickname) return `본명 ${d.fullName}`;
+  if (d.nickname) return `별명 “${d.nickname}”`;
+  return null;
+}

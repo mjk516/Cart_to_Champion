@@ -5,7 +5,7 @@ import {
   generateCandidates, LADDER, ovr, PERSONALITIES, seriesLabel, STAT_KEYS,
   type Career, type SeriesId, type StatKey, type Stats,
 } from '../engine';
-import { formatMoney } from './format';
+import { formatMoney, nameAside } from './format';
 import { SignatureView } from './SignatureView';
 import { useGame } from './store';
 import { Bar, Button, Card, Pill, SEAT_LABELS, STAT_LABELS, TEMPERAMENT_LABELS } from './ui';
@@ -279,6 +279,7 @@ export function Retired() {
       <Card className="bg-gradient-to-br from-zinc-900 to-racing/30">
         <div className="text-xs tracking-[0.3em] text-zinc-400">CAREER CARD</div>
         <h1 className="mt-1 text-3xl font-black">{c.driver.name}</h1>
+        {nameAside(c.driver) && <div className="text-sm text-zinc-300">{nameAside(c.driver)}</div>}
         <div className="mt-1 flex flex-wrap gap-2">
           <Pill>{PERSONALITIES[c.driver.personality].label}</Pill>
           <Pill>{c.age}세 은퇴 · {c.history.length}시즌</Pill>

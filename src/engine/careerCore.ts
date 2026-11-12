@@ -21,7 +21,13 @@ export const PLAYER_ID = 'player';
 // ── 타입 ─────────────────────────────────────────────────────────────
 export interface CareerSetup {
   seed: number;
+  /** 부르는 이름(별명을 원하면 별명, 아니면 국적에 맞는 성명) */
   name: string;
+  /** 성·이름·별명(SPEC v0.37). 이전 저장 파일에는 없다 */
+  surname?: string;
+  givenName?: string;
+  nickname?: string;
+  useNickname?: boolean;
   nationality: string;
   wealthTier: WealthTier;
   personality: Personality;
@@ -248,7 +254,11 @@ export interface Career {
   seed: number;
   setup: CareerSetup;
   driver: {
+    /** 부르는 이름 */
     name: string;
+    /** 국적에 맞는 성명(본명). 별명으로 불릴 때 함께 보여 준다 */
+    fullName?: string;
+    nickname?: string;
     code: string;
     nationality: string;
     personality: Personality;
