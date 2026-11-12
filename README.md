@@ -1,6 +1,8 @@
 # 카트에서 챔피언까지
 
-**플레이: https://mjk516.github.io/Cart_to_Champion/**
+**플레이: https://cart-to-champion.vercel.app/**
+
+(예전 주소 https://mjk516.github.io/Cart_to_Champion/ 도 당분간 열리고, 새 주소 안내가 뜹니다. 커리어는 설정 → 내보내기/가져오기로 옮깁니다.)
 
 12세 카트 유망주에서 F1 월드 챔피언까지 가는 레이싱 커리어 시뮬레이션. 브라우저에서만 돌아가는 정적 웹 게임이고, 진행 상황은 브라우저(localStorage)에 저장된다.
 
