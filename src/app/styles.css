@@ -5,6 +5,11 @@
 html { color-scheme: dark; -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: #09090b; -webkit-tap-highlight-color: transparent; }
 
+/* 한국어 줄바꿈은 어절(띄어쓰기) 단위로. 띄어쓰기 없이 긴 낱말·주소만 칸을 넘을 때 글자 단위로 끊는다 */
+body { word-break: keep-all; overflow-wrap: break-word; line-break: strict; }
+/* 문단 끝에 한 단어만 남는 줄을 줄인다(지원하는 브라우저만) */
+p, li, dd, figcaption { text-wrap: pretty; }
+
 /* 키보드로 옮겨 다닐 때만 보이는 포커스 링(마우스·터치에서는 안 보인다) */
 :focus { outline: none; }
 :focus-visible { outline: 2px solid #f87171; outline-offset: 2px; border-radius: 0.5rem; }

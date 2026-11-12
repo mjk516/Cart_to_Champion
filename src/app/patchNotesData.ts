@@ -9,6 +9,7 @@ export const PATCH_NOTES: PatchDay[] = [
   {
     date: '2026-11-12',
     items: [
+      { tag: '개선', title: '단어 단위 줄바꿈', details: ['게임 방법·안내·기사·무전 등 모든 글이 낱글자가 아니라 띄어쓰기(어절) 단위로 줄을 바꾼다. 띄어쓰기 없이 아주 긴 낱말만 칸을 넘을 때 끊는다.'] },
       {
         tag: '개선', title: 'UI 다듬기',
         details: [
