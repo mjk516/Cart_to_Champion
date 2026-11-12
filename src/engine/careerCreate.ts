@@ -57,7 +57,7 @@ export function createCareer(setup: CareerSetup): Career {
       helmet: setup.helmet ?? DEFAULT_HELMET,
       stats: { ...cand.stats },
       xp: zeroStats(),
-      hidden: generateHidden(setup.seed, setup.personality),
+      hidden: generateHidden(setup.seed, setup.personality, setup.difficulty),
     },
     year: startYear,
     age: 12,

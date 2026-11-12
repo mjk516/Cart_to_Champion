@@ -3,7 +3,7 @@
 
 import { PERSONALITIES } from './creation';
 import { int, normal, rngFor, weightedPick, type Rng } from './rng';
-import { STAT_KEYS, type Personality, type StatKey, type Stats } from './types';
+import { STAT_KEYS, type Difficulty, type Personality, type StatKey, type Stats } from './types';
 
 export type GrowthType = 'early' | 'standard' | 'late' | 'longevity';
 
@@ -18,7 +18,24 @@ export interface Hidden {
 
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
 
-export function generateHidden(seed: number, personality: Personality): Hidden {
+/** 난이도별 잠재력 보정(SPEC v0.45): 쉬움 +2~3(반반, 시드로), 어려움 −2, 보통은 그대로. 1점 차이가 챔피언 확률을 크게 바꿔서 쉬움은 반반으로 맞춘다 */
+export const DIFFICULTY_INFO: Record<Difficulty, { label: string; desc: string; champion: string }> = {
+  easy: { label: '쉬움', desc: '잠재력 한도가 조금 높다. 월드 챔피언의 꿈을 맛보고 싶다면', champion: '약 30%' },
+  normal: { label: '보통', desc: '기본 밸런스. 노력과 운, 좋은 팀이 모두 맞아야 챔피언', champion: '약 13%' },
+  hard: { label: '어려움', desc: '잠재력 한도가 낮다. 실제 F1처럼 챔피언은 극소수만', champion: '약 5%' },
+};
+
+/** 커리어의 난이도(이전 저장 파일은 보통) */
+export function difficultyOf(c: { setup?: { difficulty?: Difficulty } }): Difficulty {
+  return c.setup?.difficulty ?? 'normal';
+}
+
+export function difficultyPotential(seed: number, difficulty: Difficulty): number {
+  if (difficulty === 'easy') return rngFor(seed, 'difficulty')() < 0.5 ? 2 : 3;
+  return difficulty === 'hard' ? -2 : 0;
+}
+
+export function generateHidden(seed: number, personality: Personality, difficulty: Difficulty = 'normal'): Hidden {
   const r = rngFor(seed, 'hidden');
   // 기질에 따라 잠재력 분포가 다르다(SPEC §3.4 v0.11): 좋은 성격은 좁고 낮은 상한, 나쁜 성격은 넓고 높은 상한
   const t = PERSONALITIES[personality].temperament;
@@ -39,7 +56,7 @@ export function generateHidden(seed: number, personality: Personality): Hidden {
   // v0.40: 쇼맨형의 압박 내성 감점(−15)을 없앴다(성격별 챔피언 확률 맞춤)
   const pressureBonus = personality === 'calm' || personality === 'fighter' ? 15 : 0;
   return {
-    potential,
+    potential: potential + difficultyPotential(seed, difficulty),
     growthType,
     peakEnd,
     injuryResist: clamp(Math.round(50 + normal(r) * 15), 10, 95),

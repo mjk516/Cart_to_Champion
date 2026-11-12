@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ALL_F1_CIRCUITS, calledName, driverCode, FAMILY_FIRST_NATIONS, formatFullName, CALENDAR_2026, CALENDAR_2027_SLOTS, carNumberProblem, circuitById, DEFAULT_HELMET, defaultCarNumber, generateCandidates, HELMET_COLORS, HELMET_PATTERNS, RETURNING_CIRCUITS, ovr, PERSONALITIES, recommendedFocus, STAT_KEYS, WEALTH_TIERS,
-  type Helmet, type Personality, type StatKey, type WealthTier,
+  DIFFICULTY_INFO, type Difficulty, type Helmet, type Personality, type StatKey, type WealthTier,
 } from '../engine';
 import { formatMoney, pct } from './format';
 import { HelmetView } from './Helmet';
@@ -61,13 +61,14 @@ export function Create() {
   const [focus, setFocus] = useState<StatKey[]>((draft?.focus as StatKey[]) ?? recommendedFocus('fighter'));
   const [helmet, setHelmet] = useState<Helmet>((draft?.helmet as Helmet) ?? DEFAULT_HELMET);
   const [numberText, setNumberText] = useState(() => draft?.numberText ?? String(defaultCarNumber(seed)));
+  const [difficulty, setDifficulty] = useState<Difficulty>((draft?.difficulty as Difficulty) ?? 'normal');
   const fullName = formatFullName(surname, given, nationality);
   const name = calledName({ surname, given, nationality, nickname, useNickname });
   useEffect(() => {
     // 이름을 쓰거나 다음 단계로 넘어간 뒤부터 저장한다
     if (!surname.trim() && !given.trim() && step === 0) return;
-    setCreateDraft({ seed, step, name, surname, given, nickname, useNickname, nationality, wealth, personality, reroll, candidate, focus, helmet, numberText });
-  }, [seed, step, surname, given, nickname, useNickname, nationality, wealth, personality, reroll, candidate, focus, helmet, numberText]); // eslint-disable-line react-hooks/exhaustive-deps
+    setCreateDraft({ seed, step, name, surname, given, nickname, useNickname, nationality, wealth, personality, reroll, candidate, focus, helmet, numberText, difficulty });
+  }, [seed, step, surname, given, nickname, useNickname, nationality, wealth, personality, reroll, candidate, focus, helmet, numberText, difficulty]); // eslint-disable-line react-hooks/exhaustive-deps
   const carNumber = Number(numberText);
   const numberError = numberText.trim() === '' ? '번호를 입력해 주세요' : carNumberProblem(carNumber);
   const candidates = useMemo(() => generateCandidates(seed, personality, reroll), [seed, personality, reroll]);
@@ -149,6 +150,17 @@ export function Create() {
               </div>
             </div>
           )}
+          <div className="mt-4 text-sm font-bold text-zinc-200">난이도</div>
+          <div className="mt-1.5 grid grid-cols-3 gap-2" role="radiogroup" aria-label="난이도">
+            {(['easy', 'normal', 'hard'] as const).map((d) => (
+              <button key={d} role="radio" aria-checked={difficulty === d} onClick={() => setDifficulty(d)}
+                className={`rounded-xl border p-2.5 text-left transition ${difficulty === d ? 'border-racing bg-racing/10' : 'border-white/15 hover:bg-white/5'}`}>
+                <div className="text-sm font-black">{DIFFICULTY_INFO[d].label}</div>
+                <div className="mt-0.5 text-[11px] text-zinc-400">챔피언 {DIFFICULTY_INFO[d].champion}</div>
+              </button>
+            ))}
+          </div>
+          <p className="mt-1.5 text-xs text-zinc-400">{DIFFICULTY_INFO[difficulty].desc}. 커리어를 시작하면 바꿀 수 없습니다.</p>
           <p className="mt-4 text-sm text-zinc-400">12세, 첫 카트 시즌부터 시작합니다.</p>
         </Card>
       )}
@@ -287,7 +299,7 @@ export function Create() {
             name={name.trim()}
             doneLabel="커리어 시작"
             onDone={(sig) =>
-              startCareer({ seed, name: name.trim(), surname: surname.trim(), givenName: given.trim(), ...(nickname.trim() ? { nickname: nickname.trim() } : {}), useNickname: useNickname && !!nickname.trim(), nationality, wealthTier: wealth, personality, candidateIndex: candidate, reroll, focus, number: carNumber, helmet }, sig)
+              startCareer({ seed, name: name.trim(), surname: surname.trim(), givenName: given.trim(), ...(nickname.trim() ? { nickname: nickname.trim() } : {}), useNickname: useNickname && !!nickname.trim(), nationality, wealthTier: wealth, personality, candidateIndex: candidate, reroll, focus, number: carNumber, helmet, difficulty }, sig)
             }
           />
         </Card>

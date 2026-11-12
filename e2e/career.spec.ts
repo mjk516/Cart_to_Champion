@@ -11,6 +11,9 @@ test('새 커리어: 헬멧·번호(실제 F1 번호는 경고) → 대시보드
   await page.getByRole('button', { name: '새 커리어' }).click();
   await page.getByLabel('성', { exact: true }).fill('김');
   await page.getByLabel('이름', { exact: true }).fill('테스트');
+  // 난이도: 기본은 보통, 쉬움을 고른다
+  await expect(page.getByRole('radio', { name: /보통/ })).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('radio', { name: /쉬움/ }).click();
   await page.getByRole('button', { name: '다음' }).click();
 
   const num = page.getByLabel('차 번호');
@@ -28,6 +31,9 @@ test('새 커리어: 헬멧·번호(실제 F1 번호는 경고) → 대시보드
   await page.getByRole('button', { name: '이름으로 서명 만들기' }).click();
   await expect(page.getByRole('heading', { level: 1 })).toContainText('김테스트');
   await expect(page.getByRole('heading', { level: 1 })).toContainText('#9');
+  await expect(page.getByText('난이도 쉬움')).toBeVisible();
+  const saved = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)!).state.career.setup.difficulty, KEY);
+  expect(saved).toBe('easy');
 });
 
 test('시즌 진행 → 오프시즌 → 은퇴 선언(게임 안 확인 창)', async ({ page }) => {
