@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyOffseason, autoplayCareer, createCareer, DEFAULT_POLICY, getOffseason, MAX_TEAMS, MIN_TEAMS, replayCareer,
   CALENDAR_2026, f1WeekendFor, isF1RaceSeason, radioKey, type RadioOptionId, EVENTS, managerAdvice, MAJOR_FLOOR, OTHERS_CAP, feedTemplateCount, pendingEventCards, resolveEvent, F1_WINNER_TEAMS, f1Rules, generateHidden, initialWorld, NEW_TEAM_START, PERSONALITIES, runOffseason, TEAMS_2026, runSeason, STAT_KEYS, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, superLicencePoints, type CareerSetup,
-  evolveCalendar, RETURNING_CIRCUITS, CALENDAR_2027_SLOTS, ALL_F1_CIRCUITS, CALENDAR_CHANGE_FROM, CALENDAR_COOLDOWN, f1Calendar, type CalendarChange, hasHomeGp, homeGpEffect, type Personality, achievements, ACHIEVEMENTS, newAchievements, careerRecords, playerNumber, DRIVERS_2026, carNumberProblem, defaultCarNumber, FAMILY_BEHAVIOR, militaryDraftAge,
+  evolveCalendar, RETURNING_CIRCUITS, CALENDAR_2027_SLOTS, ALL_F1_CIRCUITS, CALENDAR_CHANGE_FROM, CALENDAR_COOLDOWN, f1Calendar, type CalendarChange, hasHomeGp, homeGpEffect, type Personality, achievements, ACHIEVEMENTS, newAchievements, careerRecords, playerNumber, DRIVERS_2026, carNumberProblem, defaultCarNumber, FAMILY_BEHAVIOR, militaryDraftAge, ROOKIE_TEAMS, ROOKIE_ACADEMY_WEIGHT, rookieTeamWeights,
 } from '../src/engine';
 import { CIRCUIT_PATHS } from '../src/app/circuitPaths';
 
@@ -573,5 +573,67 @@ describe('군 복무(SPEC §2.4 v0.30)', () => {
       for (const h of served) { expect(h.seat).toBe('none'); expect(h.races).toBe(0); }
     }
     expect(replayCareer({ ...base, seed }, c.choiceLog)).toEqual(c);
+  });
+});
+
+describe('신인 F1 데뷔 팀과 에이전트 재방문 (v0.33)', () => {
+  /** 처음 F1 제안을 받는 오프시즌들의 신인 레이스 제안을 모은다 */
+  function rookieOffers(seeds: number) {
+    const tally: Array<{ academy: string | null; teamId: string }> = [];
+    for (let seed = 1; seed <= seeds; seed++) {
+      autoplayCareer(setup(seed, { wealthTier: ((seed % 5) + 1) as 1 }), {
+        ...DEFAULT_POLICY,
+        offseason: (c, o) => {
+          if (c.f1Debut === null) for (const x of o.offers) if (x.series === 'f1' && x.seat === 'race' && x.id !== 'stay') tally.push({ academy: c.academy, teamId: x.teamId! });
+          return DEFAULT_POLICY.offseason(c, o);
+        },
+      });
+    }
+    return tally;
+  }
+
+  it('신인 레이스 제안은 7개 팀에서만, 아카데미 없이는 고르게 나온다', () => {
+    const t = rookieOffers(100);
+    expect(t.length).toBeGreaterThan(80);
+    for (const x of t) expect(ROOKIE_TEAMS as readonly string[]).toContain(x.teamId);
+    const plain = t.filter((x) => !x.academy);
+    for (const id of ROOKIE_TEAMS) {
+      const share = plain.filter((x) => x.teamId === id).length / plain.length;
+      expect(share).toBeGreaterThan(0.06);
+      expect(share).toBeLessThan(0.26);
+    }
+  });
+
+  it('레드불 아카데미는 레이싱 불스, 페라리 아카데미는 하스 가중치가 오르고 다른 아카데미는 그대로다', () => {
+    const c = createCareer(setup(1));
+    const w = (academy: string | null) => Object.fromEntries(rookieTeamWeights({ ...c, academy }).map((x) => [x.teamId, x.weight]));
+    expect(w('Red Bull Junior Team').racing_bulls).toBe(ROOKIE_ACADEMY_WEIGHT);
+    expect(w('Ferrari Driver Academy').haas).toBe(ROOKIE_ACADEMY_WEIGHT);
+    expect(Object.values(w('Mercedes Junior')).every((v) => v === 1)).toBe(true);
+    expect(Object.values(w(null))).toHaveLength(7);
+  });
+
+  it('에이전트 제안을 거절해도 1~2 오프시즌 뒤에 다시 온다', () => {
+    let found = 0;
+    for (let seed = 1; seed <= 60 && found < 3; seed++) {
+      let c = createCareer(setup(seed, { wealthTier: 4 }));
+      let refusedYear: number | null = null;
+      for (let i = 0; i < 20 && !c.retired; i++) {
+        c = runSeason(c, DEFAULT_POLICY.training(c)).career;
+        for (const card of pendingEventCards(c)) {
+          if (card.id === 'agent_change' && refusedYear !== null) {
+            expect(c.year - refusedYear).toBeLessThanOrEqual(2);
+            expect(card.title).toBe('에이전트가 다시 찾아왔다');
+            found++;
+          }
+          const opt = card.id === 'agent_change' ? 'stay' : card.options[0]!.id;
+          if (card.id === 'agent_change') refusedYear = c.year;
+          c = resolveEvent(c, card.id, opt).career;
+        }
+        if (refusedYear !== null && c.year - refusedYear > 2 && c.funds > 0 && c.age >= 15) throw new Error(`agent did not return (seed ${seed})`);
+        c = applyOffseason(c, DEFAULT_POLICY.offseason(c, getOffseason(c)));
+      }
+    }
+    expect(found).toBeGreaterThan(0);
   });
 });

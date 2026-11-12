@@ -382,7 +382,9 @@ export function pickEvents(c: Career, last: SeasonRecord): string[] {
   const count = roll < 0.25 ? 0 : roll < 0.75 ? 1 : 2;
   const recent = new Set((c.eventLog ?? []).filter((e) => e.year > c.year - 3).map((e) => e.id));
   const x = eventContext(c, last);
-  const pool = EVENTS.filter((e) => e.category !== 'interview' && !recent.has(e.id) && e.when(x));
+  // 에이전트 제안을 거절했으면 1~2 오프시즌 뒤에 다시 찾아온다(계약할 때까지)
+  const agentBack = agentReturns(c) && EVENT_BY_ID.get(AGENT_EVENT_ID)!.when(x);
+  const pool = EVENTS.filter((e) => e.category !== 'interview' && !recent.has(e.id) && e.when(x) && !(agentBack && e.id === AGENT_EVENT_ID));
   const picked: string[] = [];
   if (last.seat === 'race' && last.series !== 'kart') {
     const ri = rngFor(c.seed, 'interview', c.year);
@@ -394,7 +396,18 @@ export function pickEvents(c: Career, last: SeasonRecord): string[] {
     picked.push(e.id);
     pool.splice(pool.indexOf(e), 1);
   }
+  if (agentBack) picked.push(AGENT_EVENT_ID);
   return picked;
+}
+
+export const AGENT_EVENT_ID = 'agent_change';
+
+/** 마지막 에이전트 제안을 거절했고, 그 뒤로 1~2 오프시즌(시드로 정함)이 지났으면 true */
+export function agentReturns(c: Career): boolean {
+  const last = [...c.choiceLog].reverse().find((e) => e.kind === 'event' && e.eventId === AGENT_EVENT_ID);
+  if (!last || last.kind !== 'event' || last.optionId !== 'stay') return false;
+  const gap = rngFor(c.seed, 'agent-return', last.year)() < 0.5 ? 1 : 2;
+  return c.year - last.year >= gap;
 }
 
 function eurText(eur: number): string {
@@ -452,7 +465,9 @@ export function eventCard(c: Career, id: string): EventCard {
     const v = interviewVars(c, id);
     text = `[${v.outlet.label} · ${v.mood.label}] ${text} (${v.outlet.note})`;
   }
-  return { id, category: e.category, title: e.title, text, options: e.options.map(({ id: oid, label, hint }) => ({ id: oid, label, hint })) };
+  const refused = id === AGENT_EVENT_ID && c.choiceLog.some((x) => x.kind === 'event' && x.eventId === AGENT_EVENT_ID && x.optionId === 'stay');
+  if (refused) text = `지난번에 거절했던 에이전트가 다시 찾아왔다. ${text}`;
+  return { id, category: e.category, title: refused ? '에이전트가 다시 찾아왔다' : e.title, text, options: e.options.map(({ id: oid, label, hint }) => ({ id: oid, label, hint })) };
 }
 
 const clampStat = (v: number) => Math.max(20, Math.min(99, v));
