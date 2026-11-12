@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyOffseason, autoplayCareer, createCareer, DEFAULT_POLICY, getOffseason, MAX_TEAMS, MIN_TEAMS, replayCareer,
   CALENDAR_2026, f1WeekendFor, isF1RaceSeason, radioKey, type RadioOptionId, EVENTS, managerAdvice, MAJOR_FLOOR, OTHERS_CAP, feedTemplateCount, pendingEventCards, resolveEvent, F1_WINNER_TEAMS, f1Rules, generateHidden, initialWorld, NEW_TEAM_START, PERSONALITIES, runOffseason, TEAMS_2026, runSeason, STAT_KEYS, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, superLicencePoints, type CareerSetup,
-  evolveCalendar, RETURNING_CIRCUITS, CALENDAR_2027_SLOTS, ALL_F1_CIRCUITS, CALENDAR_CHANGE_FROM, CALENDAR_COOLDOWN, f1Calendar, type CalendarChange, hasHomeGp, homeGpEffect, type Personality, achievements, ACHIEVEMENTS, newAchievements, careerRecords, playerNumber, DRIVERS_2026, carNumberProblem, defaultCarNumber, FAMILY_BEHAVIOR, militaryDraftAge, enduranceOffer, previewEndurance, ROOKIE_TEAMS, ROOKIE_ACADEMY_WEIGHT, rookieTeamWeights, coachAdvice, followsCoach, enduranceResult, PLAYER_ID, TRAINING, snsOptions, snsReaction, raceArticle, myRaceResult, runRace,
+  evolveCalendar, RETURNING_CIRCUITS, CALENDAR_2027_SLOTS, ALL_F1_CIRCUITS, CALENDAR_CHANGE_FROM, CALENDAR_COOLDOWN, f1Calendar, type CalendarChange, hasHomeGp, homeGpEffect, type Personality, achievements, ACHIEVEMENTS, newAchievements, careerRecords, playerNumber, DRIVERS_2026, carNumberProblem, defaultCarNumber, FAMILY_BEHAVIOR, militaryDraftAge, enduranceOffer, previewEndurance, ROOKIE_TEAMS, ROOKIE_ACADEMY_WEIGHT, rookieTeamWeights, coachAdvice, followsCoach, enduranceResult, PLAYER_ID, TRAINING, snsOptions, snsReaction, raceArticle, myRaceResult, runRace, firstNameOf,
 } from '../src/engine';
 import { CIRCUIT_PATHS } from '../src/app/circuitPaths';
 
@@ -845,5 +845,38 @@ describe('레이스 기사·SNS (v0.36)', () => {
     // 하부 리그에서는 무시
     const k = createCareer(setup(3));
     expect(runSeason(k, DEFAULT_POLICY.training(k), {}, { sns: { '0': 'bold' } }).career.choiceLog.at(-1)).not.toHaveProperty('sns');
+  });
+});
+
+describe('가상 드라이버 이름·시즌 주요 기사 (v0.38)', () => {
+  it('30시즌 동안 F1 그리드에 새로 들어온 가상 드라이버끼리 이름(이름 부분)이 겹치지 않는다', () => {
+    for (const seed of [3, 11, 27]) {
+      const c = autoplayCareer(setup(seed, { wealthTier: 4 }));
+      const fictional = c.world.drivers.filter((d) => !d.real);
+      expect(fictional.length).toBeGreaterThan(10);
+      // 같은 시기에 뛴 드라이버(데뷔 연도가 가까운)끼리 이름 부분이 거의 겹치지 않는다
+      const firsts = fictional.map((d) => firstNameOf(d.name, d.nationality));
+      const counts = new Map<string, number>();
+      for (const f of firsts) counts.set(f, (counts.get(f) ?? 0) + 1);
+      expect(Math.max(...counts.values())).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('F1 레이스 시즌 기록에 주요 결승 3~4개가 남고, 한 번에 진행해도 기사를 만들 수 있다', () => {
+    let found = 0;
+    for (let seed = 1; seed <= 60 && found < 2; seed++) {
+      const c = autoplayCareer(setup(seed, { wealthTier: 5 }));
+      for (const h of c.history.filter((x) => x.series === 'f1' && x.seat === 'race' && x.races > 0)) {
+        expect(h.raceHighlights!.length).toBeGreaterThan(0);
+        expect(h.raceHighlights!.length).toBeLessThanOrEqual(4);
+        const rounds = h.raceHighlights!.map((x) => x.round);
+        expect([...rounds].sort((a, b) => a - b)).toEqual(rounds);
+        const a = raceArticle(c, h.raceHighlights![0]!.result, { gp: 'GP', round: 0, name: c.driver.name, team: h.team ?? '', winnerName: h.raceHighlights![0]!.winnerName, neutralizations: 0, retired: [] });
+        expect(a.headline.length).toBeGreaterThan(5);
+        if (h.wins > 0) expect(h.raceHighlights!.some((x) => x.result.position === 1)).toBe(true);
+        found++;
+      }
+    }
+    expect(found).toBeGreaterThan(0);
   });
 });

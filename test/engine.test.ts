@@ -332,3 +332,43 @@ describe('플레이어 이름 (v0.37)', () => {
     expect(driverCode(undefined, 'Alex Moreau')).toBe('ALE');
   });
 });
+
+import { batchim, fixJosa, josa, fictionalName, namePoolSize } from '../src/engine';
+
+describe('조사·가상 이름 (v0.38)', () => {
+  it('받침에 맞는 조사', () => {
+    expect(josa('김민준', '은/는')).toBe('김민준은');
+    expect(josa('이서연', '이/가')).toBe('이서연이');
+    expect(josa('박지우', '을/를')).toBe('박지우를');
+    expect(josa('Luca Rossi', '은/는')).toBe('Luca Rossi는');
+    expect(josa('Max Verstappen', '이/가')).toBe('Max Verstappen이');
+    expect(josa('Haas', '이/가')).toBe('Haas가');
+    expect(josa('Cadillac', '이/가')).toBe('Cadillac이');
+    expect(josa('Alpine', '은/는')).toBe('Alpine은');
+    expect(josa('사고', '으로/로')).toBe('사고로');
+    expect(josa('기계 결함', '으로/로')).toBe('기계 결함으로');
+    expect(josa('George Russell', '으로/로')).toBe('George Russell로');
+    expect(batchim('3')).toBe('other');
+    expect(batchim('2')).toBe('none');
+    expect(fixJosa('Shot(Haas)은 21위, Isack Hadjar이 우승. 원인은 기계 결함로.', ['Shot', 'Isack Hadjar', '기계 결함']))
+      .toBe('Shot(Haas)은 21위, Isack Hadjar가 우승. 원인은 기계 결함으로.');
+    expect(fixJosa('Luca Rossi은 이번에', ['Luca Rossi'])).toBe('Luca Rossi는 이번에');
+  });
+
+  it('가상 이름은 나라에 맞는 이름·성이고 다양하며, 피하라는 이름은 다시 뽑는다', () => {
+    const size = namePoolSize();
+    expect(size.nations).toBeGreaterThanOrEqual(25);
+    expect(size.first).toBeGreaterThanOrEqual(250);
+    const r = rngFor(7, 'names-test');
+    const firsts = new Map<string, number>();
+    for (let i = 0; i < 400; i++) {
+      const n = fictionalName(r);
+      firsts.set(n.first, (firsts.get(n.first) ?? 0) + 1);
+      if (n.nationality === 'KR') expect(n.name.split(' ')[0]).toMatch(/^(Kim|Lee|Park|Choi|Jung|Kang|Cho|Yoon|Jang|Lim|Han|Shin|Seo|Kwon)$/);
+      expect(n.code).toMatch(/^[A-Z]{3}$/);
+    }
+    expect(Math.max(...firsts.values())).toBeLessThan(12); // 400명 중 같은 이름이 3%를 넘지 않는다
+    const avoid = new Set<string>();
+    for (let i = 0; i < 60; i++) { const n = fictionalName(r, avoid); expect(avoid.has(n.first)).toBe(false); avoid.add(n.first); }
+  });
+});

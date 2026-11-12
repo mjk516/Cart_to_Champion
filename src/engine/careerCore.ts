@@ -10,6 +10,7 @@ import { rngFor } from './rng';
 import { type Hidden, type TrainingId } from './growth';
 import { type Media } from './media';
 import { type RaceCar, type RadioOptionId } from './race';
+import { type MyRaceResult } from './raceNews';
 import { type SeriesId } from './series';
 import { type TeamNews, type TeamWorld } from './teams';
 import { STAT_KEYS, type Circuit, type Personality, type StatKey, type Stats, type WealthTier } from './types';
@@ -120,6 +121,18 @@ export interface SeasonRecord {
   f1Standings?: F1Standings;
   /** 시즌 중 내구레이스 결과(SPEC v0.34) */
   endurance?: EnduranceResult;
+  /** 시즌 주요 결승(기사용, SPEC v0.38). F1 레이스 시트 시즌에만 있다 */
+  raceHighlights?: RaceHighlight[];
+}
+
+export interface RaceHighlight {
+  round: number;
+  circuitId: string;
+  result: MyRaceResult;
+  winnerName: string;
+  mateName?: string;
+  neutralizations: number;
+  retired: string[];
 }
 
 export interface F1Standings {

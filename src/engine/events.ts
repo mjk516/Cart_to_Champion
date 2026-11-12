@@ -2,6 +2,7 @@
 // 결과는 능력치·자금·언론/팬 지표·다음 오프시즌 플래그(스카우트, 방출 위험)에 반영된다.
 // 이벤트 선택은 choiceLog에 남아 replayCareer로 재현된다(SPEC §9).
 
+import { fixJosa } from './josa';
 import type { Career, SeasonRecord } from './career';
 import { PERSONALITIES } from './creation';
 import { rngFor, weightedPick, type Rng } from './rng';
@@ -422,7 +423,7 @@ export function unitsToEur(c: Career, units: number): number {
 
 export function fillText(t: string, c: Career, amount?: number): string {
   const team = c.contract?.team ?? '팀';
-  return t.replaceAll('{name}', c.driver.name).replaceAll('{team}', team).replaceAll('{amount}', amount !== undefined ? eurText(amount) : '');
+  return fixJosa(t.replaceAll('{name}', c.driver.name).replaceAll('{team}', team).replaceAll('{amount}', amount !== undefined ? eurText(amount) : ''), [c.driver.name, team]);
 }
 
 // ── 기자회견 변수(SPEC §6 v0.30): 어느 매체가, 어떤 분위기에서 묻느냐에 따라 같은 답도 결과가 달라진다 ──

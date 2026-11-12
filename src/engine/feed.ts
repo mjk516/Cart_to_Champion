@@ -1,6 +1,7 @@
 // 언론·팬 반응 피드(SPEC §6.1). 시즌마다 상황에 맞는 반응 3~5개를 고른다.
 // 규칙: 가상 매체·가상 해설가만 쓴다. 실존 인물의 말을 직접 인용하지 않는다. 반응에는 실제 숫자를 담는다.
 
+import { fixJosa } from './josa';
 import type { Career, SeasonRecord } from './career';
 import { PERSONALITIES } from './creation';
 import { int, pick, rngFor, type Rng } from './rng';
@@ -165,7 +166,7 @@ function situation(r: SeasonRecord): Situation {
 
 function fill(t: string, c: Career, r: SeasonRecord): string {
   const years = Math.max(1, c.history.length);
-  return t
+  return fixJosa(t
     .replaceAll('{name}', c.driver.name)
     .replaceAll('{series}', seriesLabel(r.series))
     .replaceAll('{team}', r.team ?? '팀')
@@ -176,7 +177,7 @@ function fill(t: string, c: Career, r: SeasonRecord): string {
     .replaceAll('{exp}', String(r.expectedAvg))
     .replaceAll('{act}', String(r.actualAvg))
     .replaceAll('{age}', String(r.age))
-    .replaceAll('{years}', String(years));
+    .replaceAll('{years}', String(years)), [c.driver.name, r.team ?? '팀', seriesLabel(r.series)]);
 }
 
 function likes(rng: Rng, c: Career, big = false): number {

@@ -46,7 +46,7 @@ export function coachStaff(c: Career): CoachStaff {
   const base = Math.max(1, Math.min(top, Math.round(1 + fac * 4)));
   const roll = (): number => Math.max(1, Math.min(top, base + (r() < 0.3 ? 1 : r() < 0.3 ? -1 : 0)));
   const a = fictionalName(r);
-  const b = fictionalName(r);
+  const b = fictionalName(r, new Set([a.first]));
   const source = k?.series === 'f1' ? `${k.team} 소속` : c.academy ? `${c.academy} 소속` : k ? `${k.team}에서 소개` : '가족이 고용';
   return {
     coach: { name: a.name, nationality: a.nationality, skill: roll() },

@@ -1,6 +1,7 @@
 // 시즌 진행(SPEC §4·§5): 카트·하부 리그·F1 시즌 계산, F1 그랑프리 주말(라이브용), runSeason.
 
-import { type Career, type F1Driver, type F1Standings, PLAYER_ID, type SeasonRecord, f1Calendar, homeGpEffect, inMilitary, playerBehavior, withHomeGp } from './careerCore';
+import { josa } from './josa';
+import { type Career, type F1Driver, type F1Standings, type RaceHighlight, PLAYER_ID, type SeasonRecord, f1Calendar, homeGpEffect, inMilitary, playerBehavior, withHomeGp } from './careerCore';
 import { clamp, juniorTeams, lerp, statsAround } from './careerInternal';
 import { WEALTH_TIERS } from './creation';
 import { coachAdvice, followsCoach } from './coach';
@@ -45,11 +46,13 @@ interface SeasonSim {
   f1Standings?: F1Standings;
   /** 라운드별 내 결승 결과(SNS 반응 계산용) */
   myRaces: Record<number, MyRaceResult>;
+  /** 라운드별 결승 메모(기사용) */
+  raceNotes: Record<number, { neutralizations: number; retired: string[]; mateId?: string }>;
 }
 
 const emptySim = (fieldSize: number): SeasonSim => ({
   races: 0, wins: 0, podiums: 0, poles: 0, points: 0, position: null, fieldSize, champion: false,
-  expectedAvg: 0, actualAvg: 0, teammateBeat: 0, raceXp: {}, prize: 0, homeWins: 0, myRaces: {},
+  expectedAvg: 0, actualAvg: 0, teammateBeat: 0, raceXp: {}, prize: 0, homeWins: 0, myRaces: {}, raceNotes: {},
 });
 
 function perfOf(stats: Stats, teamQ: number, w: number): number {
@@ -183,8 +186,10 @@ function simulateJunior(c: Career, stats: Stats, seed: number): SeasonSim {
   return sim;
 }
 
-export function newRookie(rng: Rng, year: number, idx: number, used: Set<number>): F1Driver {
-  const nm = fictionalName(rng);
+export function newRookie(rng: Rng, year: number, idx: number, used: Set<number>, avoidNames?: Set<string>): F1Driver {
+  const nm = fictionalName(rng, avoidNames);
+  avoidNames?.add(nm.first);
+  avoidNames?.add(nm.name);
   let number = int(rng, 2, 99);
   while (used.has(number)) number = number >= 99 ? 2 : number + 1;
   used.add(number);
@@ -335,6 +340,11 @@ function simulateF1(c: Career, stats: Stats, seed: number, radio: Record<string,
         sim.races++;
         const res = myRaceResult(out.classification, PLAYER_ID, mateId);
         if (res) sim.myRaces[round] = res;
+        sim.raceNotes[round] = {
+          neutralizations: out.incidents.filter((i) => i.type === 'sc_deploy' || i.type === 'vsc_deploy' || i.type === 'red_flag').length,
+          retired: out.incidents.flatMap((i) => ((i.type === 'crash' || i.type === 'mech_dnf') && i.car !== PLAYER_ID ? [i.car] : [])),
+          mateId,
+        };
         if (me.status === 'finished') {
           finishSum += me.position;
           finished++;
@@ -415,6 +425,34 @@ export function superLicencePoints(c: Career, uptoYear = c.year): number {
   return c.history.filter((h) => h.year > uptoYear - 3 && h.year <= uptoYear).reduce((a, h) => a + h.superLicence, 0);
 }
 
+/** 시즌 주요 결승 3~4개(첫 우승·우승·포디움·리타이어·큰 순위 상승) — 시즌 결과의 기사용(SPEC v0.38) */
+function raceHighlights(c: Career, sim: SeasonSim): RaceHighlight[] {
+  const nameOf = (id: string) => c.world.drivers.find((d) => d.id === id)?.name ?? id;
+  const hadWin = c.totals.f1Wins > 0 || c.history.some((h) => h.series === 'f1' && h.wins > 0);
+  let firstWinSeen = hadWin;
+  const scored = Object.entries(sim.myRaces).map(([k, r]) => {
+    const round = Number(k);
+    let score = 0;
+    if (r.position === 1) { score = firstWinSeen ? 80 : 200; firstWinSeen = true; }
+    else if (r.position !== null && r.position <= 3) score = 60;
+    else if (r.position === null) score = 40;
+    else score = Math.max(0, r.grid - r.position) * 4 + (r.points > 0 ? 5 : 0);
+    return { round, r, score };
+  });
+  const picked = scored.sort((a, b) => b.score - a.score || a.round - b.round).slice(0, 4).filter((x) => x.score > 0).sort((a, b) => a.round - b.round);
+  const cal = f1Calendar(c);
+  return picked.map(({ round, r }) => {
+    const note = sim.raceNotes[round];
+    return {
+      round, circuitId: cal[round]?.id ?? '', result: r,
+      winnerName: r.winnerId === PLAYER_ID ? c.driver.name : nameOf(r.winnerId),
+      ...(note?.mateId ? { mateName: nameOf(note.mateId) } : {}),
+      neutralizations: note?.neutralizations ?? 0,
+      retired: (note?.retired ?? []).map(nameOf),
+    };
+  });
+}
+
 /** 시즌 동안 쓰는 능력치(압박·과훈련 반영). runSeason과 화면용 주말이 같은 값을 쓴다 */
 export function seasonStatsFor(c: Career, plan: TrainingId[]): { stats: Stats; pressured: boolean; overtrained: boolean; coached: boolean } {
   const seat = c.contract?.seat ?? 'none';
@@ -461,7 +499,7 @@ export function runSeason(input: Career, plan: TrainingId[], radio: Record<strin
     const byAcademy = !!c.academy && contract.series !== 'f1';
     const covered = byAcademy || contract.management ? contract.seatCost : 0;
     expenses += contract.seatCost - covered;
-    if (covered) notes.push(byAcademy ? `${c.academy}가 시트 비용을 지원했다` : '매니지먼트가 시트 비용을 지원했다');
+    if (covered) notes.push(byAcademy ? `${josa(c.academy!, '이/가')} 시트 비용을 지원했다` : '매니지먼트가 시트 비용을 지원했다');
   }
   if (c.age < 21 && c.f1Debut === null) income += wealth.familySupport;
 
@@ -600,6 +638,7 @@ export function runSeason(input: Career, plan: TrainingId[], radio: Record<strin
     ...(serving ? { military: true } : {}),
     ...(endur ? { endurance: endur } : {}),
     ...(sim.f1Standings ? { f1Standings: sim.f1Standings } : {}),
+    ...(Object.keys(sim.myRaces).length ? { raceHighlights: raceHighlights(c, sim) } : {}),
   };
   record.feed = seasonFeed(c, record);
   c.history.push(record);
