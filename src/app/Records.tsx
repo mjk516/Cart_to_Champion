@@ -1,6 +1,6 @@
 // 업적·기록 화면(SPEC §9 v0.22): 통산 기록, 리그별 최고 성적, 업적 목록.
 
-import { ACHIEVEMENT_GROUP_LABEL, achievements, careerRecords, LADDER, REAL_YOUNGEST, REAL_YOUNGEST_HOLDER, seriesLabel, type AchievementGroup } from '../engine';
+import { ACHIEVEMENT_GROUP_LABEL, achievements, careerRecords, enduranceRecords, LADDER, REAL_YOUNGEST, REAL_YOUNGEST_HOLDER, seriesLabel, type AchievementGroup } from '../engine';
 import { formatMoney } from './format';
 import { useGame } from './store';
 import { Button, Card } from './ui';
@@ -18,6 +18,7 @@ export function Records() {
   const t = c.totals;
   const list = achievements(c);
   const rec = careerRecords(c);
+  const endur = enduranceRecords(c);
   const recRows: Array<[string, string, string?]> = [
     youngRow('최연소 F1 우승', rec.youngestWin, 'winner'),
     youngRow('최연소 F1 포디움', rec.youngestPodium, 'podium'),
@@ -83,6 +84,33 @@ export function Records() {
           ))}
         </dl>
       </Card>
+
+      {endur.starts > 0 && (
+        <Card title="내구레이스 기록">
+          <div className="grid grid-cols-4 gap-2 text-center">
+            {([['출전', endur.starts], ['클래스 우승', endur.wins], ['포디움', endur.podiums], ['리타이어', endur.dnfs]] as const).map(([k, v]) => (
+              <div key={k} className="rounded-xl bg-white/5 p-2"><div className="text-[11px] text-zinc-400">{k}</div><div className="text-lg font-black">{v}</div></div>
+            ))}
+          </div>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-sm" aria-label="대회별 최고 성적">
+              <thead><tr className="text-left text-xs text-zinc-400"><th className="py-1">대회</th><th>출전</th><th>최고 성적</th></tr></thead>
+              <tbody>
+                {endur.best.map((b) => (
+                  <tr key={b.name} className="border-t border-white/5">
+                    <td className="py-1.5 font-bold">{b.best === 1 ? '🏆 ' : ''}{b.name}</td>
+                    <td>{b.starts}회</td>
+                    <td>{b.best === null ? '완주 못 함' : b.best === 1 ? `클래스 우승 (${b.bestYear})` : `클래스 ${b.best}위 (${b.bestYear})`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <ul className="mt-3 space-y-0.5 text-xs text-zinc-400">
+            {endur.list.map((e) => <li key={e.year}>{e.year} · {e.name} — {e.position === null ? '리타이어' : e.position === 1 ? '클래스 우승' : `클래스 ${e.position}위 / ${e.classCars}대`}</li>)}
+          </ul>
+        </Card>
+      )}
 
       <Card title="리그별 최고 성적">
         {best.length === 0 ? <p className="text-sm text-zinc-400">아직 레이스 시트로 치른 시즌이 없습니다.</p> : (

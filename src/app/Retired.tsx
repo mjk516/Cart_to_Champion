@@ -248,7 +248,7 @@ function SeasonTable({ c }: { c: Career }) {
                         <div className="mt-1">
                           성장: 훈련 {h.growth.training} · 경기 {h.growth.racing} · 팀 환경 {h.growth.environment}{h.growth.aging ? ` · 노화 ${h.growth.aging}` : ''}
                           {h.races > 0 && ` · 기대 P${h.expectedAvg} → 실제 평균 P${h.actualAvg}`}
-                          {h.teammateBeat !== 0.5 && ` · 팀메이트 상대 ${Math.round(h.teammateBeat * 100)}%`}
+                          {h.h2h ? ` · vs ${h.h2h.mate} 결승 ${h.h2h.race[0]}-${h.h2h.race[1]}` : h.teammateBeat !== 0.5 && ` · 팀메이트 상대 ${Math.round(h.teammateBeat * 100)}%`}
                         </div>
                         <div className="mt-1">수입 {formatMoney(h.income, showKrw)} · 지출 {formatMoney(h.expenses, showKrw)} · 슈퍼 라이선스 +{h.superLicence}</div>
                         {h.statsEnd && <div className="mt-1 text-zinc-400">{STAT_KEYS.map((k) => `${STAT_LABELS[k]} ${h.statsEnd![k]}`).join(' · ')}</div>}

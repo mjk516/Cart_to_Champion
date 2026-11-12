@@ -108,8 +108,49 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'three_peat', group: 'special', title: '3연패', desc: 'F1 챔피언 3시즌 연속', check: (c) => { const s = titleStreak(c); return s && s.count >= 3 ? s.from + 2 : null; } },
   { id: 'youngest_champ', group: 'special', title: '역대 최연소 챔피언', desc: `실제 F1 최연소 챔피언 기록(${REAL_YOUNGEST_HOLDER.champion} ${REAL_YOUNGEST.champion}세)보다 어린 나이에 월드 챔피언`, check: (c) => first(c, (h) => h.series === 'f1' && h.champion && h.age < REAL_YOUNGEST.champion) },
   { id: 'endurance_win', group: 'special', title: '24시간의 승자', desc: 'F1 시즌 사이 내구레이스에서 클래스 우승', check: (c) => (c.eventLog ?? []).find((e) => e.id === 'endurance_race' && e.text.includes('클래스 우승'))?.year ?? null },
+  { id: 'le_mans_win', group: 'special', title: '르망의 왕', desc: '르망 24시 클래스 우승', check: (c) => c.history.find((h) => h.endurance?.name === '르망 24시' && h.endurance.position === 1)?.year ?? null },
+  { id: 'endurance_podiums', group: 'special', title: '내구레이스 단골', desc: '내구레이스 포디움 3회', check: (c) => nthYear(c.history.filter((h) => h.endurance?.position !== null && h.endurance !== undefined && h.endurance.position! <= 3), 3) },
+  { id: 'endurance_triple', group: 'special', title: '내구레이스 3관왕', desc: '서로 다른 내구레이스 3곳에서 클래스 우승', check: (c) => {
+    const seen = new Set<string>();
+    for (const h of c.history) if (h.endurance?.position === 1) { seen.add(h.endurance.name); if (seen.size >= 3) return h.year; }
+    return null;
+  } },
   { id: 'legend', group: 'special', title: '팀 레전드', desc: '한 팀에서 8시즌 이상 뛰며 챔피언. 차 번호가 영구결번된다', check: (c) => teamLegend(c)?.year ?? null },
 ];
+
+function nthYear(hs: SeasonRecord[], n: number): number | null {
+  return hs.length >= n ? hs[n - 1]!.year : null;
+}
+
+export interface EnduranceRecords {
+  starts: number;
+  wins: number;
+  podiums: number;
+  dnfs: number;
+  /** 대회별 최고 성적(이름 → 최고 순위, null은 완주 못 함) */
+  best: Array<{ name: string; starts: number; best: number | null; bestYear: number }>;
+  list: Array<{ year: number; name: string; when: string; position: number | null; classCars: number }>;
+}
+
+/** 내구레이스 기록(SPEC v0.43) */
+export function enduranceRecords(c: Career): EnduranceRecords {
+  const list = c.history.flatMap((h) => (h.endurance ? [{ year: h.year, name: h.endurance.name, when: h.endurance.when, position: h.endurance.position, classCars: h.endurance.classCars }] : []));
+  const byName = new Map<string, EnduranceRecords['best'][number]>();
+  for (const e of list) {
+    const b = byName.get(e.name);
+    if (!b) { byName.set(e.name, { name: e.name, starts: 1, best: e.position, bestYear: e.year }); continue; }
+    b.starts++;
+    if (e.position !== null && (b.best === null || e.position < b.best)) { b.best = e.position; b.bestYear = e.year; }
+  }
+  return {
+    starts: list.length,
+    wins: list.filter((e) => e.position === 1).length,
+    podiums: list.filter((e) => e.position !== null && e.position <= 3).length,
+    dnfs: list.filter((e) => e.position === null).length,
+    best: [...byName.values()].sort((a, b) => (a.best ?? 99) - (b.best ?? 99) || b.starts - a.starts),
+    list,
+  };
+}
 
 function titleStreak(c: Career): { count: number; from: number; to: number } | null {
   let best: { count: number; from: number; to: number } | null = null;

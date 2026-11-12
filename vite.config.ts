@@ -53,6 +53,8 @@ export default defineConfig(({ command }) => ({
   plugins: [react(), legacyRedirect()],
   // 배포 빌드는 상대 경로라 어느 주소(GitHub Pages의 하위 경로 포함)에 올려도 동작한다
   base: command === 'serve' ? '/' : './',
+  // React는 따로 묶어 게임 코드가 바뀌어도 브라우저 캐시를 쓴다
+  build: { rollupOptions: { output: { manualChunks: { react: ['react', 'react-dom', 'zustand'] } } } },
   server: { port: PORT, host: '0.0.0.0', strictPort: true, open: false, allowedHosts: [HOST_NAME, 'localhost'] },
   preview: { port: 4173, host: '127.0.0.1' },
   test: { include: ['test/**/*.test.ts'] },

@@ -141,3 +141,21 @@ test('패치노트: 상단 메뉴에서 날짜별 변경 사항을 본다', asyn
   await page.getByRole('button', { name: '돌아가기' }).click();
   await expect(page.getByRole('button', { name: '새 커리어' })).toBeVisible();
 });
+
+test('주소 옮기기: 예전 주소 링크(#move=)로 넘어온 커리어를 받는다', async ({ page }) => {
+  const { gzipSync } = await import('node:zlib');
+  const c = createCareer({ seed: 11, name: '이사 테스트', nationality: 'KR', wealthTier: 3, personality: 'calm', candidateIndex: 0, focus: ['pace'] });
+  const save = JSON.stringify({ app: 'kart-to-champion', saveVersion: 1, exportedAt: new Date().toISOString(), career: c, signature: null, firstF1Signature: null, contracts: [], showKrw: true, live: null, lastRecord: null, interviewAuto: null });
+  const packed = 'g.' + gzipSync(save).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  // 다른 주소에서 오는 것처럼 새로 연다(같은 문서에서 #만 바꾸면 다시 열리지 않는다)
+  await page.goto('/#move=' + packed);
+  await page.reload();
+  await expect(page.getByRole('status').filter({ hasText: '커리어를 옮겨 왔어요' })).toContainText('이사 테스트');
+  expect(new URL(page.url()).hash).toBe('');
+  const saved = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)!).state.career.driver.name, KEY);
+  expect(saved).toBe('이사 테스트');
+  // 이미 커리어가 있으면 덮어쓸지 묻는다
+  await page.goto('/#move=' + packed);
+  await page.reload();
+  await expect(page.getByRole('alertdialog')).toContainText('예전 주소의 커리어');
+});

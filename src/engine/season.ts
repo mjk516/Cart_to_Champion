@@ -1,7 +1,7 @@
 // 시즌 진행(SPEC §4·§5): 카트·하부 리그·F1 시즌 계산, F1 그랑프리 주말(라이브용), runSeason.
 
 import { josa } from './josa';
-import { type Career, type F1Driver, type F1Standings, type RaceHighlight, PLAYER_ID, type SeasonRecord, f1Calendar, homeGpEffect, inMilitary, playerBehavior, withHomeGp } from './careerCore';
+import { type Career, type F1Driver, type F1Standings, type RaceHighlight, type TeammateH2H, PLAYER_ID, type SeasonRecord, f1Calendar, homeGpEffect, inMilitary, playerBehavior, withHomeGp } from './careerCore';
 import { clamp, juniorTeams, lerp, statsAround } from './careerInternal';
 import { WEALTH_TIERS } from './creation';
 import { coachAdvice, followsCoach } from './coach';
@@ -53,6 +53,7 @@ interface SeasonSim {
   myRaces: Record<number, MyRaceResult>;
   /** 라운드별 결승 메모(기사용) */
   raceNotes: Record<number, { neutralizations: number; neutral?: NeutralCounts; retired: string[]; mateId?: string }>;
+  h2h?: TeammateH2H;
 }
 
 const emptySim = (fieldSize: number): SeasonSim => ({
@@ -322,6 +323,8 @@ function simulateF1(c: Career, stats: Stats, seed: number, radio: Record<string,
   let finished = 0;
   let beat = 0;
   let duels = 0;
+  let qBeat = 0;
+  let qDuels = 0;
   f1Calendar(c).forEach((circuit, round) => {
     addXp(sim.raceXp, SESSION_XP.practice, (circuit.sprint ? 1 : 3) * (racing ? 1 : 0.4));
     const wk = f1Weekend(c, cars, seed, round, radio, racing, true, strategy);
@@ -331,6 +334,10 @@ function simulateF1(c: Career, stats: Stats, seed: number, radio: Record<string,
         if (racing) {
           addXp(sim.raceXp, SESSION_XP.quali);
           if (sess.session === 'Q' && sess.result.order[0] === PLAYER_ID) sim.poles++;
+          if (sess.session === 'Q' && mateId) {
+            const a = sess.result.order.indexOf(PLAYER_ID), b = sess.result.order.indexOf(mateId);
+            if (a >= 0 && b >= 0) { qDuels++; if (a < b) qBeat++; }
+          }
         }
         continue;
       }
@@ -395,6 +402,10 @@ function simulateF1(c: Career, stats: Stats, seed: number, radio: Record<string,
     sim.actualAvg = finished ? finishSum / finished : exp + 5;
     sim.teammateBeat = duels ? beat / duels : 0.5;
     sim.prize = sim.points * 40_000;
+    if (mateId && duels) {
+      const mateName = c.world.drivers.find((d) => d.id === mateId)?.name ?? mateId;
+      sim.h2h = { mate: mateName, quali: [qBeat, qDuels - qBeat], race: [beat, duels - beat], points: [sim.points, points.get(mateId) ?? 0] };
+    }
   }
   return sim;
 }
@@ -650,6 +661,7 @@ export function runSeason(input: Career, plan: TrainingId[], radio: Record<strin
     ...(endur ? { endurance: endur } : {}),
     ...(sim.f1Standings ? { f1Standings: sim.f1Standings } : {}),
     ...(Object.keys(sim.myRaces).length ? { raceHighlights: raceHighlights(c, sim) } : {}),
+    ...(sim.h2h ? { h2h: sim.h2h } : {}),
   };
   record.feed = seasonFeed(c, record);
   c.history.push(record);

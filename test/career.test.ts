@@ -184,9 +184,9 @@ describe('성격 기질과 잠재력(SPEC §3.4 v0.11)', () => {
 });
 
 describe('전환점 이벤트와 언론·팬 피드(SPEC §6, §6.1)', () => {
-  it('이벤트 70개(기자회견 20개 포함), 반응 문구 80개', () => {
-    expect(EVENTS).toHaveLength(70);
-    expect(new Set(EVENTS.map((e) => e.id)).size).toBe(70);
+  it('이벤트 72개(기자회견 20개, 1인자 경쟁 2개 포함), 반응 문구 80개', () => {
+    expect(EVENTS).toHaveLength(72);
+    expect(new Set(EVENTS.map((e) => e.id)).size).toBe(72);
     expect(EVENTS.filter((e) => e.category === 'interview')).toHaveLength(20);
     for (const e of EVENTS) for (const o of e.options) {
       expect(o.outcomes.length).toBeGreaterThan(0);
@@ -979,5 +979,51 @@ describe('내구레이스 하이라이트 중계', () => {
       const b = runSeason(c, DEFAULT_POLICY.training(c), {}, { endurance: true, enduranceChoices: choices });
       expect(b.record.endurance).toEqual(a.record.endurance);
     });
+  });
+});
+
+describe('주소 옮기기 링크', () => {
+  it('압축해서 링크에 싣고 그대로 꺼낸다', async () => {
+    const { moveUrl, unpackSave } = await import('../src/app/move');
+    const text = JSON.stringify({ career: autoplayCareer(setup(3)) });
+    const url = await moveUrl(text, 'https://example.test/');
+    expect(url.startsWith('https://example.test/#move=g.')).toBe(true);
+    expect(url.length).toBeLessThan(text.length / 2);
+    expect(await unpackSave(url.split('#move=')[1]!)).toBe(text);
+  });
+});
+
+describe('팀메이트 맞대결과 내구레이스 기록', () => {
+  it('F1 시즌에 퀄리·결승·포인트 맞대결이 남고, 팽팽하면 1인자 경쟁 이벤트가 나온다', async () => {
+    const { h2hClose, EVENTS, fillText } = await import('../src/engine');
+    let seen = 0, close = 0;
+    for (let i = 0; i < 12 && close === 0; i++) {
+      const c = autoplayCareer(setup(400 + i, { wealthTier: 5 }));
+      for (const h of c.history.filter((x) => x.series === 'f1' && x.seat === 'race' && x.h2h)) {
+        seen++;
+        const [qw, ql] = h.h2h!.quali; const [rw, rl] = h.h2h!.race;
+        expect(qw + ql).toBeGreaterThan(0);
+        expect(rw / (rw + rl)).toBeCloseTo(h.teammateBeat, 1);
+        if (h2hClose(h.h2h)) close++;
+      }
+      const rv = (c.eventLog ?? []).find((e) => e.id.startsWith('rivalry'));
+      if (rv) expect(rv.title).toBe('팀 내 1인자 경쟁');
+    }
+    expect(seen).toBeGreaterThan(0);
+    const def = EVENTS.find((e) => e.id === 'rivalry_ahead')!;
+    const c = autoplayCareer(setup(400, { wealthTier: 5 }));
+    expect(fillText(def.text, c)).not.toContain('{');
+  });
+  it('내구레이스 기록을 대회별로 모은다', async () => {
+    const { enduranceRecords, achievements } = await import('../src/engine');
+    const c = autoplayCareer(setup(5));
+    const mk = (year: number, name: string, position: number | null) => ({ ...c.history[0]!, year, endurance: { name, when: '6월', position, classCars: 20, gains: {} } });
+    const fake = { ...c, history: [...c.history, mk(2050, '르망 24시', 1), mk(2051, '르망 24시', null), mk(2052, '스파 24시', 2), mk(2053, '바레인 8시간', 1), mk(2054, '프티 르망', 1)] };
+    const r = enduranceRecords(fake);
+    expect(r).toMatchObject({ starts: 5 + c.history.filter((h) => h.endurance).length });
+    expect(r.best.find((b) => b.name === '르망 24시')).toMatchObject({ starts: 2, best: 1, bestYear: 2050 });
+    const got = Object.fromEntries(achievements(fake).map((a) => [a.def.id, a.year]));
+    expect(got.le_mans_win).toBe(2050);
+    expect(got.endurance_triple).toBe(2054);
   });
 });

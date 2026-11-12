@@ -124,6 +124,24 @@ export interface SeasonRecord {
   endurance?: EnduranceResult;
   /** 시즌 주요 결승(기사용, SPEC v0.38). F1 레이스 시트 시즌에만 있다 */
   raceHighlights?: RaceHighlight[];
+  /** 팀메이트 맞대결(SPEC v0.43). F1 레이스 시트 시즌에만 있다 */
+  h2h?: TeammateH2H;
+}
+
+/** 팀메이트 맞대결: [내가 앞선 수, 팀메이트가 앞선 수] */
+export interface TeammateH2H {
+  mate: string;
+  quali: [number, number];
+  race: [number, number];
+  points: [number, number];
+}
+
+/** 맞대결이 팽팽하다: 결승 8번 이상 맞붙어 차이가 2 이하, 또는 퀄리 차이 1 이하 */
+export function h2hClose(h?: TeammateH2H): boolean {
+  if (!h) return false;
+  const [rw, rl] = h.race;
+  const [qw, ql] = h.quali;
+  return rw + rl >= 8 && (Math.abs(rw - rl) <= 2 || (qw + ql >= 8 && Math.abs(qw - ql) <= 1));
 }
 
 export interface RaceHighlight {

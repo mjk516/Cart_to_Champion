@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import {
   EVENT_CATEGORY_LABEL, LADDER, MANAGER_STYLE_LABEL, managerAdvice, newAchievements, pendingEventCards, seriesLabel, VERDICT_LABEL,
-  type ManagerAdvice, type Offer, type OfferAdvice, type SeasonRecord, type F1Standings, type EnduranceResult, enduranceLine, PLAYER_ID,
+  type ManagerAdvice, type Offer, type OfferAdvice, type SeasonRecord, type F1Standings, type EnduranceResult, enduranceLine, h2hClose, type TeammateH2H, PLAYER_ID,
   draftedNext, seasonChatter,
 } from '../engine';
 import { FeedList, RollingComments } from './FeedList';
@@ -77,6 +77,35 @@ function StandingsTables({ st, me }: { st: F1Standings; me: string }) {
   );
 }
 
+/** 팀메이트 맞대결(SPEC v0.43) */
+function H2HPanel({ h }: { h: TeammateH2H; me: string }) {
+  const rows: Array<[string, [number, number]]> = [['퀄리파잉', h.quali], ['결승', h.race], ['포인트', h.points]];
+  return (
+    <section aria-label="팀메이트 맞대결" className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+        <span className="font-bold text-zinc-200">팀메이트 맞대결 · vs {h.mate}</span>
+        {h2hClose(h) && <Pill tone="amber">팽팽한 1인자 경쟁</Pill>}
+      </div>
+      <div className="mt-2 space-y-1.5">
+        {rows.map(([label, [a, b]]) => {
+          const total = Math.max(1, a + b);
+          return (
+            <div key={label} className="grid grid-cols-[4.5rem_2rem_1fr_2rem] items-center gap-2 text-xs">
+              <span className="text-zinc-400">{label}</span>
+              <span className={`text-right font-black ${a >= b ? 'text-emerald-300' : 'text-zinc-300'}`}>{a}</span>
+              <div className="flex h-2 overflow-hidden rounded-full bg-white/10">
+                <div className="bg-emerald-400" style={{ width: `${(a / total) * 100}%` }} />
+                <div className="bg-zinc-500" style={{ width: `${(b / total) * 100}%` }} />
+              </div>
+              <span className={`font-black ${b > a ? 'text-red-300' : 'text-zinc-400'}`}>{b}</span>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function EnduranceCard({ e }: { e: EnduranceResult }) {
   const podium = e.position !== null && e.position <= 3;
   const medal = e.position === 1 ? '🥇' : e.position === 2 ? '🥈' : e.position === 3 ? '🥉' : '🏁';
@@ -118,9 +147,10 @@ function SeasonSummary({ r }: { r: SeasonRecord }) {
           <span className={r.expectedAvg - r.actualAvg >= 0 ? 'text-emerald-300' : 'text-red-300'}>
             ({r.expectedAvg - r.actualAvg >= 0 ? '+' : ''}{(r.expectedAvg - r.actualAvg).toFixed(1)})
           </span>
-          {r.teammateBeat !== 0.5 && ` · 팀메이트 상대 ${Math.round(r.teammateBeat * 100)}%`}
+          {!r.h2h && r.teammateBeat !== 0.5 && ` · 팀메이트 상대 ${Math.round(r.teammateBeat * 100)}%`}
         </p>
       )}
+      {r.h2h && <H2HPanel h={r.h2h} me={r.team ?? ''} />}
       <div className="mt-3 text-sm">
         OVR <b>{r.ovrStart} → {r.ovrEnd}</b>{' '}
         <span className="text-zinc-400">(훈련 {g.training} · 경기 {g.racing} · 팀 환경 {g.environment}{g.aging ? ` · 노화 ${g.aging}` : ''})</span>
