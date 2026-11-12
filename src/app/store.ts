@@ -29,7 +29,7 @@ export interface SignedContract {
   firstF1: boolean;
 }
 
-export type Screen = 'home' | 'create' | 'dashboard' | 'offseason' | 'retired' | 'settings' | 'weekend' | 'records' | 'guide';
+export type Screen = 'home' | 'create' | 'dashboard' | 'offseason' | 'retired' | 'settings' | 'weekend' | 'records' | 'guide' | 'patch';
 
 /** 기자회견 자동 응답(SPEC §6.1): null이면 매번 직접 고른다 */
 export type InterviewAuto = null | 'humble' | 'confident' | 'bold' | 'joke';
