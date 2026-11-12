@@ -4,6 +4,8 @@ export type Stats = Record<StatKey, number>;
 
 export type Personality = 'aggressive' | 'calm' | 'analytical' | 'instinctive' | 'fighter' | 'showman';
 export type WealthTier = 1 | 2 | 3 | 4 | 5;
+/** 난이도(SPEC v0.45). 없으면 보통 */
+export type Difficulty = 'easy' | 'normal' | 'hard';
 
 /** S/M/H = 슬릭, I = 인터미디어트 */
 export type Compound = 'S' | 'M' | 'H' | 'I' | 'W';

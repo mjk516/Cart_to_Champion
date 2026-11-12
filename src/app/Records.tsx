@@ -1,6 +1,6 @@
 // 업적·기록 화면(SPEC §9 v0.22): 통산 기록, 리그별 최고 성적, 업적 목록.
 
-import { ACHIEVEMENT_GROUP_LABEL, achievements, careerRecords, enduranceRecords, LADDER, REAL_YOUNGEST, REAL_YOUNGEST_HOLDER, seriesLabel, type AchievementGroup } from '../engine';
+import { ACHIEVEMENT_GROUP_LABEL, achievements, careerRecords, DIFFICULTY_INFO, difficultyOf, enduranceRecords, LADDER, REAL_YOUNGEST, REAL_YOUNGEST_HOLDER, seriesLabel, type AchievementGroup } from '../engine';
 import { formatMoney } from './format';
 import { useGame } from './store';
 import { Button, Card } from './ui';
@@ -47,7 +47,7 @@ export function Records() {
     <div className="mx-auto max-w-5xl space-y-4 px-4 py-6">
       <header className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <div className="text-xs text-zinc-400">{c.driver.name} · {c.history.length}시즌</div>
+          <div className="text-xs text-zinc-400">{c.driver.name} · {c.history.length}시즌 · 난이도 {DIFFICULTY_INFO[difficultyOf(c)].label}</div>
           <h1 className="text-2xl font-black">업적·기록</h1>
         </div>
         <Button variant="ghost" onClick={() => go(c.retired ? 'retired' : 'dashboard')}>돌아가기</Button>

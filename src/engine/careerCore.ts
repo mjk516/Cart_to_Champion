@@ -14,7 +14,7 @@ import { type EnduranceChoices } from './endurance';
 import { type MyRaceResult, type NeutralCounts } from './raceNews';
 import { type SeriesId } from './series';
 import { type TeamNews, type TeamWorld } from './teams';
-import { STAT_KEYS, type Circuit, type Compound, type Personality, type StatKey, type Stats, type WealthTier } from './types';
+import { STAT_KEYS, type Circuit, type Compound, type Difficulty, type Personality, type StatKey, type Stats, type WealthTier } from './types';
 
 export const ENGINE_VERSION = '0.2.0';
 export const PLAYER_ID = 'player';
@@ -34,6 +34,8 @@ export interface CareerSetup {
   wealthTier: WealthTier;
   personality: Personality;
   candidateIndex: number;
+  /** 난이도(SPEC v0.45). 이전 저장 파일에는 없다(보통) */
+  difficulty?: Difficulty;
   reroll?: number;
   focus: StatKey[];
   startYear?: number;

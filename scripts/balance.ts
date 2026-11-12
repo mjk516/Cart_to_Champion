@@ -2,11 +2,13 @@
 //   npm run balance -- --n 100
 // 목표(SPEC §3.1): 다섯 단계 모두 F1 진출과 챔피언이 가능. F1 진출률은 ⑤ > ①, F1 진출 후 챔피언 비율은 ①이 가장 높게.
 
-import { autoplayCareer, PERSONALITIES, type Personality, type WealthTier } from '../src/engine';
+import { autoplayCareer, PERSONALITIES, type Difficulty, type Personality, type WealthTier } from '../src/engine';
 
 const nArg = process.argv.indexOf('--n');
 const N = nArg >= 0 ? Number(process.argv[nArg + 1]) : 60;
 const personalities = Object.keys(PERSONALITIES) as Personality[];
+const dArg = process.argv.indexOf('--difficulty');
+const DIFF = (dArg >= 0 ? process.argv[dArg + 1] : 'normal') as Difficulty;
 
 interface Row { f1: number; champ: number; titles: number; starts: number; wins: number; peak: number; retireAge: number; juniorTitles: number; noSeat: number; releases: number; podiums: number }
 const pctf = (x: number) => `${(x * 100).toFixed(0)}%`.padStart(4);
@@ -15,7 +17,7 @@ function run(filter: (i: number) => { tier: WealthTier; p: Personality }): Row {
   const row: Row = { f1: 0, champ: 0, titles: 0, starts: 0, wins: 0, peak: 0, retireAge: 0, juniorTitles: 0, noSeat: 0, releases: 0, podiums: 0 };
   for (let i = 0; i < N; i++) {
     const { tier, p } = filter(i);
-    const c = autoplayCareer({ seed: 10_000 + i * 7 + tier * 1000, name: 'Test', nationality: 'KR', wealthTier: tier, personality: p, candidateIndex: i % 3, focus: [] });
+    const c = autoplayCareer({ seed: 10_000 + i * 7 + tier * 1000, name: 'Test', nationality: 'KR', wealthTier: tier, personality: p, candidateIndex: i % 3, focus: [], difficulty: DIFF });
     if (c.f1Debut !== null) row.f1++;
     if (c.totals.f1Titles > 0) row.champ++;
     row.titles += c.totals.f1Titles;
@@ -49,5 +51,5 @@ for (const p of personalities) {
   all += N; allChamp += r.champ;
   print(`${PERSONALITIES[p].label}(${PERSONALITIES[p].temperament})`, r);
 }
-console.log(`\n전체 챔피언 비율(성격별 표본 합): ${pctf(allChamp / all)} — 목표 10~20%`);
+console.log(`\n[난이도 ${DIFF}] 전체 챔피언 비율(성격별 표본 합): ${pctf(allChamp / all)} — 목표 쉬움 ~30%, 보통 10~20%, 어려움 ~5%`);
 console.log(`\n${((Date.now() - t0) / 1000).toFixed(1)}초`);

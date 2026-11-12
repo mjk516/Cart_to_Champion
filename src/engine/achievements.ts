@@ -5,6 +5,7 @@ import type { Career, SeasonRecord } from './career';
 import type { SeriesId } from './series';
 import { DRIVERS_2026 } from './data';
 import { hashSeed } from './rng';
+import { difficultyOf } from './growth';
 
 export type AchievementGroup = 'junior' | 'f1' | 'special';
 export const ACHIEVEMENT_GROUP_LABEL: Record<AchievementGroup, string> = { junior: '하부 리그', f1: 'F1', special: '특별' };
@@ -108,6 +109,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'three_peat', group: 'special', title: '3연패', desc: 'F1 챔피언 3시즌 연속', check: (c) => { const s = titleStreak(c); return s && s.count >= 3 ? s.from + 2 : null; } },
   { id: 'youngest_champ', group: 'special', title: '역대 최연소 챔피언', desc: `실제 F1 최연소 챔피언 기록(${REAL_YOUNGEST_HOLDER.champion} ${REAL_YOUNGEST.champion}세)보다 어린 나이에 월드 챔피언`, check: (c) => first(c, (h) => h.series === 'f1' && h.champion && h.age < REAL_YOUNGEST.champion) },
   { id: 'endurance_win', group: 'special', title: '24시간의 승자', desc: 'F1 시즌 사이 내구레이스에서 클래스 우승', check: (c) => (c.eventLog ?? []).find((e) => e.id === 'endurance_race' && e.text.includes('클래스 우승'))?.year ?? null },
+  { id: 'hard_champion', group: 'special', title: '역경의 챔피언', desc: '어려움 난이도에서 F1 월드 챔피언', check: (c) => (difficultyOf(c) === 'hard' ? first(c, (h) => h.series === 'f1' && h.champion) : null) },
   { id: 'le_mans_win', group: 'special', title: '르망의 왕', desc: '르망 24시 클래스 우승', check: (c) => c.history.find((h) => h.endurance?.name === '르망 24시' && h.endurance.position === 1)?.year ?? null },
   { id: 'endurance_podiums', group: 'special', title: '내구레이스 단골', desc: '내구레이스 포디움 3회', check: (c) => nthYear(c.history.filter((h) => h.endurance?.position !== null && h.endurance !== undefined && h.endurance.position! <= 3), 3) },
   { id: 'endurance_triple', group: 'special', title: '내구레이스 3관왕', desc: '서로 다른 내구레이스 3곳에서 클래스 우승', check: (c) => {

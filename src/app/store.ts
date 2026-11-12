@@ -84,6 +84,7 @@ export interface CreateDraft {
   focus: string[];
   helmet: unknown;
   numberText: string;
+  difficulty?: string;
 }
 
 /** 자동 백업(커리어별 최근 상태, 최대 3개) */

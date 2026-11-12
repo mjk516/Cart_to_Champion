@@ -1,7 +1,7 @@
 // 은퇴 화면(SPEC §9): 커리어 카드, 세부 능력치(최종·최고·숨은 값 공개), 성장 곡선, 시리즈별 기록, 시즌별 상세, 계약서 보관함
 
 import { Fragment, useMemo, useState, type PointerEvent } from 'react';
-import {
+import { DIFFICULTY_INFO, difficultyOf,
   generateCandidates, LADDER, ovr, PERSONALITIES, seriesLabel, STAT_KEYS,
   type Career, type SeriesId, type StatKey, type Stats,
 } from '../engine';
@@ -282,7 +282,7 @@ export function Retired() {
         {nameAside(c.driver) && <div className="text-sm text-zinc-300">{nameAside(c.driver)}</div>}
         <div className="mt-1 flex flex-wrap gap-2">
           <Pill>{PERSONALITIES[c.driver.personality].label}</Pill>
-          <Pill>{c.age}세 은퇴 · {c.history.length}시즌</Pill>
+          <Pill>{c.age}세 은퇴 · {c.history.length}시즌 · 난이도 {DIFFICULTY_INFO[difficultyOf(c)].label}</Pill>
           {c.f1Debut && <Pill tone="red">F1 데뷔 {c.f1Debut}</Pill>}
           {c.academy && <Pill tone="blue">{c.academy}</Pill>}
         </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+  DIFFICULTY_INFO, difficultyOf,
   circuitById, coachAdvice, enduranceOdds, enduranceOffer, followsCoach, inMilitary, seasonChatter, isF1RaceSeason, managerOf, MANAGER_STYLE_LABEL, ovr, PERSONALITIES, recommendedPlan, seriesLabel, STAT_KEYS, superLicencePoints, TRAINING, TRAINING_SLOTS,
   TRAINING_SLOTS_RESERVE, xpNeeded, type TrainingId,
 } from '../engine';
@@ -74,6 +75,7 @@ export function Dashboard() {
           <h1 className="flex items-center gap-2 text-2xl font-black">{d.helmet && <HelmetView helmet={d.helmet} size={44} />}{d.name}{d.number && <span className="text-base font-black text-zinc-400">#{d.number}</span>}</h1>
           {nameAside(d) && <div className="text-xs text-zinc-400" aria-label="본명·별명">{nameAside(d)}</div>}
           <div className="mt-1 flex flex-wrap gap-2">
+            <Pill tone={difficultyOf(c) === 'easy' ? 'green' : difficultyOf(c) === 'hard' ? 'red' : 'zinc'}>난이도 {DIFFICULTY_INFO[difficultyOf(c)].label}</Pill>
             <Pill>{pdef.label}</Pill>
             <Pill tone={temper.tone}>{temper.label}</Pill>
             {c.academy && <Pill tone="blue">{c.academy}</Pill>}

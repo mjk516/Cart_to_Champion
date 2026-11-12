@@ -1027,3 +1027,20 @@ describe('팀메이트 맞대결과 내구레이스 기록', () => {
     expect(got.endurance_triple).toBe(2054);
   });
 });
+
+describe('난이도', () => {
+  it('보통은 예전과 같고, 쉬움은 잠재력이 2~3 높고 어려움은 2 낮다. 재생해도 같다', async () => {
+    const { generateHidden, difficultyOf } = await import('../src/engine');
+    for (let s = 1; s <= 30; s++) {
+      const base = generateHidden(s, 'calm').potential;
+      expect(generateHidden(s, 'calm', 'normal').potential).toBe(base);
+      expect([base + 2, base + 3]).toContain(generateHidden(s, 'calm', 'easy').potential);
+      expect(generateHidden(s, 'calm', 'hard').potential).toBe(base - 2);
+    }
+    const easy = createCareer(setup(9, { difficulty: 'easy' }));
+    expect(difficultyOf(easy)).toBe('easy');
+    expect(difficultyOf(createCareer(setup(9)))).toBe('normal');
+    const a = autoplayCareer(setup(9, { difficulty: 'hard' }));
+    expect(replayCareer(a.setup, a.choiceLog).history.map((h) => h.ovrEnd)).toEqual(a.history.map((h) => h.ovrEnd));
+  });
+});
