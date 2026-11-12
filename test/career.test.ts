@@ -909,3 +909,29 @@ describe('기사의 세이프티카 문장', () => {
     expect(neutralSentence(1)).toBe('세이프티카·VSC·레드 플래그가 모두 1번 나온 레이스였다.');
   });
 });
+
+describe('방출과 성적', () => {
+  it('월드챔피언은 성격·논란이 있어도 방출되지 않는다', () => {
+    let found = false;
+    for (let seed = 1; seed <= 200 && !found; seed++) {
+      let c = createCareer(setup(seed, { wealthTier: 5, personality: 'aggressive' }));
+      for (let i = 0; i < 30 && !c.retired; i++) {
+        const before = c;
+        c = runSeason(c, DEFAULT_POLICY.training(c)).career;
+        for (const card of pendingEventCards(c)) c = resolveEvent(c, card.id, card.options[0]!.id).career;
+        if (isF1RaceSeason(before) && c.contract?.seat === 'race') {
+          const last = c.history[c.history.length - 1]!;
+          // 시즌 기록을 챔피언으로, 방출 위험 플래그를 최대로 둔다
+          const champ = { ...c, flags: { ...(c.flags ?? {}), releaseRisk: 1 }, history: [...c.history.slice(0, -1), { ...last, champion: true, position: 1 }] };
+          expect(getOffseason(champ).released).toBe(false);
+          const tenth = { ...c, flags: { ...(c.flags ?? {}), releaseRisk: 1 }, history: [...c.history.slice(0, -1), { ...last, champion: false, position: 10, wins: 0, teammateBeat: 0.2 }] };
+          expect(getOffseason(tenth).released).toBe(true);
+          found = true;
+          break;
+        }
+        c = applyOffseason(c, DEFAULT_POLICY.offseason(c, getOffseason(c)));
+      }
+    }
+    expect(found).toBe(true);
+  });
+});
