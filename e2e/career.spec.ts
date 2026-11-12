@@ -138,6 +138,16 @@ test('패치노트: 상단 메뉴에서 날짜별 변경 사항을 본다', asyn
   await expect(page.getByRole('heading', { name: '패치노트' })).toBeVisible();
   await expect(page.getByRole('list', { name: '2026년 11월 12일 변경 사항' })).toContainText('팀 전략 회의');
   await expect(page.getByRole('list', { name: '2026년 11월 11일 변경 사항' })).toContainText('첫 공개');
+  // 항목 탭: 밸런스만 보면 새 기능 항목은 안 보인다
+  await page.getByRole('tab', { name: /밸런스/ }).click();
+  await expect(page.getByRole('tab', { name: /밸런스/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('list', { name: '2026년 11월 12일 변경 사항' })).toContainText('좋은 성적이면 방출되지 않는다');
+  await expect(page.getByRole('list', { name: '2026년 11월 12일 변경 사항' })).not.toContainText('팀 전략 회의');
+  // 제목을 누르면 세부 내용이 펼쳐진다
+  await page.getByText('좋은 성적이면 방출되지 않는다').click();
+  await expect(page.getByText(/월드챔피언이 된 시즌 뒤에는/)).toBeVisible();
+  await page.getByRole('tab', { name: /전체/ }).click();
+  await expect(page.getByRole('list', { name: '2026년 11월 12일 변경 사항' })).toContainText('팀 전략 회의');
   await page.getByRole('button', { name: '돌아가기' }).click();
   await expect(page.getByRole('button', { name: '새 커리어' })).toBeVisible();
 });
