@@ -5,7 +5,7 @@ import { type Career, type F1Driver, type F1Standings, type RaceHighlight, PLAYE
 import { clamp, juniorTeams, lerp, statsAround } from './careerInternal';
 import { WEALTH_TIERS } from './creation';
 import { coachAdvice, followsCoach } from './coach';
-import { applyEndurance, enduranceResult } from './endurance';
+import { applyEndurance, enduranceResult, type EnduranceChoices } from './endurance';
 import { myRaceResult, neutralCounts, snsReaction, sumSnsEffects, type MyRaceResult, type NeutralCounts } from './raceNews';
 import { strategyKey, type StrategyMap } from './strategy';
 import { pickEvents } from './events';
@@ -27,6 +27,8 @@ export interface SeasonOptions {
   sns?: Record<string, string>;
   /** 전략 회의 선택(라운드:종류 → 전략·출발 타이어, SPEC v0.40) */
   strategy?: StrategyMap;
+  /** 내구레이스 하이라이트 중계에서 고른 것(SPEC v0.42). 없으면 한 번에 결과 */
+  enduranceChoices?: EnduranceChoices;
 }
 
 // ── 시즌 ─────────────────────────────────────────────────────────────
@@ -491,12 +493,12 @@ export function runSeason(input: Career, plan: TrainingId[], radio: Record<strin
   const serving = inMilitary(c);
   const cleanPlan = serving ? [] : plan.slice(0, slots);
   // 결과는 시즌 시작 때의 상태로 정한다(라이브 주말에 미리 보여 준 결과와 같게)
-  const enduranceOut = !serving && opts.endurance ? enduranceResult(c) : null;
+  const enduranceOut = !serving && opts.endurance ? enduranceResult(c, opts.enduranceChoices) : null;
   const endurance = !!enduranceOut;
   const f1Racing = !serving && contract?.series === 'f1' && contract.seat === 'race';
   const sns: Record<string, string> = f1Racing ? { ...(opts.sns ?? {}) } : {};
   const strategy: StrategyMap = f1Racing ? { ...(opts.strategy ?? {}) } : {};
-  c.choiceLog.push({ year: c.year, kind: 'training', plan: cleanPlan, ...(Object.keys(radio).length ? { radio } : {}), ...(endurance ? { endurance: true } : {}), ...(Object.keys(sns).length ? { sns } : {}), ...(Object.keys(strategy).length ? { strategy } : {}) });
+  c.choiceLog.push({ year: c.year, kind: 'training', plan: cleanPlan, ...(Object.keys(radio).length ? { radio } : {}), ...(endurance ? { endurance: true } : {}), ...(endurance && opts.enduranceChoices && Object.keys(opts.enduranceChoices).length ? { enduranceChoices: opts.enduranceChoices } : {}), ...(Object.keys(sns).length ? { sns } : {}), ...(Object.keys(strategy).length ? { strategy } : {}) });
 
   const notes: string[] = [];
   let expenses = 0;
