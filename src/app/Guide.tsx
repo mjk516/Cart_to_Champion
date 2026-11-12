@@ -14,8 +14,8 @@ export function Tip({ id, title, children }: { id: string; title: string; childr
       <div className="font-black text-sky-200">💡 {title}</div>
       <div className="mt-1 space-y-1 leading-relaxed text-zinc-200">{children}</div>
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button className="!px-3 !py-1.5 text-xs" onClick={() => dismissTip(id)}>알겠어요</Button>
-        <Button variant="ghost" className="!px-3 !py-1.5 text-xs" onClick={() => go('guide')}>게임 방법 전체 보기</Button>
+        <Button size="sm" onClick={() => dismissTip(id)}>알겠어요</Button>
+        <Button variant="ghost" size="sm" onClick={() => go('guide')}>게임 방법 전체 보기</Button>
       </div>
     </div>
   );

@@ -437,7 +437,7 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
               <span className="h-4 w-1 rounded" style={{ background: x.colorOf(e.id) }} />
               <span className="w-12">{x.codeOf(e.id)}</span>
               <span className="flex-1 text-right tabular-nums text-zinc-300">{i === 0 ? '선두' : `+${e.gap.toFixed(1)}`}</span>
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black text-zinc-900" style={{ background: TYRE_COLOR[e.compound] }}>{e.compound}</span>
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-black text-zinc-900" style={{ background: TYRE_COLOR[e.compound] }}>{e.compound}</span>
               <span className="w-10 text-right text-xs text-zinc-500">{e.stops}스톱</span>
             </li>
           ))}
@@ -447,7 +447,7 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
               <span className="h-4 w-1 rounded opacity-40" style={{ background: x.colorOf(o.car) }} />
               <span className="w-12 line-through">{x.codeOf(o.car)}</span>
               <span className="flex-1 text-right text-xs">{o.type === 'crash' ? '사고' : '기계 결함'} · L{o.lap}</span>
-              <span className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-black text-white">OUT</span>
+              <span className="rounded bg-red-600 px-1.5 py-0.5 text-[11px] font-black text-white">OUT</span>
             </li>
           ))}
         </ol>

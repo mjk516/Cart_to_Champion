@@ -42,7 +42,7 @@ export function FeedList({ items }: { items: FeedItem[] }) {
 export function ChatLine({ c }: { c: Chat }) {
   return (
     <li className="chat-in flex items-start gap-2 text-xs">
-      <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${PLATFORM_STYLE[c.platform]}`}>{PLATFORM_LABEL[c.platform]}</span>
+      <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-bold ${PLATFORM_STYLE[c.platform]}`}>{PLATFORM_LABEL[c.platform]}</span>
       <span className="shrink-0 font-bold text-zinc-400">{c.author}</span>
       <span className="text-zinc-200">{c.text}</span>
     </li>

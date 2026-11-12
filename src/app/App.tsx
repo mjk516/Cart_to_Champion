@@ -14,7 +14,33 @@ const Settings = lazy(() => import('./Screens').then((m) => ({ default: m.Settin
 import { moveUrl, takeIncomingSave } from './move';
 import { onOldSite, SITE_URL } from './site';
 import { useConfirm } from './ui';
-import { requestPersistentStorage, useGame } from './store';
+import { requestPersistentStorage, useGame, type Screen } from './store';
+
+const NAV: Array<{ id: Screen; label: string; always: boolean }> = [
+  { id: 'patch', label: '패치노트', always: true },
+  { id: 'guide', label: '게임 방법', always: true },
+  { id: 'records', label: '업적·기록', always: false },
+  { id: 'settings', label: '설정', always: true },
+];
+
+// 화면 코드를 미리 받아 둔다(처음 그린 뒤 한가할 때). 화면을 열 때 "불러오는 중"이 거의 안 보인다
+const SCREEN_CHUNKS = [() => import('./Dashboard'), () => import('./Weekend'), () => import('./Offseason'), () => import('./Create'),
+  () => import('./Records'), () => import('./Retired'), () => import('./Guide'), () => import('./PatchNotes'), () => import('./Screens')];
+function prefetchScreens() {
+  const run = () => { for (const f of SCREEN_CHUNKS) void f().catch(() => { /* 오프라인 등: 열 때 다시 받는다 */ }); };
+  const w = window as Window & { requestIdleCallback?: (cb: () => void) => void };
+  if (w.requestIdleCallback) w.requestIdleCallback(run); else setTimeout(run, 1200);
+}
+
+function ScreenSkeleton() {
+  return (
+    <div className="mx-auto max-w-5xl space-y-4 px-4 py-6" role="status" aria-label="불러오는 중">
+      <div className="skel h-7 w-40 rounded-lg bg-white/10" />
+      <div className="skel h-36 rounded-2xl bg-white/5" />
+      <div className="skel h-56 rounded-2xl bg-white/5" />
+    </div>
+  );
+}
 
 export function App() {
   const { screen, career, go, exportSave, importSave, peekSave } = useGame();
@@ -23,7 +49,7 @@ export function App() {
   // 은퇴한 커리어는 항상 은퇴 화면으로
   const effective = career?.retired && (screen === 'dashboard' || screen === 'offseason') ? 'retired' : screen;
   // 휴대폰 브라우저가 저장 데이터를 지우지 않게 요청(한 번)
-  useEffect(() => { requestPersistentStorage(); }, []);
+  useEffect(() => { requestPersistentStorage(); prefetchScreens(); }, []);
   // 예전 주소에서 넘어온 커리어 받기
   useEffect(() => {
     void takeIncomingSave().then((text) => {
@@ -48,10 +74,12 @@ export function App() {
           <span className="text-racing">▍</span>카트에서 챔피언까지
         </button>
         <div className="flex shrink-0 gap-2.5 whitespace-nowrap sm:gap-4">
-          <button onClick={() => go('patch')} className="text-xs text-zinc-400 hover:text-zinc-200">패치노트</button>
-          <button onClick={() => go('guide')} className="text-xs text-zinc-400 hover:text-zinc-200">게임 방법</button>
-          {career && <button onClick={() => go('records')} className="text-xs text-zinc-400 hover:text-zinc-200">업적·기록</button>}
-          <button onClick={() => go('settings')} className="text-xs text-zinc-400 hover:text-zinc-200">설정</button>
+          {NAV.filter((n) => n.always || career).map((n) => (
+            <button key={n.id} onClick={() => go(n.id)} aria-current={effective === n.id ? 'page' : undefined}
+              className={`relative py-1 text-xs transition ${effective === n.id ? 'font-bold text-white after:absolute after:inset-x-0 after:-bottom-[13px] after:h-0.5 after:rounded-full after:bg-racing' : 'text-zinc-400 hover:text-zinc-200'}`}>
+              {n.label}
+            </button>
+          ))}
         </div>
       </nav>
       {onOldSite() && (
@@ -69,7 +97,7 @@ export function App() {
         </div>
       )}
       {effective === 'home' && <Home />}
-      <Suspense fallback={<div className="mx-auto max-w-5xl px-4 py-10 text-sm text-zinc-500" role="status">불러오는 중…</div>}>
+      <Suspense fallback={<ScreenSkeleton />}>
       {effective === 'create' && <Create />}
       {effective === 'dashboard' && <Dashboard />}
       {effective === 'offseason' && <Offseason />}

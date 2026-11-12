@@ -43,9 +43,9 @@ export function StrategyMeeting({ c, circuit, kind, laps, seed, initial, onConfi
         {tyres.map((t) => (
           <button key={t} onClick={() => setTyre(t === plan.start ? null : t)} aria-pressed={start === t}
             className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-sm ${start === t ? 'border-white bg-white/10 font-bold' : 'border-white/15 hover:bg-white/5'}`}>
-            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black text-zinc-900" style={{ background: TYRE_COLOR[t] }}>{t}</span>
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-black text-zinc-900" style={{ background: TYRE_COLOR[t] }}>{t}</span>
             {TYRE_NAME[t]}
-            {t === teamTyre && <span className="text-[10px] text-emerald-300">★팀</span>}
+            {t === teamTyre && <span className="text-[11px] text-emerald-300">★팀</span>}
           </button>
         ))}
       </div>
