@@ -22,10 +22,11 @@ export function generateHidden(seed: number, personality: Personality): Hidden {
   const r = rngFor(seed, 'hidden');
   // 기질에 따라 잠재력 분포가 다르다(SPEC §3.4 v0.11): 좋은 성격은 좁고 낮은 상한, 나쁜 성격은 넓고 높은 상한
   const t = PERSONALITIES[personality].temperament;
+  // v0.40: 성격별 챔피언 확률 차이를 줄이려고 평균을 맞추고 나쁜 기질의 상한을 낮췄다(넓은 분포는 그대로)
   const potential = t === 'good'
     ? clamp(Math.round(82.5 + normal(r) * 2.5), 78, 88)
     : t === 'bad'
-      ? clamp(Math.round(84 + normal(r) * 4.5), 76, 93)
+      ? clamp(Math.round(82.5 + normal(r) * 4), 75, 90)
       : clamp(Math.round(82 + normal(r) * 3), 77, 88);
   const growthType = weightedPick<GrowthType>(r, ['early', 'standard', 'late', 'longevity'], (g) =>
     g === 'early' ? (personality === 'instinctive' ? 0.4 : 0.25)
@@ -35,7 +36,8 @@ export function generateHidden(seed: number, personality: Personality): Hidden {
   );
   // 전성기는 37세까지 유지되고 38세부터 능력치가 떨어진다(SPEC §4.4 v0.14). 장기 유지형은 1~2년 더 버틴다
   const peakEnd = growthType === 'longevity' ? 38 + int(r, 0, 1) : 37;
-  const pressureBonus = personality === 'calm' || personality === 'fighter' ? 15 : personality === 'showman' ? -15 : 0;
+  // v0.40: 쇼맨형의 압박 내성 감점(−15)을 없앴다(성격별 챔피언 확률 맞춤)
+  const pressureBonus = personality === 'calm' || personality === 'fighter' ? 15 : 0;
   return {
     potential,
     growthType,

@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from 'react';
 import {
-  circuitType, enduranceLine, enduranceOffer, enduranceResult, f1Calendar, previewEndurance, f1WeekendFor, homeGpEffect, forecastFinish, ovr, radioKey, runRace,
+  circuitType, enduranceLine, strategyKey, enduranceOffer, enduranceResult, f1Calendar, previewEndurance, f1WeekendFor, homeGpEffect, forecastFinish, ovr, radioKey, runRace,
   type Classified, type F1Weekend, type F1WeekendSession,
 } from '../engine';
 import { LiveRace } from './LiveRace';
 import { gpName, RaceAftermath } from './RaceAftermath';
+import { StrategyMeeting } from './StrategyMeeting';
 import { F1TeamBadge } from './TeamBadge';
 import { Tip } from './Guide';
 import { useGame } from './store';
@@ -36,8 +37,8 @@ export function Weekend() {
   const confirmBox = useConfirm();
   const [doneKey, setDoneKey] = useState<string | null>(null);
   const wk: F1Weekend | null = useMemo(
-    () => (c && live && live.year === c.year ? f1WeekendFor(c, live.plan, live.round, live.radio) : null),
-    [c, live?.plan, live?.round, live?.radio, live?.year], // eslint-disable-line react-hooks/exhaustive-deps
+    () => (c && live && live.year === c.year ? f1WeekendFor(c, live.plan, live.round, live.radio, live.strategy ?? {}) : null),
+    [c, live?.plan, live?.round, live?.radio, live?.year, live?.strategy], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const mainRace = wk?.sessions.filter((s) => s.type === 'race').slice(-1)[0];
   const forecast = useMemo(
@@ -178,7 +179,20 @@ export function Weekend() {
             </div>
           )}
 
-          {session?.type === 'race' && (
+          {session?.type === 'race' && !skipped && !(live.strategyDone ?? []).includes(strategyKey(live.round, session.kind)) && (
+            <div>
+              <div className="mb-2 text-lg font-black">{session.label}</div>
+              <StrategyMeeting
+                c={c} circuit={wk.circuit} kind={session.kind} laps={session.outcome.totalLaps} seed={session.input.seed}
+                initial={live.strategy?.[strategyKey(live.round, session.kind)]}
+                onConfirm={(choice) => updateLive({
+                  strategy: { ...(live.strategy ?? {}), [strategyKey(live.round, session.kind)]: choice },
+                  strategyDone: [...(live.strategyDone ?? []), strategyKey(live.round, session.kind)],
+                })}
+              />
+            </div>
+          )}
+          {session?.type === 'race' && (skipped || (live.strategyDone ?? []).includes(strategyKey(live.round, session.kind))) && (
             <div>
               <div className="mb-2 text-lg font-black">{session.label}</div>
               <LiveRace
@@ -199,12 +213,12 @@ export function Weekend() {
                 onRadio={(d, o) => updateLive({ radio: { ...live.radio, [radioKey(live.round, session.kind, d)]: o } })}
                 onDone={() => setDoneKey(`${live.round}:${session.kind}`)}
               />
-              {raceDone && session.kind === 'race' && (() => {
+              {raceDone && (() => {
                 const out = skipped ? runRace({ ...session.input, autoRadio: true }) : session.outcome;
                 if (out.status !== 'finished') return null;
                 return (
                   <RaceAftermath
-                    c={c} round={live.round} gp={gpName(c, wk.circuit, f1Calendar(c))} rows={out.classification} incidents={out.incidents} cars={wk.cars}
+                    c={c} round={live.round} kind={session.kind} gp={gpName(c, wk.circuit, f1Calendar(c))} rows={out.classification} incidents={out.incidents} cars={wk.cars}
                     chosen={live.sns?.[String(live.round)]}
                     onPick={(id) => updateLive({ sns: { ...(live.sns ?? {}), [String(live.round)]: id } })}
                   />

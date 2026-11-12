@@ -57,6 +57,8 @@ export interface RaceArticle {
 export interface ArticleContext {
   gp: string;
   round: number;
+  /** 스프린트 기사(SPEC v0.40). 없으면 결승 */
+  kind?: 'race' | 'sprint';
   name: string;
   team: string;
   winnerName: string;
@@ -68,7 +70,7 @@ export interface ArticleContext {
 }
 
 export function raceArticle(c: Career, r: MyRaceResult, x: ArticleContext): RaceArticle {
-  const rng = rngFor(c.seed, 'race-article', c.year, x.round);
+  const rng = rngFor(c.seed, 'race-article', c.year, x.round, x.kind ?? 'race');
   const s = situationOf(r);
   const gain = r.position !== null ? r.grid - r.position : 0;
   const fill = (t: string) => fixJosa(t

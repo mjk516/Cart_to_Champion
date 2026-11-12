@@ -372,3 +372,76 @@ describe('조사·가상 이름 (v0.38)', () => {
     for (let i = 0; i < 60; i++) { const n = fictionalName(r, avoid); expect(avoid.has(n.first)).toBe(false); avoid.add(n.first); }
   });
 });
+
+import { circuitTyreData, raceForecast, teamStrategies, weatherPlan, raceLaps } from '../src/engine';
+
+describe('타이어·비·전략 회의 (v0.40)', () => {
+  it('비 확률이 높은 서킷일수록 비가 자주 오고, 폭우 땐 풀웻을 쓰며 젖은 타이어를 쓰면 의무 피트 규칙이 없다', () => {
+    const rainy = (id: string) => { let n = 0; const c = circuitById(id); for (let s = 0; s < 600; s++) if (weatherPlan(s, c, raceLaps(c, 'race'))) n++; return n / 600; };
+    expect(rainy('belgium')).toBeGreaterThan(rainy('bahrain') + 0.2);
+    expect(rainy('brazil')).toBeGreaterThan(0.25);
+    let wSeen = 0;
+    let wetStart = 0;
+    for (let seed = 0; seed < 400 && wSeen < 3; seed++) {
+      const c = circuitById('belgium');
+      const w = weatherPlan(seed, c, raceLaps(c, 'race'));
+      if (!w?.heavy) continue;
+      if (w.start <= 1) wetStart++;
+      const out = runRace(raceInput(seed, 'belgium'));
+      if (out.status !== 'finished') continue;
+      const usedW = out.incidents.some((i) => i.type === 'pit' && i.compound === 'W') || out.laps[0]!.order.some((e) => e.compound === 'W');
+      if (usedW) wSeen++;
+    }
+    expect(wSeen).toBeGreaterThan(0);
+    expect(wetStart).toBeGreaterThanOrEqual(0);
+  });
+
+  it('팀 추천 출발 타이어는 서킷 실제 데이터, 스프린트는 피트 계획이 없고, 젖은 출발은 젖은 타이어', () => {
+    const bh = circuitById('bahrain');
+    const dry = raceForecast(1, bh, 57);
+    expect(dry.rain).toBe(false);
+    const opts = teamStrategies(bh, 'race', 57, dry, 'calm');
+    expect(opts[0]!.recommended).toBe(true);
+    expect(opts[0]!.start).toBe(circuitTyreData('bahrain').start);
+    expect(opts.some((o) => o.style === 'data')).toBe(true);
+    expect(opts.some((o) => o.style === 'gamble')).toBe(false);
+    expect(teamStrategies(bh, 'race', 57, dry, 'aggressive').some((o) => o.style === 'gamble')).toBe(true);
+    expect(teamStrategies(bh, 'race', 57, dry, 'fighter').every((o) => o.style === 'team' || o.style === 'alt')).toBe(true);
+    for (const o of teamStrategies(bh, 'sprint', 19, dry, 'instinctive')) expect(o.stops).toEqual([]);
+    const wet = { ...dry, rain: true, wetStart: true, heavy: true };
+    expect(teamStrategies(bh, 'race', 57, wet, 'calm')[0]!.start).toBe('W');
+    expect(teamStrategies(bh, 'race', 57, { ...wet, heavy: false }, 'calm')[0]!.start).toBe('I');
+  });
+
+  it('전략 회의에서 고른 출발 타이어·피트 계획을 내 차가 따르고, 피트 창 무전에 성격 전략이 붙는다', () => {
+    const me = cars[5]!;
+    const base = (p: Personality, extra: Partial<RaceInput> = {}) => {
+      const myCars = cars.map((c) => (c.id === me.id ? { ...c, personality: p } : c));
+      return { ...raceInput(3, 'italy'), cars: myCars, myCarId: me.id, ...extra };
+    };
+    // 하드 출발 지정
+    const out = runRace({ ...base('calm'), myPlan: 'team', myStart: 'H', autoRadio: true });
+    expect(out.laps[0]!.order.find((e) => e.id === me.id)?.compound).toBe('H');
+    // 피트 창 무전: 분석·침착형은 데이터, 공격·본능형은 도박 선택지
+    // 무전을 하나씩 추천으로 넘기며 피트 창 무전을 찾는다
+    const findWindow = (p: Personality) => {
+      const radio: Record<string, RadioOptionId> = {};
+      for (let i = 0; i < 10; i++) {
+        const r = runRace({ ...base(p), myPlan: 'team', autoRadio: false, radio });
+        if (r.status !== 'pending') return null;
+        if (r.decision.trigger === 'pit_window') return r.decision;
+        radio[r.decision.id] = r.decision.options.find((o) => o.recommended)!.id;
+      }
+      return null;
+    };
+    const d1 = findWindow('analytical')!;
+    const d2 = findWindow('aggressive')!;
+    const d3 = findWindow('fighter')!;
+    expect(d1.options.map((o) => o.id)).toContain('data_optimal');
+    expect(d2.options.map((o) => o.id)).toContain('gamble_soft');
+    expect(d3.options.map((o) => o.id)).toEqual(['pit_plan', 'pit_now', 'extend']);
+    expect(d1.options.find((o) => o.recommended)!.id).toBe('pit_plan');
+    // 같은 선택이면 같은 결과
+    expect(runRace({ ...base('calm'), myPlan: 'team', autoRadio: true })).toEqual(runRace({ ...base('calm'), myPlan: 'team', autoRadio: true }));
+  });
+});

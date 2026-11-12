@@ -7,6 +7,7 @@ import { WEALTH_TIERS } from './creation';
 import { coachAdvice, followsCoach } from './coach';
 import { applyEndurance, enduranceResult } from './endurance';
 import { myRaceResult, snsReaction, sumSnsEffects, type MyRaceResult } from './raceNews';
+import { strategyKey, type StrategyMap } from './strategy';
 import { pickEvents } from './events';
 import { seasonFeed } from './feed';
 import { CAR_WEIGHT, F1_WINNER_TEAMS, ovr, POINTS_RACE } from './data';
@@ -24,6 +25,8 @@ export interface SeasonOptions {
   endurance?: boolean;
   /** 그랑프리 결승 뒤 올린 SNS 글(라운드 → 선택지 id, SPEC v0.36) */
   sns?: Record<string, string>;
+  /** 전략 회의 선택(라운드:종류 → 전략·출발 타이어, SPEC v0.40) */
+  strategy?: StrategyMap;
 }
 
 // ── 시즌 ─────────────────────────────────────────────────────────────
@@ -256,7 +259,7 @@ export interface F1Weekend {
  * radio: 시즌 전체 무전 선택(radioKey). 없는 결정은 엔지니어 추천을 따른다(autoRadio).
  * 화면용 프랙티스(FP)는 결과에 영향을 주지 않는다.
  */
-function f1Weekend(c: Career, cars: RaceCar[], seed: number, round: number, radio: Record<string, RadioOptionId>, racing: boolean, autoRadio = true): F1Weekend {
+function f1Weekend(c: Career, cars: RaceCar[], seed: number, round: number, radio: Record<string, RadioOptionId>, racing: boolean, autoRadio = true, strategy: StrategyMap = {}): F1Weekend {
   const rules = f1Rules(c);
   const w = CAR_WEIGHT.f1;
   const calendar = f1Calendar(c);
@@ -284,6 +287,8 @@ function f1Weekend(c: Career, cars: RaceCar[], seed: number, round: number, radi
     const input: RaceInput = {
       seed: hashSeed(seed, c.year, 'f1', round, wk.kind), circuit, cars: roundCars, grid: q.order, kind: wk.kind, carWeight: w, rules,
       myCarId: racing ? PLAYER_ID : undefined, autoRadio, radio: sub,
+      ...(racing && strategy[strategyKey(round, wk.kind)]?.plan ? { myPlan: strategy[strategyKey(round, wk.kind)]!.plan } : {}),
+      ...(racing && strategy[strategyKey(round, wk.kind)]?.tyre ? { myStart: strategy[strategyKey(round, wk.kind)]!.tyre } : {}),
     };
     sessions.push({ type: 'race', kind: wk.kind, label: wk.kind === 'sprint' ? '스프린트' : '레이스', input, outcome: runRace(input) });
   }
@@ -291,17 +296,17 @@ function f1Weekend(c: Career, cars: RaceCar[], seed: number, round: number, radi
 }
 
 /** 화면용: 이번 시즌 F1 한 라운드. 무전 결정이 남아 있으면 레이스 결과는 pending */
-export function f1WeekendFor(c: Career, plan: TrainingId[], round: number, radio: Record<string, RadioOptionId> = {}): F1Weekend {
+export function f1WeekendFor(c: Career, plan: TrainingId[], round: number, radio: Record<string, RadioOptionId> = {}, strategy: StrategyMap = {}): F1Weekend {
   const racing = c.contract?.series === 'f1' && c.contract.seat === 'race';
   const stats = seasonStatsFor(c, plan).stats;
-  return f1Weekend(c, f1Cars(c, stats), hashSeed(c.seed, 'season', c.year), round, radio, racing, false);
+  return f1Weekend(c, f1Cars(c, stats), hashSeed(c.seed, 'season', c.year), round, radio, racing, false, strategy);
 }
 
 export function isF1RaceSeason(c: Career): boolean {
   return c.contract?.series === 'f1' && c.contract.seat === 'race' && !c.retired;
 }
 
-function simulateF1(c: Career, stats: Stats, seed: number, radio: Record<string, RadioOptionId> = {}): SeasonSim {
+function simulateF1(c: Career, stats: Stats, seed: number, radio: Record<string, RadioOptionId> = {}, strategy: StrategyMap = {}): SeasonSim {
   const racing = c.contract?.series === 'f1' && c.contract.seat === 'race';
   const cars = f1Cars(c, stats);
   const w = CAR_WEIGHT.f1;
@@ -317,7 +322,7 @@ function simulateF1(c: Career, stats: Stats, seed: number, radio: Record<string,
   let duels = 0;
   f1Calendar(c).forEach((circuit, round) => {
     addXp(sim.raceXp, SESSION_XP.practice, (circuit.sprint ? 1 : 3) * (racing ? 1 : 0.4));
-    const wk = f1Weekend(c, cars, seed, round, radio, racing);
+    const wk = f1Weekend(c, cars, seed, round, radio, racing, true, strategy);
     for (const sess of wk.sessions) {
       if (sess.type === 'quali') {
         if (sess.display) continue;
@@ -486,8 +491,10 @@ export function runSeason(input: Career, plan: TrainingId[], radio: Record<strin
   // 결과는 시즌 시작 때의 상태로 정한다(라이브 주말에 미리 보여 준 결과와 같게)
   const enduranceOut = !serving && opts.endurance ? enduranceResult(c) : null;
   const endurance = !!enduranceOut;
-  const sns: Record<string, string> = !serving && contract?.series === 'f1' && contract.seat === 'race' ? { ...(opts.sns ?? {}) } : {};
-  c.choiceLog.push({ year: c.year, kind: 'training', plan: cleanPlan, ...(Object.keys(radio).length ? { radio } : {}), ...(endurance ? { endurance: true } : {}), ...(Object.keys(sns).length ? { sns } : {}) });
+  const f1Racing = !serving && contract?.series === 'f1' && contract.seat === 'race';
+  const sns: Record<string, string> = f1Racing ? { ...(opts.sns ?? {}) } : {};
+  const strategy: StrategyMap = f1Racing ? { ...(opts.strategy ?? {}) } : {};
+  c.choiceLog.push({ year: c.year, kind: 'training', plan: cleanPlan, ...(Object.keys(radio).length ? { radio } : {}), ...(endurance ? { endurance: true } : {}), ...(Object.keys(sns).length ? { sns } : {}), ...(Object.keys(strategy).length ? { strategy } : {}) });
 
   const notes: string[] = [];
   let expenses = 0;
@@ -530,7 +537,7 @@ export function runSeason(input: Career, plan: TrainingId[], radio: Record<strin
     sim = simulateKart(c, seasonStats, seed);
     quickF1World(c, seed);
   } else if (series === 'f1') {
-    sim = simulateF1(c, seasonStats, seed, radio);
+    sim = simulateF1(c, seasonStats, seed, radio, strategy);
   } else {
     sim = simulateJunior(c, seasonStats, seed);
     quickF1World(c, seed);

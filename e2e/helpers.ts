@@ -45,3 +45,14 @@ export function useCleanStorage() {
     await page.evaluate(() => localStorage.clear());
   });
 }
+
+/** 주말 시작에서 첫 레이스 트랙 뷰까지: 세션을 넘기고, 전략 회의가 나오면 팀 추천으로 확정한다 */
+export async function goToFirstRace(page: Page) {
+  const track = page.locator('svg[aria-label^="트랙 뷰"]');
+  for (let i = 0; i < 8 && !(await track.isVisible().catch(() => false)); i++) {
+    const confirm = page.getByRole('button', { name: '전략 확정하고 출발' });
+    if (await confirm.isVisible().catch(() => false)) await confirm.click();
+    else await page.getByRole('button', { name: '다음 세션' }).click();
+  }
+  return track;
+}
