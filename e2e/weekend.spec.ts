@@ -85,12 +85,49 @@ test('내구레이스: 팀 입지가 단단하면 훈련 계획에서 출전을 
     s.state.live.round = r; localStorage.setItem(k as string, JSON.stringify(s));
   }, [KEY, offer.afterRound + 1] as const);
   await page.reload();
+  await expect(page.getByLabel('내구레이스')).toContainText(`${offer.hours}시간 레이스`);
+  await page.getByLabel('내구레이스').getByRole('button', { name: '결과로 바로 가기' }).click();
   await expect(page.getByLabel('내구레이스')).toContainText(previewEndurance(c)!);
   await page.getByRole('button', { name: '남은 시즌 자동 진행' }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: '남은 시즌 자동 진행' }).click();
   await expect(page.getByText(`${c.year} 시즌 결과`)).toBeVisible();
   const log = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)!).state.career.choiceLog.at(-1), KEY);
   expect(log.endurance).toBe(true);
+});
+
+test('내구레이스 하이라이트 중계: 구간마다 고르고 기사를 본다. 고른 것이 시즌 기록에 남는다', async ({ page }) => {
+  const c = f1Career((x) => !!enduranceOffer(x), 5);
+  const offer = enduranceOffer(c)!;
+  await loadSave(page, c);
+  await page.getByRole('checkbox', { name: '내구레이스 출전' }).check();
+  await page.getByRole('button', { name: /시즌 라이브로 시작/ }).click();
+  await page.evaluate(([k, r]) => {
+    const s = JSON.parse(localStorage.getItem(k as string)!);
+    s.state.live.round = r; localStorage.setItem(k as string, JSON.stringify(s));
+  }, [KEY, offer.afterRound + 1] as const);
+  await page.reload();
+  await page.getByRole('button', { name: '📺 하이라이트 중계 보기' }).click();
+  const feed = page.getByRole('list', { name: '중계 기록' });
+  await expect(feed).toContainText('출발한다');
+  // 구간마다 공격적인 쪽을 고른다(리타이어하면 거기서 끝)
+  for (let i = 0; i < 3; i++) {
+    const end = page.getByRole('button', { name: '결과와 기사 보기' });
+    const pick = page.getByRole('group').getByRole('button').first();
+    await expect(end.or(pick)).toBeVisible();
+    if (await end.isVisible()) break;
+    await pick.click();
+    const fast = page.getByRole('button', { name: '빨리 보기' });
+    if (await fast.isVisible().catch(() => false)) await fast.click().catch(() => {});
+  }
+  await page.getByRole('button', { name: '결과와 기사 보기' }).click();
+  await expect(page.getByRole('article', { name: '내구레이스 기사' })).toContainText(offer.name);
+  const choices = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)!).state.live.enduranceChoices, KEY);
+  expect(Object.keys(choices).length).toBeGreaterThan(0);
+  await page.getByRole('button', { name: '남은 시즌 자동 진행' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '남은 시즌 자동 진행' }).click();
+  await expect(page.getByText(`${c.year} 시즌 결과`)).toBeVisible();
+  const log = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)!).state.career.choiceLog.at(-1), KEY);
+  expect(log.enduranceChoices).toEqual(choices);
 });
 
 test('결승 뒤 기사와 SNS 글 고르기, 리타이어한 차는 OUT', async ({ page }) => {

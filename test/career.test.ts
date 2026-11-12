@@ -599,9 +599,10 @@ describe('여름·가을 내구레이스 (v0.32)', () => {
     expect(last.teammateBeat).toBeGreaterThanOrEqual(0.5);
     expect(['summer', 'autumn']).toContain(o.season);
     const n = f1Calendar(c).length;
-    expect(o.afterRound).toBeGreaterThan(n * 0.4);
+    // 여름(6월)은 캘린더 40% 무렵, 가을(10~11월)은 75% 무렵(SPEC v0.42)
+    expect(o.afterRound).toBeGreaterThan(n * 0.25);
     expect(o.afterRound).toBeLessThan(n - 1);
-    expect(o.when).toMatch(/8월|10월/);
+    expect(o.when).toMatch(o.season === 'summer' ? /6월/ : /10월|11월/);
   });
 
   it('출전하면 결과가 이벤트 기록·시즌 메모에 남고, 선택 기록으로 똑같이 재현된다', () => {
@@ -895,5 +896,88 @@ describe('전략 회의 선택 재생 (v0.40)', () => {
     const yes = runSeason(c, DEFAULT_POLICY.training(c), {}, { strategy });
     expect(yes.career.choiceLog.at(-1)).toMatchObject({ kind: 'training', strategy });
     expect(replayCareer(yes.career.setup, yes.career.choiceLog)).toEqual(yes.career);
+  });
+});
+
+describe('기사의 세이프티카 문장', () => {
+  it('나온 것만 말하고, 2번 이상이면 어지러운 레이스', async () => {
+    const { neutralSentence } = await import('../src/engine');
+    expect(neutralSentence(1, { sc: 1, vsc: 0, red: 0 })).toBe('세이프티카가 1번 나온 레이스였다.');
+    expect(neutralSentence(1, { sc: 0, vsc: 1, red: 0 })).toBe('VSC가 1번 나온 레이스였다.');
+    expect(neutralSentence(1, { sc: 0, vsc: 0, red: 1 })).toBe('레드 플래그가 1번 나온 레이스였다.');
+    expect(neutralSentence(2, { sc: 2, vsc: 0, red: 0 })).toBe('세이프티카가 2번 나온 어지러운 레이스였다.');
+    expect(neutralSentence(3, { sc: 1, vsc: 1, red: 1 })).toBe('세이프티카 1번, VSC 1번, 레드 플래그 1번이 나온 어지러운 레이스였다.');
+    expect(neutralSentence(1)).toBe('세이프티카·VSC·레드 플래그가 모두 1번 나온 레이스였다.');
+  });
+});
+
+describe('방출과 성적', () => {
+  it('월드챔피언은 성격·논란이 있어도 방출되지 않는다', () => {
+    let found = false;
+    for (let seed = 1; seed <= 200 && !found; seed++) {
+      let c = createCareer(setup(seed, { wealthTier: 5, personality: 'aggressive' }));
+      for (let i = 0; i < 30 && !c.retired; i++) {
+        const before = c;
+        c = runSeason(c, DEFAULT_POLICY.training(c)).career;
+        for (const card of pendingEventCards(c)) c = resolveEvent(c, card.id, card.options[0]!.id).career;
+        if (isF1RaceSeason(before) && c.contract?.seat === 'race') {
+          const last = c.history[c.history.length - 1]!;
+          // 시즌 기록을 챔피언으로, 방출 위험 플래그를 최대로 둔다
+          const champ = { ...c, flags: { ...(c.flags ?? {}), releaseRisk: 1 }, history: [...c.history.slice(0, -1), { ...last, champion: true, position: 1 }] };
+          expect(getOffseason(champ).released).toBe(false);
+          const tenth = { ...c, flags: { ...(c.flags ?? {}), releaseRisk: 1 }, history: [...c.history.slice(0, -1), { ...last, champion: false, position: 10, wins: 0, teammateBeat: 0.2 }] };
+          expect(getOffseason(tenth).released).toBe(true);
+          found = true;
+          break;
+        }
+        c = applyOffseason(c, DEFAULT_POLICY.offseason(c, getOffseason(c)));
+      }
+    }
+    expect(found).toBe(true);
+  });
+});
+
+describe('내구레이스 하이라이트 중계', () => {
+  async function withOffer() {
+    const { enduranceOffer } = await import('../src/engine');
+    for (let seed = 1; seed <= 300; seed++) {
+      let c = createCareer(setup(seed, { wealthTier: 5 }));
+      for (let i = 0; i < 30 && !c.retired; i++) {
+        if (enduranceOffer(c)) return c;
+        c = runSeason(c, DEFAULT_POLICY.training(c)).career;
+        for (const card of pendingEventCards(c)) c = resolveEvent(c, card.id, card.options[0]!.id).career;
+        c = applyOffseason(c, DEFAULT_POLICY.offseason(c, getOffseason(c)));
+      }
+    }
+    throw new Error('no offer');
+  }
+  it('실제 대회 이름, 앞 구간은 뒤 선택에 안 바뀌고, 고르지 않으면 예전 결과', async () => {
+    const { enduranceOffer, enduranceRun, enduranceResult } = await import('../src/engine');
+    const base = await withOffer();
+    const names = ['르망 24시', '스파 24시', '뉘르부르크링 24시', '프티 르망', '인디애나폴리스 8시간', '바레인 8시간'];
+    for (let s = 1; s <= 40; s++) {
+      const c = { ...base, seed: s };
+      const offer = enduranceOffer(c)!;
+      expect(names).toContain(offer.name);
+      const a = enduranceRun(c, { start: 'push', night: 'push', final: 'attack' })!;
+      const b = enduranceRun(c, { start: 'push', night: 'safe', final: 'hold' })!;
+      const stage1 = (r: typeof a) => r.beats.filter((x) => x.stage <= 1).map((x) => x.text + x.pos);
+      expect(stage1(a)).toEqual(stage1(b));
+      if (a.dnfStage) expect(a.beats.at(-1)!.kind).toBe('dnf');
+      else expect(a.beats.at(-1)!.kind).toBe('finish');
+      expect(enduranceResult(c, { start: 'push', night: 'push', final: 'attack' })).toEqual(a.outcome);
+    }
+    // 고르지 않으면(결과로 바로 가기) 예전 한 번 판정과 같다
+    const old = enduranceResult(base)!;
+    expect(enduranceResult(base, {})).toEqual(old);
+  });
+  it('고른 것이 기록에 남고 다시 돌려도 같은 결과', () => {
+    return withOffer().then((c) => {
+      const choices = { start: 'push', night: 'safe', final: 'attack' } as const;
+      const a = runSeason(c, DEFAULT_POLICY.training(c), {}, { endurance: true, enduranceChoices: choices });
+      expect(a.career.choiceLog.at(-1)).toMatchObject({ endurance: true, enduranceChoices: choices });
+      const b = runSeason(c, DEFAULT_POLICY.training(c), {}, { endurance: true, enduranceChoices: choices });
+      expect(b.record.endurance).toEqual(a.record.endurance);
+    });
   });
 });

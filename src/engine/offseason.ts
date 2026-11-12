@@ -304,7 +304,11 @@ export function getOffseason(c: Career): Offseason {
   const pdef = PERSONALITIES[c.driver.personality];
   if (c.contract && c.contract.seat === 'race' && last.seat === 'race') {
     const conflict = (last.teammateBeat < 0.4 ? 1.5 : 1) * (perf < 0 ? 1.3 : 1);
-    if (rngFor(c.seed, 'release', c.year)() < Math.max(0, pdef.releaseRisk * conflict + (c.flags?.releaseRisk ?? 0))) {
+    // 성적이 좋으면 팀은 성격 문제를 참는다: 챔피언은 방출하지 않고, 2~3위·우승자·팀메이트를 크게 앞선 시즌은 위험이 줄어든다
+    const standing = last.champion ? 0
+      : last.position !== null && last.position <= 3 ? 0.2
+      : last.wins > 0 || (perf > 0 && last.teammateBeat >= 0.6) ? 0.5 : 1;
+    if (rngFor(c.seed, 'release', c.year)() < standing * Math.max(0, pdef.releaseRisk * conflict + (c.flags?.releaseRisk ?? 0))) {
       released = true;
       const team = c.contract.team;
       for (let i = offers.length - 1; i >= 0; i--) if (offers[i]!.team === team) offers.splice(i, 1);

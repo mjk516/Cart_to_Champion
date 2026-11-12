@@ -232,7 +232,7 @@ export function Dashboard() {
                 <b>🏁 {offer.when} · {offer.name} 출전</b>
                 <span className="mt-0.5 block text-xs leading-relaxed text-zinc-400">
                   이 팀에서 {offer.teamSeasons}시즌을 보내며 팀메이트를 앞섰고, 입지가 단단해져서 팀이 그랑프리 사이 내구레이스 출전을 허락했습니다.
-                  지금 실력이면 포디움 약 {Math.round((1 - enduranceOdds(ovr(d.stats)).dnf) * enduranceOdds(ovr(d.stats)).podium * 100)}%. 포디움에 오르면 능력치가 실제로 오릅니다(우승: 레이스크래프트 +2·우천·일관성·타이어 +1, 2·3위: 일관성·타이어 +1 등). 포디움 밖이면 능력치는 그대로, 사고 10%(압박 +, 방출 위험 +).
+                  지금 실력이면 포디움 약 {Math.round((1 - enduranceOdds(ovr(d.stats)).dnf) * enduranceOdds(ovr(d.stats)).podium * 100)}%. 포디움에 오르면 능력치가 실제로 오릅니다(우승: 레이스크래프트 +2·우천·일관성·타이어 +1, 2·3위: 일관성·타이어 +1 등). 포디움 밖이면 능력치는 그대로, 사고 10%(압박 +, 방출 위험 +). {offer.hours}시간 · {offer.cls} 클래스 {offer.classCars}대. 시즌을 라이브로 진행하면 하이라이트 중계로 출발·{offer.hours >= 20 ? '야간' : '해 질 녘'}·마지막 스틴트 전략을 직접 고릅니다(공격하면 포디움 확률↑, 사고 위험↑).
                   {locked ? ' 시즌이 시작되어 바꿀 수 없습니다.' : ''}
                 </span>
               </span>

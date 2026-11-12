@@ -1,6 +1,6 @@
 // 그랑프리 결승 뒤(SPEC v0.36): 결과 기사 한 편과 SNS 글 고르기. 고른 글은 시즌을 마칠 때 언론 지표에 반영된다.
 
-import { circuitById, f1Calendar, myRaceResult, raceArticle, snsOptions, snsReaction, type Career, type Circuit, type Classified, type Incident, type RaceCar, type RaceHighlight } from '../engine';
+import { circuitById, f1Calendar, myRaceResult, neutralCounts, raceArticle, snsOptions, snsReaction, type Career, type Circuit, type Classified, type Incident, type RaceCar, type RaceHighlight } from '../engine';
 import { nationName } from './Create';
 import { Pill } from './ui';
 
@@ -33,6 +33,7 @@ export function RaceAftermath({ c, round, kind = 'race', gp, rows, incidents, ca
     gp: kind === 'sprint' ? `${gp} 스프린트` : gp, round, kind, name: c.driver.name, team: c.contract?.team ?? '', winnerName: nameOf(res.winnerId),
     mateName: mateId ? nameOf(mateId) : undefined,
     neutralizations: incidents.filter((i) => i.type === 'sc_deploy' || i.type === 'vsc_deploy' || i.type === 'red_flag').length,
+    neutral: neutralCounts(incidents),
     retired: incidents.flatMap((i) => ((i.type === 'crash' || i.type === 'mech_dnf') && i.car !== ME ? [nameOf(i.car)] : [])),
   });
   const options = snsOptions(c, res, gp);
@@ -81,7 +82,7 @@ export function SeasonArticles({ c, year, team, highlights }: { c: Career; year:
     const gp = circuit ? gpName(c, circuit, cal) : `${h.round + 1}라운드`;
     const a = raceArticle({ ...c, year }, h.result, {
       gp, round: h.round, name: c.driver.name, team, winnerName: h.winnerName, mateName: h.mateName,
-      neutralizations: h.neutralizations, retired: h.retired,
+      neutralizations: h.neutralizations, neutral: h.neutral, retired: h.retired,
     });
     return { h, a };
   });

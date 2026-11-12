@@ -14,6 +14,7 @@
     "create": "tsx src/cli.ts create",
     "teams": "tsx src/cli.ts teams",
     "balance": "tsx scripts/balance.ts",
+    "release-check": "tsx scripts/release-check.ts",
     "career": "tsx src/cli.ts career",
     "rate-drivers": "tsx scripts/rate-drivers.ts",
     "e2e": "playwright test",
