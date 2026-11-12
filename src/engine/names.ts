@@ -1,7 +1,7 @@
 // 가상 드라이버 이름 생성기(SPEC §2.2). 실존 F1 드라이버 성(姓)과 겹치지 않게 한다.
 
 import { DRIVERS_2026 } from './data';
-import { pick, type Rng } from './rng';
+import { pick, rngFor, type Rng } from './rng';
 
 /**
  * 나라별 이름 풀(SPEC v0.38): 이름과 성이 같은 나라에서 나온다(한국 성 + 이탈리아 이름 같은 조합이 없게).
@@ -85,11 +85,21 @@ export function fictionalName(rng: Rng, avoid?: Set<string>): { name: string; co
   return fallback ?? { name: 'Alex Moreau', code: 'MOR', nationality: 'FR', first: 'Alex' };
 }
 
-/** 실제·가상 드라이버 이름에서 이름 부분(성을 뺀 것)을 꺼낸다 */
+/** 이전 버전 가상 이름 생성기의 이름 목록(이전 저장 파일의 "Min-jun Park" 같은 이름을 알아보는 데 쓴다) */
+const LEGACY_FIRST = ['Luca', 'Mateo', 'Noah', 'Elias', 'Leon', 'Hugo', 'Oskar', 'Theo', 'Rafael', 'Tomas', 'Kai', 'Jonas', 'Felix',
+  'Adrien', 'Marco', 'Diego', 'Sebastian', 'Emil', 'Nathan', 'Ryo', 'Haruto', 'Min-jun', 'Ji-ho', 'Arjun', 'Yuki',
+  'Lorenzo', 'Pablo', 'Victor', 'Matias', 'Owen', 'Callum', 'Finn', 'Anton', 'Milan', 'Bruno', 'Iker'];
+const KNOWN_FIRST = new Set([...LEGACY_FIRST, ...Object.values(POOLS).flatMap((p) => p.first)]);
+
+/** 실제·가상 드라이버 이름에서 이름 부분(성을 뺀 것)을 꺼낸다. 순서가 나라 방식과 달라도 이름 목록으로 알아본다 */
 export function firstNameOf(name: string, nationality: string): string {
   const parts = name.trim().split(/\s+/);
   if (parts.length < 2) return name;
-  return FAMILY_FIRST_NATIONS.has(nationality) ? parts.slice(1).join(' ') : parts.slice(0, -1).join(' ');
+  const western = parts.slice(0, -1).join(' ');
+  const eastern = parts.slice(1).join(' ');
+  if (KNOWN_FIRST.has(parts[0]!) && !KNOWN_FIRST.has(eastern)) return parts[0]!;
+  if (KNOWN_FIRST.has(eastern) && !KNOWN_FIRST.has(parts[0]!)) return eastern;
+  return FAMILY_FIRST_NATIONS.has(nationality) ? eastern : western;
 }
 
 // ── 플레이어 이름(SPEC v0.37) ─────────────────────────────────────────
@@ -122,4 +132,37 @@ export function driverCode(surname: string | undefined, name: string): string {
   const latin = (surname ?? '').replace(/[^A-Za-z]/g, '');
   if (latin.length >= 3) return latin.slice(0, 3).toUpperCase();
   return name.replace(/[^A-Za-z가-힣]/g, '').slice(0, 3).toUpperCase() || 'YOU';
+}
+
+/**
+ * 이전 저장 파일의 가상 드라이버 이름 정리(SPEC v0.39): 이름(이름 부분)이나 성명이 앞선 드라이버·플레이어와 겹치는
+ * 가상 드라이버만 나라별 이름 풀에서 새 이름을 받는다. 실제 F1 드라이버와 겹치지 않는 이름은 그대로 둔다.
+ * 월드 챔피언 명단·시즌 순위표에 남은 이름도 함께 바꾼다. 바꾼 드라이버 수를 돌려준다(c를 직접 바꾼다).
+ */
+export function renameDuplicateDrivers(c: {
+  seed: number;
+  driver: { name: string; fullName?: string };
+  world: { drivers: Array<{ id: string; name: string; code: string; nationality: string; real: boolean }>; champions: Array<{ driverId: string; name: string }> };
+  history: Array<{ f1Standings?: { drivers: Array<{ id: string; name: string }> } }>;
+}): number {
+  const used = new Set<string>([c.driver.name, ...(c.driver.fullName ? [c.driver.fullName] : [])]);
+  for (const d of c.world.drivers) if (d.real) { used.add(d.name); used.add(firstNameOf(d.name, d.nationality)); }
+  const renamed = new Map<string, string>();
+  for (const d of c.world.drivers) {
+    if (d.real) continue;
+    const first = firstNameOf(d.name, d.nationality);
+    if (!used.has(first) && !used.has(d.name)) { used.add(first); used.add(d.name); continue; }
+    const nm = fictionalName(rngFor(c.seed, 'rename-driver', d.id), used);
+    d.name = nm.name;
+    d.code = nm.code;
+    d.nationality = nm.nationality;
+    used.add(nm.first);
+    used.add(nm.name);
+    renamed.set(d.id, nm.name);
+  }
+  if (renamed.size) {
+    for (const ch of c.world.champions) { const n = renamed.get(ch.driverId); if (n) ch.name = n; }
+    for (const h of c.history) for (const row of h.f1Standings?.drivers ?? []) { const n = renamed.get(row.id); if (n) row.name = n; }
+  }
+  return renamed.size;
 }

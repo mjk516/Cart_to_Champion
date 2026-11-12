@@ -8,8 +8,9 @@ export default defineConfig({
   testDir: 'e2e',
   timeout: 90_000,
   expect: { timeout: 15_000 },
+  // 파일(career·weekend·training-resume)끼리 나란히 돌린다. 같은 파일 안의 테스트는 차례로
   fullyParallel: false,
-  workers: 1,
+  workers: process.env.CI ? 2 : 3,
   reporter: [['list']],
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
