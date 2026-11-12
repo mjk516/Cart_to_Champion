@@ -6,6 +6,7 @@ import {
   type Classified, type F1Weekend, type F1WeekendSession,
 } from '../engine';
 import { LiveRace } from './LiveRace';
+import { gpName, RaceAftermath } from './RaceAftermath';
 import { F1TeamBadge } from './TeamBadge';
 import { Tip } from './Guide';
 import { useGame } from './store';
@@ -198,6 +199,17 @@ export function Weekend() {
                 onRadio={(d, o) => updateLive({ radio: { ...live.radio, [radioKey(live.round, session.kind, d)]: o } })}
                 onDone={() => setDoneKey(`${live.round}:${session.kind}`)}
               />
+              {raceDone && session.kind === 'race' && (() => {
+                const out = skipped ? runRace({ ...session.input, autoRadio: true }) : session.outcome;
+                if (out.status !== 'finished') return null;
+                return (
+                  <RaceAftermath
+                    c={c} round={live.round} gp={gpName(c, wk.circuit, f1Calendar(c))} rows={out.classification} incidents={out.incidents} cars={wk.cars}
+                    chosen={live.sns?.[String(live.round)]}
+                    onPick={(id) => updateLive({ sns: { ...(live.sns ?? {}), [String(live.round)]: id } })}
+                  />
+                );
+              })()}
             </div>
           )}
 

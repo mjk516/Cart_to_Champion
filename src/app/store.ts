@@ -50,6 +50,8 @@ export interface LiveSeason {
   endurance?: boolean;
   /** 레이스 트랙 뷰를 어디까지 봤는지(key = `라운드:세션 번호`). 중간에 닫아도 그 랩부터 다시 본다 */
   raceLap?: { key: string; lap: number };
+  /** 그랑프리 결승 뒤 올린 SNS 글(라운드 → 선택지 id) */
+  sns?: Record<string, string>;
 }
 
 /** 대시보드에서 짜던 훈련 계획(시즌 시작 전에 닫아도 남는다) */
@@ -225,7 +227,7 @@ export const useGame = create<State>()(
         const c = get().career;
         const l = get().live;
         if (!c || !l) return;
-        const { career, record } = runSeason(c, l.plan, l.radio, { endurance: l.endurance });
+        const { career, record } = runSeason(c, l.plan, l.radio, { endurance: l.endurance, sns: l.sns });
         set({ career: autoInterview(career, get().interviewAuto), lastRecord: record, live: null, screen: 'offseason' });
       },
       startCareer: (setup, signature) =>

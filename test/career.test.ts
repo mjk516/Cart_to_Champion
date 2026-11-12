@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyOffseason, autoplayCareer, createCareer, DEFAULT_POLICY, getOffseason, MAX_TEAMS, MIN_TEAMS, replayCareer,
   CALENDAR_2026, f1WeekendFor, isF1RaceSeason, radioKey, type RadioOptionId, EVENTS, managerAdvice, MAJOR_FLOOR, OTHERS_CAP, feedTemplateCount, pendingEventCards, resolveEvent, F1_WINNER_TEAMS, f1Rules, generateHidden, initialWorld, NEW_TEAM_START, PERSONALITIES, runOffseason, TEAMS_2026, runSeason, STAT_KEYS, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, superLicencePoints, type CareerSetup,
-  evolveCalendar, RETURNING_CIRCUITS, CALENDAR_2027_SLOTS, ALL_F1_CIRCUITS, CALENDAR_CHANGE_FROM, CALENDAR_COOLDOWN, f1Calendar, type CalendarChange, hasHomeGp, homeGpEffect, type Personality, achievements, ACHIEVEMENTS, newAchievements, careerRecords, playerNumber, DRIVERS_2026, carNumberProblem, defaultCarNumber, FAMILY_BEHAVIOR, militaryDraftAge, enduranceOffer, previewEndurance, ROOKIE_TEAMS, ROOKIE_ACADEMY_WEIGHT, rookieTeamWeights, coachAdvice, followsCoach, enduranceResult, PLAYER_ID, TRAINING,
+  evolveCalendar, RETURNING_CIRCUITS, CALENDAR_2027_SLOTS, ALL_F1_CIRCUITS, CALENDAR_CHANGE_FROM, CALENDAR_COOLDOWN, f1Calendar, type CalendarChange, hasHomeGp, homeGpEffect, type Personality, achievements, ACHIEVEMENTS, newAchievements, careerRecords, playerNumber, DRIVERS_2026, carNumberProblem, defaultCarNumber, FAMILY_BEHAVIOR, militaryDraftAge, enduranceOffer, previewEndurance, ROOKIE_TEAMS, ROOKIE_ACADEMY_WEIGHT, rookieTeamWeights, coachAdvice, followsCoach, enduranceResult, PLAYER_ID, TRAINING, snsOptions, snsReaction, raceArticle, myRaceResult, runRace,
 } from '../src/engine';
 import { CIRCUIT_PATHS } from '../src/app/circuitPaths';
 
@@ -785,5 +785,65 @@ describe('시즌 순위표·코치·내구레이스 포디움 (v0.34)', () => {
     }
     expect(podium).toBeGreaterThan(0);
     expect(outside).toBeGreaterThan(0);
+  });
+});
+
+describe('레이스 기사·SNS (v0.36)', () => {
+  function f1Season() {
+    for (let seed = 1; seed <= 200; seed++) {
+      let c = createCareer(setup(seed, { wealthTier: 5 }));
+      for (let i = 0; i < 30 && !c.retired; i++) {
+        if (isF1RaceSeason(c)) return c;
+        c = runSeason(c, DEFAULT_POLICY.training(c)).career;
+        for (const card of pendingEventCards(c)) c = resolveEvent(c, card.id, card.options[0]!.id).career;
+        c = applyOffseason(c, DEFAULT_POLICY.offseason(c, getOffseason(c)));
+      }
+    }
+    throw new Error('no F1 season');
+  }
+
+  it('성격마다 성격다운 글이 다르고, 결과에 맞는 기사가 나온다', () => {
+    const c = f1Season();
+    const plan = DEFAULT_POLICY.training(c);
+    const wk = f1WeekendFor(c, plan, 0);
+    const race = wk.sessions.filter((s) => s.type === 'race').at(-1)!;
+    if (race.type !== 'race') throw new Error('no race');
+    const outcome = runRace({ ...race.input, autoRadio: true });
+    if (outcome.status !== 'finished') throw new Error('race not finished');
+    const mate = wk.cars.find((x) => x.teamId === c.contract!.teamId && x.id !== PLAYER_ID)?.id;
+    const res = myRaceResult(outcome.classification, PLAYER_ID, mate)!;
+    const a = raceArticle(c, res, { gp: '테스트 그랑프리', round: 0, name: c.driver.name, team: c.contract!.team, winnerName: 'W', neutralizations: 0, retired: [] });
+    expect(a.headline).toContain(c.driver.name);
+    expect(a.body.join(' ')).toContain('테스트 그랑프리');
+    if (res.position !== null) expect(a.headline + a.body.join(' ')).toContain(String(res.position));
+    const sigs = new Set((['aggressive', 'calm', 'analytical', 'instinctive', 'fighter', 'showman'] as const).map((p) => {
+      const opts = snsOptions({ ...c, driver: { ...c.driver, personality: p } }, res, 'GP');
+      expect(opts[0]!.signature).toBe(true);
+      expect(opts.map((o) => o.id)).toEqual(['signature', 'thanks', 'humble', 'bold', 'silent']);
+      return opts[0]!.label;
+    }));
+    expect(sigs.size).toBe(6);
+    // 결과가 나쁠 때 자신감 글은 역풍
+    const bad = { ...res, position: 15, points: 0 };
+    expect(snsReaction(c, bad, 'bold').effect.sentiment).toBeLessThan(0);
+    expect(snsReaction(c, { ...res, position: 1, points: 25 }, 'bold').effect.sentiment).toBeGreaterThan(0);
+  });
+
+  it('고른 SNS 글은 시즌을 마칠 때 언론 지표에 반영되고, 선택 기록으로 재현된다', () => {
+    const c = f1Season();
+    const plan = DEFAULT_POLICY.training(c);
+    const n = f1Calendar(c).length;
+    const sns: Record<string, string> = {};
+    for (let r = 0; r < n; r++) sns[String(r)] = 'signature';
+    const yes = runSeason(c, plan, {}, { sns });
+    const no = runSeason(c, plan);
+    expect(yes.career.media.followers).toBeGreaterThan(no.career.media.followers);
+    expect(yes.record.notes.some((x) => x.startsWith('SNS 게시'))).toBe(true);
+    expect(yes.career.choiceLog.at(-1)).toMatchObject({ kind: 'training', sns });
+    const replayed = replayCareer(yes.career.setup, yes.career.choiceLog);
+    expect(replayed.media).toEqual(yes.career.media);
+    // 하부 리그에서는 무시
+    const k = createCareer(setup(3));
+    expect(runSeason(k, DEFAULT_POLICY.training(k), {}, { sns: { '0': 'bold' } }).career.choiceLog.at(-1)).not.toHaveProperty('sns');
   });
 });

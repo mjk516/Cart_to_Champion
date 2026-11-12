@@ -396,9 +396,9 @@ export function runRace(input: RaceInput): RaceOutcome {
         deployedNow = 'red';
       } else if (r < (acc += per(HAZARD.sc))) {
         const cause = rng();
-        if (cause < 0.55) retire(weightedPick(rng, running(), crashWeight), lap, 'crash', 'sc');
-        else if (cause < 0.8) retire(weightedPick(rng, running(), mechWeight), lap, 'mech_dnf', 'sc');
-        else incidents.push({ type: 'debris', lap });
+        // 세이프티카는 늘 누군가의 리타이어 때문에 나온다(사고 75%, 기계 결함으로 트랙에 멈춤 25%)
+        if (cause < 0.75) retire(weightedPick(rng, running(), crashWeight), lap, 'crash', 'sc');
+        else retire(weightedPick(rng, running(), mechWeight), lap, 'mech_dnf', 'sc');
         startPhase('sc', lap, rng);
         deployedNow = 'sc';
       } else if (r < (acc += per(HAZARD.vsc))) {

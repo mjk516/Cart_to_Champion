@@ -138,6 +138,23 @@ describe('레이스 엔진', () => {
     expect(red / n).toBeLessThan(0.15);
   });
 
+  it('세이프티카·VSC·레드 플래그는 늘 그 랩에 리타이어한 차가 있다(사고·결함, v0.36)', () => {
+    let checked = 0;
+    for (let seed = 0; seed < 300; seed++) {
+      const out = runRace({ ...raceInput(seed, 'austria'), autoRadio: true });
+      for (const d of out.incidents) {
+        if (d.type !== 'sc_deploy' && d.type !== 'vsc_deploy' && d.type !== 'red_flag') continue;
+        const phase = d.type === 'sc_deploy' ? 'sc' : d.type === 'vsc_deploy' ? 'vsc' : 'red';
+        const culprit = out.incidents.find((i) => (i.type === 'crash' || i.type === 'mech_dnf') && i.neutralization === phase && i.lap >= d.lap - 1 && i.lap <= d.lap);
+        expect(culprit, `seed ${seed} L${d.lap} ${d.type}`).toBeDefined();
+        if (out.status === 'finished') expect(out.classification.find((r) => r.id === (culprit as { car: string }).car)!.status).toBe('dnf');
+        checked++;
+      }
+      expect(out.incidents.some((i) => i.type === 'debris')).toBe(false);
+    }
+    expect(checked).toBeGreaterThan(50);
+  });
+
   it('세이프티카·VSC는 사고 지점·크기·예상 시간을 알려 주고, 실제 시간은 예상보다 짧거나 길 수 있다', () => {
     let shorter = 0, longer = 0, total = 0;
     for (let seed = 0; seed < 400; seed++) {

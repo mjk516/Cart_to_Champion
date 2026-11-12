@@ -36,8 +36,8 @@ function describe(inc: Incident, x: Ctx): string | null {
   switch (inc.type) {
     case 'overtake': return `${x.codeOf(inc.by)}, ${x.codeOf(inc.on)} 추월 → P${inc.position}`;
     case 'lead_change': return `선두 변경: ${x.codeOf(inc.leader)}`;
-    case 'crash': return `${x.codeOf(inc.car)} 사고 리타이어`;
-    case 'mech_dnf': return `${x.codeOf(inc.car)} 기계 결함 리타이어`;
+    case 'crash': return `${x.codeOf(inc.car)} 사고 · OUT`;
+    case 'mech_dnf': return `${x.codeOf(inc.car)} 기계 결함 · OUT`;
     case 'debris': return '트랙 위 잔해';
     case 'sc_deploy': return `🟨 세이프티카 출동${inc.info ? ` · ${SEVERITY_LABEL[inc.info.severity]} · 예상 ${inc.info.expectedLaps}랩` : ''}`;
     case 'vsc_deploy': return `🟨 VSC${inc.info ? ` · ${SEVERITY_LABEL[inc.info.severity]} · 예상 ${inc.info.expectedLaps}랩` : ''}`;
@@ -90,9 +90,11 @@ const TRACK_FLAG: Record<LapRecord['phase'], { track: string; dash: string; bord
  * 트랙 뷰: 레이스 내내 보인다. progress는 지금까지 달린 랩 수(소수). 차 위치는 앞 랩과 이번 랩의
  * 선두와의 간격을 이어 그려 랩 경계에서도 끊기지 않는다.
  */
-function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap, banner, focus, neutral, x }: {
+function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap, banner, focus, neutral, x, outIds = new Set<string>(), culprits = [] }: {
   circuitId: string; realLayout: boolean; laps: LapRecord[]; grid: string[]; progress: number; phase: LapRecord['phase']; baseLap: number;
   banner: string; focus: string[]; neutral: Neutralization | null; x: Ctx;
+  /** 리타이어한 차(트랙에서 뺀다) */ outIds?: Set<string>;
+  /** 지금 깃발을 부른 차(사고 지점에 OUT 표시) */ culprits?: string[];
 }) {
   const W = 640, H = 300;
   const pathRef = useRef<SVGPathElement>(null);
@@ -122,6 +124,7 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
   const prevGap = new Map(prev.map((e) => [e.id, e.gap]));
   const order = cur?.order ?? grid.map((id, n) => ({ id, gap: n * 0.22 }));
   const hazard = neutral ? at(neutral.at) : null;
+  const shownCars = order.filter((e) => !outIds.has(e.id));
   return (
     <div ref={boxRef} className="relative rounded-xl border bg-zinc-950 p-2 transition-colors duration-500" style={{ borderColor: flag.border }} data-flag={phase}>
       <svg viewBox={`0 0 ${W} ${H}`} className="mx-auto block max-h-[44vh] w-full" role="img" aria-label={`트랙 뷰: ${banner}`}>
@@ -141,14 +144,20 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
           <g transform={`translate(${hazard.x} ${hazard.y})`} aria-label="사고 지점">
             <circle r={16 * k} fill="none" stroke="#fb923c" strokeWidth={3}><animate attributeName="r" values={`${10 * k};${20 * k};${10 * k}`} dur="1.4s" repeatCount="indefinite" /></circle>
             <text y={5 * k} textAnchor="middle" fontSize={16 * k}>⚠️</text>
+            {culprits.map((id, n) => (
+              <g key={id} transform={`translate(0 ${(24 + n * 18) * k})`}>
+                <rect x={-30 * k} y={-10 * k} width={60 * k} height={16 * k} rx={4 * k} fill="#dc2626" />
+                <text y={2.5 * k} textAnchor="middle" fontSize={11 * k} fontWeight={900} fill="#fff">{x.codeOf(id)} OUT</text>
+              </g>
+            ))}
           </g>
         )}
-        {[...order].reverse().map((e, n) => {
+        {shownCars.reverse().map((e, n) => {
           const g = (prevGap.get(e.id) ?? e.gap) * (1 - frac) + e.gap * frac;
           const pt = at(frac - g / baseLap);
           if (!pt) return null;
           const mine = e.id === ME;
-          const leader = n === order.length - 1;
+          const leader = n === shownCars.length - 1;
           return (
             <g key={e.id}>
               <circle cx={pt.x} cy={pt.y} r={(mine ? 9 : 7) * k} fill={x.colorOf(e.id)} stroke={mine ? '#ffffff' : '#18181b'} strokeWidth={(mine ? 3 : 2) * k} />
@@ -349,8 +358,18 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
   const headline = outcome.incidents.filter((i) => i.lap >= shownLap - 1 && i.lap <= shownLap && isHeadline(i)).slice(-1)[0];
   const focus = outcome.incidents.filter((i) => i.lap === shownLap).flatMap((i) => (i.type === 'overtake' ? [i.by, i.on] : 'car' in i ? [i.car] : []));
   const winner = outcome.status === 'finished' ? outcome.classification[0] : undefined;
+  // 리타이어한 차(OUT): 지금 보이는 랩까지. 세이프티카·VSC·레드 플래그를 부른 차도 여기에 있다
+  const outUntil = finished ? Number.MAX_SAFE_INTEGER : pending ? laps.length + 1 : shownLap;
+  const outs = outcome.incidents
+    .filter((i): i is Extract<Incident, { type: 'crash' | 'mech_dnf' }> => (i.type === 'crash' || i.type === 'mech_dnf') && i.lap <= outUntil)
+    .sort((a, b) => b.lap - a.lap);
+  const outIds = new Set(outs.map((o) => o.car));
+  const deployLap = neutral ? deploys.filter((i) => i.lap <= outUntil).slice(-1)[0]?.lap : undefined;
+  const culprits = deployLap !== undefined ? outs.filter((o) => o.lap === deployLap && o.neutralization !== 'none').map((o) => o.car) : [];
+  const headlineCar = headline && 'car' in headline ? headline.car : null;
+  const culpritText = culprits.length && !(headlineCar && culprits.includes(headlineCar)) ? ` · ${culprits.map((id) => x.codeOf(id)).join(', ')} OUT` : '';
   const banner = finished && winner ? `🏁 체커기 · ${x.codeOf(winner.id)} 우승`
-    : `L${shownLap}/${outcome.totalLaps}${shownLap === outcome.totalLaps ? ' · 파이널 랩' : ''}${headline ? ` · ${describe(headline, x) ?? ''}` : shownLap === 1 ? ' · 스타트' : ''}`;
+    : `L${shownLap}/${outcome.totalLaps}${shownLap === outcome.totalLaps ? ' · 파이널 랩' : ''}${culpritText}${headline ? ` · ${describe(headline, x) ?? ''}` : shownLap === 1 ? ' · 스타트' : ''}`;
 
   const myResult = outcome.status === 'finished' ? outcome.classification.find((r) => r.id === ME) : undefined;
   const chats = chat ? raceChats(input.seed, outcome.incidents, p > 0.02, pending ? laps.length + 1 : cur, finished ? myResult : null, chat, x) : [];
@@ -410,7 +429,7 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
 
       <div className="grid gap-3 md:grid-cols-[1fr_16rem]">
         <ol className="max-h-72 overflow-y-auto rounded-xl border border-white/10 bg-zinc-950/60 text-sm" aria-label="타이밍 타워">
-          {order.map((e, i) => (
+          {order.filter((e) => !outIds.has(e.id)).map((e, i) => (
             <li key={e.id} className={`flex items-center gap-2 border-b border-white/5 px-2 py-1 ${e.id === ME ? 'bg-racing/20 font-bold' : ''}`}>
               <span className="w-6 text-right text-zinc-400">{i + 1}</span>
               <span className="h-4 w-1 rounded" style={{ background: x.colorOf(e.id) }} />
@@ -418,6 +437,15 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
               <span className="flex-1 text-right tabular-nums text-zinc-300">{i === 0 ? '선두' : `+${e.gap.toFixed(1)}`}</span>
               <span className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black text-zinc-900" style={{ background: TYRE_COLOR[e.compound] }}>{e.compound}</span>
               <span className="w-10 text-right text-xs text-zinc-500">{e.stops}스톱</span>
+            </li>
+          ))}
+          {outs.map((o) => (
+            <li key={`out-${o.car}`} aria-label={`${x.codeOf(o.car)} 리타이어`} className={`flex items-center gap-2 border-b border-white/5 px-2 py-1 text-zinc-500 ${o.car === ME ? 'bg-racing/10 font-bold' : ''}`}>
+              <span className="w-6 text-right">–</span>
+              <span className="h-4 w-1 rounded opacity-40" style={{ background: x.colorOf(o.car) }} />
+              <span className="w-12 line-through">{x.codeOf(o.car)}</span>
+              <span className="flex-1 text-right text-xs">{o.type === 'crash' ? '사고' : '기계 결함'} · L{o.lap}</span>
+              <span className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-black text-white">OUT</span>
             </li>
           ))}
         </ol>

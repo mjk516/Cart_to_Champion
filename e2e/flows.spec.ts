@@ -1,7 +1,7 @@
 // 핵심 화면 흐름 E2E(SPEC §10). 엔진 테스트로는 못 잡는 화면 버그(눌러도 반응 없는 버튼 등)를 막는다.
 import { expect, test, type Page } from '@playwright/test';
 import {
-  applyOffseason, createCareer, DEFAULT_POLICY, enduranceOffer, getOffseason, isF1RaceSeason, pendingEventCards, previewEndurance, resolveEvent, runSeason, type Career,
+  applyOffseason, createCareer, DEFAULT_POLICY, enduranceOffer, getOffseason, isF1RaceSeason, pendingEventCards, previewEndurance, resolveEvent, runSeason, f1WeekendFor, runRace, type Career,
 } from '../src/engine';
 
 const KEY = 'kart-to-champion-save';
@@ -312,4 +312,25 @@ test.describe('중간에 멈춘 곳부터 이어하기', () => {
     await backup.click();
     await expect(page.getByText(/시즌 결과/).first()).toBeVisible();
   });
+});
+
+test('결승 뒤 기사와 SNS 글 고르기, 리타이어한 차는 OUT', async ({ page }) => {
+  const c = f1Career();
+  await loadSave(page, c);
+  await page.getByRole('button', { name: /시즌 라이브로 시작/ }).click();
+  await page.getByRole('button', { name: '레이스 결과로 바로 가기' }).click();
+  const article = page.getByRole('article', { name: '레이스 기사' });
+  await expect(article).toBeVisible();
+  await expect(article.getByRole('heading')).toContainText(c.driver.name);
+  const sns = page.getByRole('region', { name: 'SNS 게시' });
+  await expect(sns.getByText('성격다운 글')).toBeVisible();
+  await sns.getByRole('button').first().click();
+  await expect(sns.getByText('시즌을 마칠 때 반영')).toBeVisible();
+  const saved = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)!).state.live.sns, KEY);
+  expect(saved).toEqual({ '0': 'signature' });
+  // 결과의 리타이어 수만큼 타이밍 타워에 OUT
+  const race = f1WeekendFor(c, DEFAULT_POLICY.training(c), 0).sessions.filter((s) => s.type === 'race').at(-1)!;
+  const out = race.type === 'race' ? runRace({ ...race.input, autoRadio: true }) : null;
+  const dnf = out && out.status === 'finished' ? out.classification.filter((r) => r.status === 'dnf').length : 0;
+  await expect(page.getByLabel('타이밍 타워').getByText('OUT', { exact: true })).toHaveCount(dnf);
 });

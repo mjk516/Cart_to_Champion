@@ -264,3 +264,9 @@ export function Create() {
     </div>
   );
 }
+
+const NATION_NAME = new Map(NATION_GROUPS.flatMap(([, list]) => list));
+/** 국가 코드 → 한국어 나라 이름(없으면 코드) */
+export function nationName(code: string): string {
+  return NATION_NAME.get(code) ?? code;
+}
