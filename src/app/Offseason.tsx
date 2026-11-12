@@ -365,7 +365,7 @@ export function Offseason() {
       {picked && (
         <ContractModal
           offer={picked}
-          name={c.driver.name}
+          name={c.driver.fullName ?? c.driver.name}
           firstF1={firstF1(picked)}
           signature={sig}
           onCancel={() => setPicked(null)}

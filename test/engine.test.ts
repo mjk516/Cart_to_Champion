@@ -138,6 +138,23 @@ describe('레이스 엔진', () => {
     expect(red / n).toBeLessThan(0.15);
   });
 
+  it('세이프티카·VSC·레드 플래그는 늘 그 랩에 리타이어한 차가 있다(사고·결함, v0.36)', () => {
+    let checked = 0;
+    for (let seed = 0; seed < 300; seed++) {
+      const out = runRace({ ...raceInput(seed, 'austria'), autoRadio: true });
+      for (const d of out.incidents) {
+        if (d.type !== 'sc_deploy' && d.type !== 'vsc_deploy' && d.type !== 'red_flag') continue;
+        const phase = d.type === 'sc_deploy' ? 'sc' : d.type === 'vsc_deploy' ? 'vsc' : 'red';
+        const culprit = out.incidents.find((i) => (i.type === 'crash' || i.type === 'mech_dnf') && i.neutralization === phase && i.lap >= d.lap - 1 && i.lap <= d.lap);
+        expect(culprit, `seed ${seed} L${d.lap} ${d.type}`).toBeDefined();
+        if (out.status === 'finished') expect(out.classification.find((r) => r.id === (culprit as { car: string }).car)!.status).toBe('dnf');
+        checked++;
+      }
+      expect(out.incidents.some((i) => i.type === 'debris')).toBe(false);
+    }
+    expect(checked).toBeGreaterThan(50);
+  });
+
   it('세이프티카·VSC는 사고 지점·크기·예상 시간을 알려 주고, 실제 시간은 예상보다 짧거나 길 수 있다', () => {
     let shorter = 0, longer = 0, total = 0;
     for (let seed = 0; seed < 400; seed++) {
@@ -294,5 +311,24 @@ describe('엔지니어 무전(SPEC §5.5 v0.31)', () => {
     }
     expect(pending).toBeGreaterThan(50);
     expect(forced).toBeGreaterThan(0);
+  });
+});
+
+import { calledName, driverCode, formatFullName } from '../src/engine';
+
+describe('플레이어 이름 (v0.37)', () => {
+  it('국적에 맞는 성명 순서, 별명 선택, 코드', () => {
+    expect(formatFullName('김', '민준', 'KR')).toBe('김민준');
+    expect(formatFullName('Kim', 'Minjun', 'KR')).toBe('Kim Minjun');
+    expect(formatFullName('佐藤', '健', 'JP')).toBe('佐藤健');
+    expect(formatFullName('Nguyen', 'Van An', 'VN')).toBe('Nguyen Van An');
+    expect(formatFullName('Rossi', 'Luca', 'IT')).toBe('Luca Rossi');
+    expect(formatFullName('Silva', 'Ana', 'BR')).toBe('Ana Silva');
+    expect(calledName({ surname: 'Rossi', given: 'Luca', nationality: 'IT', nickname: 'The Rocket', useNickname: true })).toBe('The Rocket');
+    expect(calledName({ surname: 'Rossi', given: 'Luca', nationality: 'IT', nickname: 'The Rocket', useNickname: false })).toBe('Luca Rossi');
+    expect(calledName({ surname: 'Rossi', given: 'Luca', nationality: 'IT', nickname: '  ', useNickname: true })).toBe('Luca Rossi');
+    expect(driverCode('Rossi', 'The Rocket')).toBe('ROS');
+    expect(driverCode('김', '김민준')).toBe('김민준');
+    expect(driverCode(undefined, 'Alex Moreau')).toBe('ALE');
   });
 });

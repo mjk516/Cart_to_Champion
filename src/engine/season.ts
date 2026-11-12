@@ -5,6 +5,7 @@ import { clamp, juniorTeams, lerp, statsAround } from './careerInternal';
 import { WEALTH_TIERS } from './creation';
 import { coachAdvice, followsCoach } from './coach';
 import { applyEndurance, enduranceResult } from './endurance';
+import { myRaceResult, snsReaction, sumSnsEffects, type MyRaceResult } from './raceNews';
 import { pickEvents } from './events';
 import { seasonFeed } from './feed';
 import { CAR_WEIGHT, F1_WINNER_TEAMS, ovr, POINTS_RACE } from './data';
@@ -20,6 +21,8 @@ import { STAT_KEYS, type Circuit, type StatKey, type Stats } from './types';
 /** runSeason 추가 선택 */
 export interface SeasonOptions {
   endurance?: boolean;
+  /** 그랑프리 결승 뒤 올린 SNS 글(라운드 → 선택지 id, SPEC v0.36) */
+  sns?: Record<string, string>;
 }
 
 // ── 시즌 ─────────────────────────────────────────────────────────────
@@ -40,11 +43,13 @@ interface SeasonSim {
   /** 홈 그랑프리(F1 레이스) 우승 수 */
   homeWins: number;
   f1Standings?: F1Standings;
+  /** 라운드별 내 결승 결과(SNS 반응 계산용) */
+  myRaces: Record<number, MyRaceResult>;
 }
 
 const emptySim = (fieldSize: number): SeasonSim => ({
   races: 0, wins: 0, podiums: 0, poles: 0, points: 0, position: null, fieldSize, champion: false,
-  expectedAvg: 0, actualAvg: 0, teammateBeat: 0, raceXp: {}, prize: 0, homeWins: 0,
+  expectedAvg: 0, actualAvg: 0, teammateBeat: 0, raceXp: {}, prize: 0, homeWins: 0, myRaces: {},
 });
 
 function perfOf(stats: Stats, teamQ: number, w: number): number {
@@ -328,6 +333,8 @@ function simulateF1(c: Career, stats: Stats, seed: number, radio: Record<string,
       const me = out.classification.find((x) => x.id === PLAYER_ID)!;
       if (sess.kind === 'race') {
         sim.races++;
+        const res = myRaceResult(out.classification, PLAYER_ID, mateId);
+        if (res) sim.myRaces[round] = res;
         if (me.status === 'finished') {
           finishSum += me.position;
           finished++;
@@ -441,7 +448,8 @@ export function runSeason(input: Career, plan: TrainingId[], radio: Record<strin
   // 결과는 시즌 시작 때의 상태로 정한다(라이브 주말에 미리 보여 준 결과와 같게)
   const enduranceOut = !serving && opts.endurance ? enduranceResult(c) : null;
   const endurance = !!enduranceOut;
-  c.choiceLog.push({ year: c.year, kind: 'training', plan: cleanPlan, ...(Object.keys(radio).length ? { radio } : {}), ...(endurance ? { endurance: true } : {}) });
+  const sns: Record<string, string> = !serving && contract?.series === 'f1' && contract.seat === 'race' ? { ...(opts.sns ?? {}) } : {};
+  c.choiceLog.push({ year: c.year, kind: 'training', plan: cleanPlan, ...(Object.keys(radio).length ? { radio } : {}), ...(endurance ? { endurance: true } : {}), ...(Object.keys(sns).length ? { sns } : {}) });
 
   const notes: string[] = [];
   let expenses = 0;
@@ -549,6 +557,16 @@ export function runSeason(input: Career, plan: TrainingId[], radio: Record<strin
     wealthTier: c.driver.wealthTier, raced: seat === 'race', pressureRelief: training.pressureRelief,
   });
   c.media = mediaOut.media;
+  // 그랑프리 결승 뒤 SNS 글(라이브 시즌에서 고른 것)
+  const posts = Object.entries(sns).flatMap(([round, opt]) => { const r = sim.myRaces[Number(round)]; return r ? [snsReaction(c, r, opt).effect] : []; });
+  if (posts.length) {
+    const e = sumSnsEffects(posts);
+    c.media.followers = Math.round(c.media.followers * e.followersMul);
+    c.media.sentiment = clamp(c.media.sentiment + e.sentiment, -100, 100);
+    c.media.pressure = clamp(c.media.pressure + e.pressure, 0, 100);
+    c.media.reputation = clamp(c.media.reputation + e.reputation, 0, 100);
+    notes.push(`SNS 게시 ${posts.length}번: 팔로워 ${e.followersMul >= 1 ? '+' : ''}${Math.round((e.followersMul - 1) * 100)}%, 팬 여론 ${e.sentiment >= 0 ? '+' : ''}${e.sentiment}, 압박 ${e.pressure >= 0 ? '+' : ''}${e.pressure}`);
+  }
 
   // 슈퍼 라이선스, 기록
   const sl = seat === 'race' && series !== 'f1' && series !== 'kart' && sim.position ? SERIES[series].superLicence[sim.position - 1] ?? 0 : 0;

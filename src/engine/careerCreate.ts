@@ -4,6 +4,7 @@ import { CALENDAR_2026_SLOTS, type Career, type CareerSetup, ENGINE_VERSION, typ
 import { juniorTeams, lerp, zeroStats } from './careerInternal';
 import { carNumberProblem, DEFAULT_HELMET, defaultCarNumber, generateCandidates, WEALTH_TIERS } from './creation';
 import { generateManager } from './manager';
+import { driverCode, formatFullName } from './names';
 import { DRIVERS_2026, ovr, TEAMS_2026 } from './data';
 import { generateHidden } from './growth';
 import { initialMedia } from './media';
@@ -45,7 +46,9 @@ export function createCareer(setup: CareerSetup): Career {
     setup,
     driver: {
       name: setup.name,
-      code: setup.name.replace(/[^A-Za-z가-힣]/g, '').slice(0, 3).toUpperCase() || 'YOU',
+      ...(setup.surname !== undefined ? { fullName: formatFullName(setup.surname, setup.givenName ?? '', setup.nationality) } : {}),
+      ...(setup.nickname?.trim() ? { nickname: setup.nickname.trim() } : {}),
+      code: driverCode(setup.surname, setup.surname !== undefined ? formatFullName(setup.surname, setup.givenName ?? '', setup.nationality) : setup.name),
       nationality: setup.nationality,
       personality: setup.personality,
       wealthTier: setup.wealthTier,

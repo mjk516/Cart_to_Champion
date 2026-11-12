@@ -1,7 +1,7 @@
 // 핵심 화면 흐름 E2E(SPEC §10). 엔진 테스트로는 못 잡는 화면 버그(눌러도 반응 없는 버튼 등)를 막는다.
 import { expect, test, type Page } from '@playwright/test';
 import {
-  applyOffseason, createCareer, DEFAULT_POLICY, enduranceOffer, getOffseason, isF1RaceSeason, pendingEventCards, previewEndurance, resolveEvent, runSeason, type Career,
+  applyOffseason, createCareer, DEFAULT_POLICY, enduranceOffer, getOffseason, isF1RaceSeason, pendingEventCards, previewEndurance, resolveEvent, runSeason, f1WeekendFor, runRace, type Career,
 } from '../src/engine';
 
 const KEY = 'kart-to-champion-save';
@@ -44,7 +44,8 @@ test.beforeEach(async ({ page }) => {
 test('새 커리어: 헬멧·번호(실제 F1 번호는 경고) → 대시보드', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: '새 커리어' }).click();
-  await page.getByLabel('이름').fill('김테스트');
+  await page.getByLabel('성', { exact: true }).fill('김');
+  await page.getByLabel('이름', { exact: true }).fill('테스트');
   await page.getByRole('button', { name: '다음' }).click();
 
   const num = page.getByLabel('차 번호');
@@ -282,7 +283,8 @@ test.describe('중간에 멈춘 곳부터 이어하기', () => {
   test('만들던 드라이버를 이어 만들 수 있다', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: '새 커리어' }).click();
-    await page.getByLabel('이름').fill('이어만들기');
+    await page.getByLabel('성', { exact: true }).fill('홍');
+    await page.getByLabel('이름', { exact: true }).fill('이어만들기');
     await page.getByRole('button', { name: '다음' }).click();
     await page.getByLabel('차 번호').fill('27');
     await page.reload();
@@ -291,7 +293,7 @@ test.describe('중간에 멈춘 곳부터 이어하기', () => {
     await page.getByRole('button', { name: '만들던 드라이버 이어 만들기' }).click();
     await expect(page.getByLabel('차 번호')).toHaveValue('27');
     await page.getByRole('button', { name: '이전' }).click();
-    await expect(page.getByLabel('이름')).toHaveValue('이어만들기');
+    await expect(page.getByLabel('이름', { exact: true })).toHaveValue('이어만들기');
   });
 
   test('오프시즌에서 멈추면 이어하기가 오프시즌으로, 새 커리어를 시작해도 자동 백업으로 되살린다', async ({ page }) => {
@@ -312,4 +314,51 @@ test.describe('중간에 멈춘 곳부터 이어하기', () => {
     await backup.click();
     await expect(page.getByText(/시즌 결과/).first()).toBeVisible();
   });
+});
+
+test('결승 뒤 기사와 SNS 글 고르기, 리타이어한 차는 OUT', async ({ page }) => {
+  const c = f1Career();
+  await loadSave(page, c);
+  await page.getByRole('button', { name: /시즌 라이브로 시작/ }).click();
+  await page.getByRole('button', { name: '레이스 결과로 바로 가기' }).click();
+  const article = page.getByRole('article', { name: '레이스 기사' });
+  await expect(article).toBeVisible();
+  await expect(article.getByRole('heading')).toContainText(c.driver.name);
+  const sns = page.getByRole('region', { name: 'SNS 게시' });
+  await expect(sns.getByText('성격다운 글')).toBeVisible();
+  await sns.getByRole('button').first().click();
+  await expect(sns.getByText('시즌을 마칠 때 반영')).toBeVisible();
+  const saved = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)!).state.live.sns, KEY);
+  expect(saved).toEqual({ '0': 'signature' });
+  // 결과의 리타이어 수만큼 타이밍 타워에 OUT
+  const race = f1WeekendFor(c, DEFAULT_POLICY.training(c), 0).sessions.filter((s) => s.type === 'race').at(-1)!;
+  const out = race.type === 'race' ? runRace({ ...race.input, autoRadio: true }) : null;
+  const dnf = out && out.status === 'finished' ? out.classification.filter((r) => r.status === 'dnf').length : 0;
+  await expect(page.getByLabel('타이밍 타워').getByText('OUT', { exact: true })).toHaveCount(dnf);
+});
+
+test('성·이름·별명: 국적에 맞는 순서로 부르고, 원하면 별명으로 불린다', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '새 커리어' }).click();
+  const preview = page.getByLabel('이름 미리 보기');
+  // 한국: 성 먼저, 한글이면 붙여 쓴다
+  await page.getByLabel('성', { exact: true }).fill('김');
+  await page.getByLabel('이름', { exact: true }).fill('민준');
+  await expect(preview).toContainText('김민준');
+  // 영국: 이름 먼저
+  await page.getByLabel('국적').selectOption('GB');
+  await page.getByLabel('성', { exact: true }).fill('Rossi');
+  await page.getByLabel('이름', { exact: true }).fill('Luca');
+  await expect(preview).toContainText('Luca Rossi');
+  await expect(preview).toContainText('ROS');
+  // 별명을 넣고 별명으로 불리기
+  await expect(page.getByLabel('별명으로 불리기')).toBeDisabled();
+  await page.getByLabel('별명', { exact: true }).fill('The Rocket');
+  await page.getByLabel('별명으로 불리기').check();
+  await expect(preview).toContainText('The Rocket');
+  await expect(preview).toContainText('본명 Luca Rossi');
+  for (let i = 0; i < 5; i++) await page.getByRole('button', { name: '다음' }).click();
+  await page.getByRole('button', { name: '이름으로 서명 만들기' }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('The Rocket');
+  await expect(page.getByLabel('본명·별명')).toHaveText('본명 Luca Rossi');
 });
