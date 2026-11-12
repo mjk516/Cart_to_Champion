@@ -68,8 +68,8 @@ export function Dashboard() {
   return (
     <div className="mx-auto max-w-5xl space-y-4 px-4 py-6">
       {confirmBox.dialog}
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+      <header className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
           <div className="text-xs text-zinc-400">{c.year} 시즌 · {c.age}세</div>
           <h1 className="flex items-center gap-2 text-2xl font-black">{d.helmet && <HelmetView helmet={d.helmet} size={44} />}{d.name}{d.number && <span className="text-base font-black text-zinc-400">#{d.number}</span>}</h1>
           {nameAside(d) && <div className="text-xs text-zinc-400" aria-label="본명·별명">{nameAside(d)}</div>}
@@ -81,9 +81,9 @@ export function Dashboard() {
             {c.management && <Pill tone="amber">매니지먼트 후원(F1 연봉 {Math.round(c.management.share * 100)}%)</Pill>}
           </div>
         </div>
-        <div className="text-right">
-          <div className="text-xs text-zinc-400">OVR</div>
-          <div className="text-4xl font-black text-racing">{ovr(d.stats).toFixed(1)}</div>
+        <div className="shrink-0 rounded-2xl border border-racing/30 bg-racing/10 px-3 py-2 text-right">
+          <div className="text-[11px] font-bold tracking-widest text-red-200/80">OVR</div>
+          <div className="text-3xl font-black leading-none text-racing sm:text-4xl">{ovr(d.stats).toFixed(1)}</div>
         </div>
       </header>
 
@@ -101,7 +101,7 @@ export function Dashboard() {
           ) : (
             <div className="space-y-2">
               <p className="text-sm text-zinc-300">{inMilitary(c) ? '군 복무 중입니다.' : '시트가 없습니다. 이번 시즌은 훈련만 합니다.'}</p>
-              <Button variant="danger" className="!px-3 !py-1.5 text-xs" onClick={() => confirmBox.ask(<>지금 은퇴할까요? <b>되돌릴 수 없습니다.</b> 지금까지의 커리어가 은퇴 화면에 기록됩니다.</>, retire, { confirmLabel: '은퇴 선언', danger: true })}>은퇴 선언</Button>
+              <Button variant="danger" size="sm" onClick={() => confirmBox.ask(<>지금 은퇴할까요? <b>되돌릴 수 없습니다.</b> 지금까지의 커리어가 은퇴 화면에 기록됩니다.</>, retire, { confirmLabel: '은퇴 선언', danger: true })}>은퇴 선언</Button>
             </div>
           )}
           <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
@@ -133,8 +133,8 @@ export function Dashboard() {
               <div key={k}>
                 <div className="flex justify-between text-sm"><span>{STAT_LABELS[k]}</span><b>{d.stats[k]}</b></div>
                 <Bar value={d.stats[k]} />
-                <div className="mt-1 flex items-center gap-2 text-[10px] text-zinc-500">
-                  <span className="w-20">다음 상승까지</span><Bar value={d.xp[k]} max={need} color="bg-zinc-400" className="h-1" />
+                <div className="mt-1 flex items-center gap-2 text-[11px] text-zinc-500">
+                  <span className="shrink-0 whitespace-nowrap">다음 상승</span><Bar value={d.xp[k]} max={need} color="bg-zinc-500" thin />
                 </div>
               </div>
             );
@@ -149,7 +149,7 @@ export function Dashboard() {
             <p className="text-xs text-zinc-400">{c.military.end}시즌을 마친 오프시즌부터 다시 팀들의 제안을 받을 수 있습니다.</p>
             <div className="flex flex-wrap gap-2 pt-1">
               <Button disabled={running} onClick={() => { setRunning(true); setTimeout(() => playSeason([]), 30); }}>{running ? '시즌 진행 중…' : `${c.year} 시즌 복무하기`}</Button>
-              <Button variant="danger" className="!px-3 !py-1.5 text-xs" onClick={() => confirmBox.ask(<>지금 은퇴할까요? <b>되돌릴 수 없습니다.</b></>, retire, { confirmLabel: '은퇴 선언', danger: true })}>은퇴 선언</Button>
+              <Button variant="danger" size="sm" onClick={() => confirmBox.ask(<>지금 은퇴할까요? <b>되돌릴 수 없습니다.</b></>, retire, { confirmLabel: '은퇴 선언', danger: true })}>은퇴 선언</Button>
             </div>
           </div>
         </Card>
@@ -191,7 +191,7 @@ export function Dashboard() {
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
                 <span>조언대로 하면 손해 보지 않습니다: 과훈련·압박 실수·자금 부족으로 인한 훈련 축소가 없고, 훈련 효과 +{Math.round((adv.bonus - 1) * 100)}%.</span>
-                {!following && !locked && <Button className="ml-auto !px-3 !py-1.5 text-xs" onClick={() => setPlan([...adv.plan])}>코치 조언대로 짜기</Button>}
+                {!following && !locked && <Button size="sm" className="ml-auto" onClick={() => setPlan([...adv.plan])}>코치 조언대로 짜기</Button>}
               </div>
             </div>
           );
@@ -313,7 +313,7 @@ export function Dashboard() {
             const last = c.world.calendarLog?.[c.world.calendarLog.length - 1];
             return last && <div>최근 캘린더 변화: <b>{last.season} {circuitById(last.in).name} 복귀</b> · {circuitById(last.out).name} 제외</div>;
           })()}
-          {c.world.news.filter((n) => n.kind !== 'calendar').slice(-3).reverse().map((n, i) => <div key={i} className="text-zinc-400">· {n.text}</div>)}
+          {[...new Set(c.world.news.filter((n) => n.kind !== 'calendar').map((n) => n.text))].slice(-3).reverse().map((t) => <div key={t} className="text-zinc-400">· {t}</div>)}
           {series !== 'f1' && <div className="text-xs text-zinc-500">하부 리그는 시즌 단위로 진행합니다. F1 레이스 시트에 오르면 그랑프리마다 라이브로 진행할 수 있습니다.</div>}
         </div>
       </Card>

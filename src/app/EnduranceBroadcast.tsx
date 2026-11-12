@@ -51,8 +51,8 @@ export function EnduranceBroadcast({ c, offer, choices, done, onChoose, onDone }
       <div className="space-y-2">
         <div className="text-zinc-300">{offer.hours}시간 레이스 · {offer.cls} 클래스 {offer.classCars}대. 출발·{offer.hours >= 20 ? '밤' : '해 질 녘'}·마지막 스틴트마다 직접 고른다.</div>
         <div className="flex flex-wrap gap-2">
-          <Button className="!px-3 !py-1.5 text-xs" onClick={() => setWatching(true)}>📺 하이라이트 중계 보기</Button>
-          <Button variant="ghost" className="!px-3 !py-1.5 text-xs" onClick={onDone}>결과로 바로 가기</Button>
+          <Button size="sm" onClick={() => setWatching(true)}>📺 하이라이트 중계 보기</Button>
+          <Button variant="ghost" size="sm" onClick={onDone}>결과로 바로 가기</Button>
         </div>
       </div>
     );
@@ -114,7 +114,7 @@ export function EnduranceBroadcast({ c, offer, choices, done, onChoose, onDone }
       {ended && (
         <div className="flex flex-wrap items-center gap-2">
           <Pill tone={run.outcome.position !== null && run.outcome.position <= 3 ? 'green' : run.outcome.position === null ? 'red' : 'zinc'}>{enduranceLine(run.outcome)}</Pill>
-          <Button className="!px-3 !py-1.5 text-xs" onClick={onDone}>결과와 기사 보기</Button>
+          <Button size="sm" onClick={onDone}>결과와 기사 보기</Button>
         </div>
       )}
     </div>

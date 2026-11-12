@@ -17,8 +17,8 @@ export function Settings() {
           <input type="checkbox" checked={showKrw} onChange={(e) => setShowKrw(e.target.checked)} /> 금액 옆에 원화 환산 보기
         </label>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-          <Button variant="ghost" className="!px-3 !py-1.5 text-xs" disabled={seenTips.length === 0} onClick={resetTips}>처음 안내 다시 보기</Button>
-          <Button variant="ghost" className="!px-3 !py-1.5 text-xs" onClick={() => go('guide')}>게임 방법</Button>
+          <Button variant="ghost" size="sm" disabled={seenTips.length === 0} onClick={resetTips}>처음 안내 다시 보기</Button>
+          <Button variant="ghost" size="sm" onClick={() => go('guide')}>게임 방법</Button>
         </div>
       </Card>
       <Card title="기자회견 자동 응답">

@@ -5,7 +5,9 @@ export function Card({ title, children, className = '', right }: { title?: React
     <section className={`rounded-2xl border border-white/10 bg-zinc-900/70 p-4 sm:p-5 ${className}`}>
       {title && (
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-sm font-bold tracking-wide text-zinc-300">{title}</h2>
+          <h2 className="flex items-center gap-2 text-[15px] font-black tracking-tight text-zinc-100">
+            <span aria-hidden className="h-3.5 w-1 rounded-full bg-racing" />{title}
+          </h2>
           {right}
         </div>
       )}
@@ -15,25 +17,26 @@ export function Card({ title, children, className = '', right }: { title?: React
 }
 
 export function Button({
-  children, onClick, variant = 'primary', disabled, className = '', type = 'button',
-}: { children: ReactNode; onClick?: () => void; variant?: 'primary' | 'ghost' | 'danger'; disabled?: boolean; className?: string; type?: 'button' | 'submit' }) {
+  children, onClick, variant = 'primary', size = 'md', disabled, className = '', type = 'button',
+}: { children: ReactNode; onClick?: () => void; variant?: 'primary' | 'ghost' | 'danger'; size?: 'sm' | 'md'; disabled?: boolean; className?: string; type?: 'button' | 'submit' }) {
   const styles = {
     primary: 'bg-racing text-white hover:bg-racing-dark disabled:bg-zinc-700 disabled:text-zinc-400',
     ghost: 'border border-white/15 text-zinc-200 hover:bg-white/5 disabled:opacity-40',
     danger: 'border border-red-500/40 text-red-300 hover:bg-red-500/10 disabled:opacity-40',
   }[variant];
   return (
-    <button type={type} onClick={onClick} disabled={disabled} className={`rounded-xl px-4 py-2.5 text-sm font-bold transition ${styles} ${className}`}>
+    <button type={type} onClick={onClick} disabled={disabled}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-xl font-bold transition active:scale-[0.98] disabled:active:scale-100 ${size === 'sm' ? 'min-h-9 px-3 text-xs' : 'min-h-11 px-4 text-sm'} ${styles} ${className}`}>
       {children}
     </button>
   );
 }
 
-export function Bar({ value, max = 100, color = 'bg-racing', className = '' }: { value: number; max?: number; color?: string; className?: string }) {
+export function Bar({ value, max = 100, color = 'bg-racing', className = '', thin }: { value: number; max?: number; color?: string; className?: string; thin?: boolean }) {
   const w = Math.max(0, Math.min(100, (value / max) * 100));
   return (
-    <div className={`h-2 w-full overflow-hidden rounded-full bg-white/10 ${className}`}>
-      <div className={`h-full rounded-full ${color}`} style={{ width: `${w}%` }} />
+    <div className={`${thin ? 'h-1' : 'h-2'} w-full overflow-hidden rounded-full bg-white/10 ${className}`}>
+      <div className={`h-full rounded-full transition-[width] duration-500 ${color}`} style={{ width: `${w}%` }} />
     </div>
   );
 }

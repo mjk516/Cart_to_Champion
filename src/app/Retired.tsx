@@ -301,7 +301,7 @@ export function Retired() {
         {sig && (
           <div className="mt-4 max-w-xs rounded-xl bg-[#f6f1e7] p-2 text-zinc-900">
             <SignatureView sig={sig} className="h-16 w-full" />
-            <div className="text-center text-[10px] text-zinc-500">{firstF1Signature ? '첫 F1 계약 서명' : '서명'}</div>
+            <div className="text-center text-[11px] text-zinc-500">{firstF1Signature ? '첫 F1 계약 서명' : '서명'}</div>
           </div>
         )}
       </Card>
