@@ -4,7 +4,7 @@ import { josa } from './josa';
 import { type Career, type F1Driver, type F1Standings, type RaceHighlight, type TeammateH2H, PLAYER_ID, type SeasonRecord, f1Calendar, homeGpEffect, inMilitary, playerBehavior, withHomeGp } from './careerCore';
 import { clamp, juniorTeams, lerp, statsAround } from './careerInternal';
 import { WEALTH_TIERS } from './creation';
-import { coachAdvice, followsCoach, followsCoachPre } from './coach';
+import { coachAdvice, followsCoach, followsCoachPre, midTrainingAdvice } from './coach';
 import { applyEndurance, enduranceResult, type EnduranceChoices } from './endurance';
 import { myRaceResult, neutralCounts, snsReaction, sumSnsEffects, type MyRaceResult, type NeutralCounts } from './raceNews';
 import { strategyKey, type StrategyMap } from './strategy';
@@ -12,7 +12,7 @@ import { pickEvents } from './events';
 import { seasonFeed } from './feed';
 import { CAR_WEIGHT, F1_WINNER_TEAMS, ovr, POINTS_RACE } from './data';
 import { teamForm } from './form';
-import { addXp, ageCurve, applyAging, applyXp, difficultyOf, growthWindow, SESSION_XP, TRAINING, trainEffect, trainingOutcome, TRAINING_SLOTS, TRAINING_SLOTS_RESERVE, type TrainingId } from './growth';
+import { addXp, ageCurve, applyAging, applyXp, difficultyOf, F1_MID_SLOTS, growthWindow, inPlanMidSlots, midTrainingRound, SESSION_XP, TRAINING, trainEffect, trainingOutcome, TRAINING_SLOTS, TRAINING_SLOTS_RESERVE, type TrainingId } from './growth';
 import { updateMediaSeason } from './media';
 import { fictionalName } from './names';
 import { enforceOrder, runRace, simulateQualifying, type QualiResult, type RaceCar, type RaceInput, type RaceOutcome, type RadioOptionId, type ResultRules } from './race';
@@ -29,6 +29,8 @@ export interface SeasonOptions {
   strategy?: StrategyMap;
   /** 내구레이스 하이라이트 중계에서 고른 것(SPEC v0.42). 없으면 한 번에 결과 */
   enduranceChoices?: EnduranceChoices;
+  /** F1 시즌 중 훈련 2칸(SPEC v0.48). 없으면 코치 추천 */
+  midPlan?: TrainingId[];
 }
 
 // ── 시즌 ─────────────────────────────────────────────────────────────
@@ -299,9 +301,11 @@ function f1Weekend(c: Career, cars: RaceCar[], seed: number, round: number, radi
 }
 
 /** 화면용: 이번 시즌 F1 한 라운드. 무전 결정이 남아 있으면 레이스 결과는 pending */
-export function f1WeekendFor(c: Career, plan: TrainingId[], round: number, radio: Record<string, RadioOptionId> = {}, strategy: StrategyMap = {}): F1Weekend {
+export function f1WeekendFor(c: Career, plan: TrainingId[], round: number, radio: Record<string, RadioOptionId> = {}, strategy: StrategyMap = {}, midPlan?: TrainingId[]): F1Weekend {
   const racing = c.contract?.series === 'f1' && c.contract.seat === 'race';
-  const stats = seasonStatsFor(c, plan).stats;
+  const mp = midPlanFor(c, midPlan);
+  // 시즌 중 훈련 세션(캘린더 30% 라운드) 뒤 그랑프리부터는 훈련으로 오른 능력치로 달린다(SPEC v0.48)
+  const stats = mp && round >= midTrainingRound(f1Calendar(c).length) ? midSeasonStatsFor(c, plan, mp) : seasonStatsFor(c, plan).stats;
   return f1Weekend(c, f1Cars(c, stats), hashSeed(c.seed, 'season', c.year), round, radio, racing, false, strategy);
 }
 
@@ -309,9 +313,11 @@ export function isF1RaceSeason(c: Career): boolean {
   return c.contract?.series === 'f1' && c.contract.seat === 'race' && !c.retired;
 }
 
-function simulateF1(c: Career, stats: Stats, seed: number, radio: Record<string, RadioOptionId> = {}, strategy: StrategyMap = {}): SeasonSim {
+function simulateF1(c: Career, stats: Stats, seed: number, radio: Record<string, RadioOptionId> = {}, strategy: StrategyMap = {}, lateStats?: Stats): SeasonSim {
   const racing = c.contract?.series === 'f1' && c.contract.seat === 'race';
   const cars = f1Cars(c, stats);
+  const lateCars = lateStats ? f1Cars(c, lateStats) : cars;
+  const midRound = midTrainingRound(f1Calendar(c).length);
   const w = CAR_WEIGHT.f1;
   const sim = emptySim(cars.length);
   const points = new Map<string, number>(cars.map((x) => [x.id, 0]));
@@ -327,7 +333,7 @@ function simulateF1(c: Career, stats: Stats, seed: number, radio: Record<string,
   let qDuels = 0;
   f1Calendar(c).forEach((circuit, round) => {
     addXp(sim.raceXp, SESSION_XP.practice, (circuit.sprint ? 1 : 3) * (racing ? 1 : 0.4));
-    const wk = f1Weekend(c, cars, seed, round, radio, racing, true, strategy);
+    const wk = f1Weekend(c, round >= midRound ? lateCars : cars, seed, round, radio, racing, true, strategy);
     for (const sess of wk.sessions) {
       if (sess.type === 'quali') {
         if (sess.display) continue;
@@ -483,10 +489,44 @@ export function seasonStatsFor(c: Career, plan: TrainingId[]): { stats: Stats; p
   // 손해 면제는 시즌 전 칸으로만 판단한다: 시즌 중 훈련을 바꿔도 이미 치른 레이스가 달라지지 않는다(SPEC v0.46)
   const safe = plan.length > 0 && !inMilitary(c) && followsCoachPre(c, plan);
   const pressured = !safe && c.media.pressure > c.driver.hidden.pressureResist;
-  const overtrained = !safe && trainingOutcome(plan.slice(0, slots), false).overtrained;
+  const f1Race = c.contract?.series === 'f1' && c.contract.seat === 'race';
+  const overtrained = !safe && trainingOutcome(plan.slice(0, slots), false, slots - inPlanMidSlots(f1Race)).overtrained;
   if (pressured) stats.consistency = Math.max(20, stats.consistency - 3);
   if (overtrained) stats.consistency = Math.max(20, stats.consistency - 2);
   return { stats, pressured, overtrained, coached };
+}
+
+/** F1 시즌 중 훈련(SPEC v0.48) 결과를 능력치·XP에 반영한다(입력을 바꾼다). 오른 점수를 돌려준다 */
+function applyMidTraining(c: Career, midPlan: TrainingId[], stats: Stats, xp: Stats): Partial<Stats> {
+  const out = trainingOutcome(midPlan.slice(0, F1_MID_SLOTS), true);
+  const eff = ageCurve(c.age, c.driver.hidden.growthType) * (1 + WEALTH_TIERS[c.driver.wealthTier].growthBonus);
+  const envMult = 0.8 + 0.5 * (c.contract?.facility ?? 0.5);
+  const gains: Partial<Stats> = {};
+  for (const k of STAT_KEYS) {
+    if (!out.xp[k]) continue;
+    gains[k] = (out.xp[k] ?? 0) * eff * envMult * (c.driver.focus.includes(k) ? 1.2 : 1) * trainEffect(stats, k, difficultyOf(c));
+  }
+  return applyXp(stats, xp, gains, c.driver.hidden.potential, growthWindow(difficultyOf(c)));
+}
+
+/** 시즌 중 훈련으로 오르는 능력치(화면 미리 보기용, 입력은 그대로) */
+export function midTrainingPreview(c: Career, midPlan: TrainingId[]): Partial<Stats> {
+  return applyMidTraining(c, midPlan, { ...c.driver.stats }, { ...c.driver.xp });
+}
+
+/** 시즌 중 훈련 뒤 레이스에 쓰는 능력치(압박·과훈련 반영은 시즌 전과 같다) */
+export function midSeasonStatsFor(c: Career, plan: TrainingId[], midPlan: TrainingId[]): Stats {
+  const ss = seasonStatsFor(c, plan);
+  const raised = midTrainingPreview(c, midPlan);
+  const stats = { ...ss.stats };
+  for (const k of STAT_KEYS) if (raised[k]) stats[k] = Math.min(99, stats[k] + (raised[k] ?? 0));
+  return stats;
+}
+
+/** F1 레이스 시즌이면 시즌 중 훈련 계획(고르지 않았으면 코치 추천) */
+export function midPlanFor(c: Career, midPlan?: TrainingId[]): TrainingId[] | null {
+  if (!(c.contract?.series === 'f1' && c.contract.seat === 'race') || inMilitary(c)) return null;
+  return (midPlan && midPlan.length ? midPlan : midTrainingAdvice(c)).slice(0, F1_MID_SLOTS);
 }
 
 /**
@@ -511,7 +551,8 @@ export function runSeason(input: Career, plan: TrainingId[], radio: Record<strin
   const f1Racing = !serving && contract?.series === 'f1' && contract.seat === 'race';
   const sns: Record<string, string> = f1Racing ? { ...(opts.sns ?? {}) } : {};
   const strategy: StrategyMap = f1Racing ? { ...(opts.strategy ?? {}) } : {};
-  c.choiceLog.push({ year: c.year, kind: 'training', plan: cleanPlan, ...(Object.keys(radio).length ? { radio } : {}), ...(endurance ? { endurance: true } : {}), ...(endurance && opts.enduranceChoices && Object.keys(opts.enduranceChoices).length ? { enduranceChoices: opts.enduranceChoices } : {}), ...(Object.keys(sns).length ? { sns } : {}), ...(Object.keys(strategy).length ? { strategy } : {}) });
+  const midPlan = f1Racing ? midPlanFor(c, opts.midPlan) : null;
+  c.choiceLog.push({ year: c.year, kind: 'training', plan: cleanPlan, ...(midPlan ? { mid: midPlan } : {}), ...(Object.keys(radio).length ? { radio } : {}), ...(endurance ? { endurance: true } : {}), ...(endurance && opts.enduranceChoices && Object.keys(opts.enduranceChoices).length ? { enduranceChoices: opts.enduranceChoices } : {}), ...(Object.keys(sns).length ? { sns } : {}), ...(Object.keys(strategy).length ? { strategy } : {}) });
 
   const notes: string[] = [];
   let expenses = 0;
@@ -554,7 +595,7 @@ export function runSeason(input: Career, plan: TrainingId[], radio: Record<strin
     sim = simulateKart(c, seasonStats, seed);
     quickF1World(c, seed);
   } else if (series === 'f1') {
-    sim = simulateF1(c, seasonStats, seed, radio, strategy);
+    sim = simulateF1(c, seasonStats, seed, radio, strategy, midPlan ? midSeasonStatsFor(c, cleanPlan, midPlan) : undefined);
   } else {
     sim = simulateJunior(c, seasonStats, seed);
     quickF1World(c, seed);
@@ -575,6 +616,14 @@ export function runSeason(input: Career, plan: TrainingId[], radio: Record<strin
   addXp(total, trainGain);
   addXp(total, raceGain);
   const before = { ...c.driver.stats };
+  // 시즌 중 훈련(F1)은 시즌 중에 이미 능력치를 올렸다. 그다음 시즌 XP를 더한다
+  if (midPlan) {
+    const raised = applyMidTraining(c, midPlan, c.driver.stats, c.driver.xp);
+    const midCost = trainingOutcome(midPlan, freeSim).cost;
+    expenses += midCost;
+    const ups = Object.entries(raised).map(([k, v]) => `${k === 'pace' ? '페이스' : k === 'racecraft' ? '레이스크래프트' : k === 'consistency' ? '일관성' : k === 'wet' ? '우천' : k === 'tyre' ? '타이어 관리' : '피드백'} +${v}`);
+    notes.push(`시즌 중 훈련(${midPlan.map((id) => TRAINING[id].label).join(', ')})${ups.length ? `: ${ups.join(', ')}` : ''}`);
+  }
   applyXp(c.driver.stats, c.driver.xp, total, c.driver.hidden.potential, growthWindow(difficultyOf(c)));
   const grownOvr = ovr(c.driver.stats) - ovr(before);
   const tSum = STAT_KEYS.reduce((a, k) => a + (trainGain[k] ?? 0), 0);

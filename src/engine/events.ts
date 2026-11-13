@@ -276,7 +276,7 @@ const BASE_EVENTS: EventDef[] = [
       ] },
     ],
   },
-  // 팀 내 1인자 경쟁(SPEC v0.43): 맞대결이 팽팽하면 오프시즌에 반드시 나온다(최근 2년 안에 나왔으면 제외)
+  // 팀 내 1인자 경쟁(SPEC v0.43): 맞대결이 팽팽하면 오프시즌에 반드시 나온다(최근 3년 안에 나왔으면 제외)
   {
     id: RIVALRY_AHEAD_ID, category: 'career', title: '팀 내 1인자 경쟁',
     text: '{mate}와 시즌 내내 팽팽했다({h2h}). 근소하게 앞섰지만 {team} 안에서는 누가 1번 드라이버인지 말이 많다.',
@@ -441,8 +441,8 @@ export function pickEvents(c: Career, last: SeasonRecord): string[] {
     pool.splice(pool.indexOf(e), 1);
   }
   if (agentBack) picked.push(AGENT_EVENT_ID);
-  // 팽팽한 팀메이트 맞대결 뒤에는 1인자 경쟁 이벤트(최근 2년 안에 없었을 때)
-  const recent2 = (c.eventLog ?? []).some((e) => e.year > c.year - 2 && RIVALRY_IDS.has(e.id));
+  // 팽팽한 팀메이트 맞대결 뒤에는 1인자 경쟁 이벤트(최근 3년 안에 없었을 때)
+  const recent2 = (c.eventLog ?? []).some((e) => e.year > c.year - 3 && RIVALRY_IDS.has(e.id));
   if (!recent2) {
     const rv = EVENTS.find((e) => RIVALRY_IDS.has(e.id) && e.when(x));
     if (rv) picked.push(rv.id);

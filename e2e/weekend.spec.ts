@@ -12,11 +12,52 @@ test('F1 라이브: 주말 진행 중 남은 시즌 자동 진행 → 오프시�
   await page.getByRole('button', { name: /시즌 라이브로 시작/ }).click();
   await expect(page.getByText('이번 주말 전망')).toBeVisible();
   await page.getByRole('button', { name: '다음 세션' }).click();
+  // 시즌 중 훈련 전이면 훈련 세션까지 자동으로 가서 멈춘다
   await page.getByRole('button', { name: '남은 시즌 자동 진행' }).click();
-  await page.getByRole('alertdialog').getByRole('button', { name: '남은 시즌 자동 진행' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '훈련 세션까지 자동 진행' }).click();
+  const mid = page.getByLabel('시즌 중 훈련 세션');
+  await expect(mid).toContainText('자동 진행을 잠시 멈췄습니다');
+  await expect(page.getByRole('button', { name: '다음 세션' })).toBeDisabled();
+  await mid.getByRole('button', { name: '훈련하기' }).click();
+  await expect(mid).toContainText('훈련 완료');
+  await mid.getByRole('button', { name: '남은 시즌 자동 진행' }).click();
   await expect(page.getByText(`${c.year} 시즌 결과`)).toBeVisible();
-  const races = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)!).state.career.history.at(-1).races, KEY);
-  expect(races).toBeGreaterThanOrEqual(23);
+  const last = await page.evaluate((k) => { const s = JSON.parse(localStorage.getItem(k)!).state.career; return { races: s.history.at(-1).races, mid: s.choiceLog.at(-1).mid }; }, KEY);
+  expect(last.races).toBeGreaterThanOrEqual(23);
+  expect(last.mid).toHaveLength(2);
+});
+
+test('한 번에 진행해도 F1은 시즌 중 훈련 세션에서 멈추고, 그 그랑프리부터 직접 참여할 수 있다', async ({ page }) => {
+  const c = f1Career();
+  await loadSave(page, c);
+  await page.getByRole('button', { name: '한 번에 진행' }).click();
+  const mid = page.getByLabel('시즌 중 훈련 세션');
+  await expect(mid).toContainText('자동 진행을 잠시 멈췄습니다');
+  await page.getByLabel('시즌 중 훈련 1칸').selectOption({ label: '우천 테스트 · €40k' });
+  await mid.getByRole('button', { name: '훈련하기' }).click();
+  await mid.getByRole('button', { name: '이 그랑프리부터 직접 참여' }).click();
+  await expect(page.getByRole('button', { name: '다음 세션' })).toBeEnabled();
+  const live = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)!).state.live, KEY);
+  expect(live.midPlan[0]).toBe('wet');
+  expect(live.midDone).toBe(true);
+  expect(live.round).toBeGreaterThan(0);
+});
+
+test('레이스 도중 넘기기: 먼저 묻고, 허락하면 다음 그랑프리로 넘어간다', async ({ page }) => {
+  const c = f1Career();
+  await loadSave(page, c);
+  await page.getByRole('button', { name: /시즌 라이브로 시작/ }).click();
+  await goToFirstRace(page);
+  await page.getByRole('button', { name: /넘기기$/ }).click();
+  const dlg = page.getByRole('alertdialog');
+  await expect(dlg).toContainText('넘겨도 될까요?');
+  await dlg.getByRole('button', { name: '계속 보기' }).click();
+  await expect(dlg).toHaveCount(0);
+  await page.getByRole('button', { name: /넘기기$/ }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '넘기고 다음 그랑프리로' }).click();
+  await expect(page.getByText(/라운드 2\//)).toBeVisible();
+  const pts = await page.evaluate((k) => Object.keys(JSON.parse(localStorage.getItem(k)!).state.live.points).length, KEY);
+  expect(pts).toBeGreaterThan(0);
 });
 
 test('F1 라이브 중 대시보드의 "남은 시즌 한 번에 진행"이 진행 상태를 이어받는다', async ({ page }) => {
@@ -28,6 +69,10 @@ test('F1 라이브 중 대시보드의 "남은 시즌 한 번에 진행"이 진�
   await page.getByRole('button', { name: /이어하기/ }).first().click();
   await page.getByRole('button', { name: '대시보드', exact: true }).click();
   await page.getByRole('button', { name: '남은 시즌 한 번에 진행' }).click();
+  // 시즌 중 훈련 세션에서 멈춘다 → 훈련 → 남은 시즌 자동 진행
+  const mid = page.getByLabel('시즌 중 훈련 세션');
+  await mid.getByRole('button', { name: '훈련하기' }).click();
+  await mid.getByRole('button', { name: '남은 시즌 자동 진행' }).click();
   await expect(page.getByText(`${c.year} 시즌 결과`)).toBeVisible();
   // 시즌 결과에 드라이버·컨스트럭터 최종 순위표
   await expect(page.getByRole('region', { name: '드라이버 챔피언십 순위' }).locator('li').nth(9)).toBeVisible();

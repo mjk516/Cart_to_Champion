@@ -20,7 +20,7 @@ const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x
 
 /** 난이도별 잠재력 보정(SPEC v0.45): 쉬움 +2~3(반반, 시드로), 어려움 −2, 보통은 그대로. 1점 차이가 챔피언 확률을 크게 바꿔서 쉬움은 반반으로 맞춘다 */
 export const DIFFICULTY_INFO: Record<Difficulty, { label: string; desc: string; champion: string }> = {
-  easy: { label: '쉬움', desc: '키울 수 있는 능력치가 높다. 월드 챔피언의 꿈을 맛보고 싶다면', champion: '약 40%' },
+  easy: { label: '쉬움', desc: '키울 수 있는 능력치가 높다. 월드 챔피언의 꿈을 맛보고 싶다면', champion: '약 45%' },
   normal: { label: '보통', desc: '기본 밸런스. 노력과 운, 좋은 팀이 모두 맞아야 챔피언', champion: '약 20%' },
   hard: { label: '어려움', desc: '어떤 훈련을 하느냐에 따라 성장이 크게 갈린다. 실제 F1처럼 챔피언은 극소수만', champion: '약 6%' },
 };
@@ -110,6 +110,10 @@ export const MID_SLOTS = 2;
 export const POST_SLOTS = 2;
 export const POST_TRAINING_IDS: TrainingId[] = ['data', 'mental', 'longrun', 'rest'];
 export function preSlotsOf(slots: number): number { return slots - MID_SLOTS; }
+/** F1 레이스 시즌의 시즌 중 훈련(SPEC v0.48): 시즌 계획 6칸과 따로 2칸, 그랑프리 사이 훈련 세션에서 한다 */
+export const F1_MID_SLOTS = 2;
+/** 시즌 계획 안에 시즌 중 칸이 있는가: F1 레이스 시즌은 따로(0), 그 밖은 계획의 마지막 2칸 */
+export function inPlanMidSlots(f1Race: boolean): number { return f1Race ? 0 : MID_SLOTS; }
 /** 시즌 중 훈련을 바꿀 수 있는 라운드(캘린더 30% 무렵, 여름 휴식기 전) */
 export function midTrainingRound(rounds: number): number { return Math.max(1, Math.round(rounds * 0.3)); }
 
@@ -169,7 +173,7 @@ export interface TrainingResult {
   overtrained: boolean;
 }
 
-export function trainingOutcome(plan: TrainingId[], freeSim: boolean): TrainingResult {
+export function trainingOutcome(plan: TrainingId[], freeSim: boolean, preCount?: number): TrainingResult {
   const xp: Partial<Stats> = {};
   let cost = 0;
   let fatigue = 0;
@@ -182,7 +186,7 @@ export function trainingOutcome(plan: TrainingId[], freeSim: boolean): TrainingR
     pressureRelief += p.pressureRelief ?? 0;
   }
   // 과훈련은 시즌 전 계획으로 판단한다(시즌 중 훈련을 바꿔도 이미 치른 레이스가 달라지지 않게, SPEC v0.46)
-  const pre = plan.slice(0, preSlotsOf(Math.max(plan.length, TRAINING_SLOTS)));
+  const pre = plan.slice(0, preCount ?? preSlotsOf(Math.max(plan.length, TRAINING_SLOTS)));
   return { xp, cost, fatigue, pressureRelief, overtrained: !pre.includes('rest') && plan.length >= TRAINING_SLOTS };
 }
 

@@ -3,7 +3,7 @@
 
 import { type Career } from './careerCore';
 import { WEALTH_TIERS } from './creation';
-import { preSlotsOf, recommendedPlan, TRAINING, TRAINING_SLOTS, TRAINING_SLOTS_RESERVE, type TrainingId } from './growth';
+import { F1_MID_SLOTS, inPlanMidSlots, recommendedPlan, TRAINING, TRAINING_SLOTS, TRAINING_SLOTS_RESERVE, type TrainingId } from './growth';
 import { fictionalName } from './names';
 import { rngFor } from './rng';
 import { STAT_KEYS, type StatKey } from './types';
@@ -124,6 +124,11 @@ export function coachAdvice(c: Career): CoachAdvice {
   return { staff, plan, coachLines, trainerLines, bonus: Math.round(bonus * 1000) / 1000 };
 }
 
+/** F1 시즌 중 훈련 추천(SPEC v0.48): 약점 위주 2칸(휴식·멘탈 제외) */
+export function midTrainingAdvice(c: Career): TrainingId[] {
+  return recommendedPlan(c.driver.stats, 'weakness', F1_MID_SLOTS + 1, c.driver.focus).filter((id) => id !== 'rest').slice(0, F1_MID_SLOTS);
+}
+
 /** 시즌 후 훈련 추천(SPEC v0.46): 압박이 높으면 멘탈 코칭, 나머지는 약한 쪽(피드백 → 데이터 분석, 타이어·일관성 → 롱런) */
 export function postTrainingAdvice(c: Career): TrainingId[] {
   const s = c.driver.stats;
@@ -139,7 +144,8 @@ export function postTrainingAdvice(c: Career): TrainingId[] {
 /** 시즌 전 칸이 코치 조언의 시즌 전 칸과 같은가(압박 실수·과훈련 면제 판단, SPEC v0.46) */
 export function followsCoachPre(c: Career, plan: TrainingId[]): boolean {
   const slots = slotsOf(c);
-  const pre = preSlotsOf(slots);
+  const f1Race = c.contract?.series === 'f1' && c.contract.seat === 'race';
+  const pre = slots - inPlanMidSlots(f1Race);
   const want = coachAdvice(c).plan.slice(0, pre);
   const p = plan.slice(0, pre);
   return p.length === want.length && [...p].sort().join(',') === [...want].sort().join(',');

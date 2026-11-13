@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  DIFFICULTY_INFO, difficultyOf, growthWindow, preSlotsOf,
+  DIFFICULTY_INFO, difficultyOf, growthWindow, inPlanMidSlots,
   circuitById, coachAdvice, enduranceOdds, enduranceOffer, followsCoach, inMilitary, seasonChatter, isF1RaceSeason, managerOf, MANAGER_STYLE_LABEL, ovr, PERSONALITIES, recommendedPlan, seriesLabel, STAT_KEYS, superLicencePoints, TRAINING, TRAINING_SLOTS,
   TRAINING_SLOTS_RESERVE, xpNeeded, type TrainingId,
 } from '../engine';
 import { formatMoney, nameAside } from './format';
 import { FeedList, RollingComments } from './FeedList';
-import { useGame } from './store';
+import { advanceToMidTraining, beforeMidTraining, useGame } from './store';
 import { F1TeamBadge } from './TeamBadge';
 import { HelmetView } from './Helmet';
 import { Tip } from './Guide';
@@ -36,7 +36,7 @@ function TrainingEffect({ id }: { id: TrainingId }) {
 }
 
 export function Dashboard() {
-  const { career: c, showKrw, playSeason, live, startLive, finishLive, retire, go, planDraft, setPlanDraft } = useGame();
+  const { career: c, showKrw, playSeason, live, startLive, finishLive, updateLive, retire, go, planDraft, setPlanDraft } = useGame();
   const [running, setRunning] = useState(false);
   const confirmBox = useConfirm();
   const slots = c?.contract?.seat === 'race' || !c?.contract ? TRAINING_SLOTS : TRAINING_SLOTS_RESERVE;
@@ -56,6 +56,8 @@ export function Dashboard() {
   if (!c || c.retired) return null;
 
   const d = c.driver;
+  const f1RaceSeat = c.contract?.series === 'f1' && c.contract.seat === 'race';
+  const preCount = plan.length - inPlanMidSlots(f1RaceSeat);
   const pdef = PERSONALITIES[d.personality];
   const temper = TEMPERAMENT_LABELS[pdef.temperament]!;
   const contract = c.contract;
@@ -161,7 +163,7 @@ export function Dashboard() {
         <p>시즌을 시작하기 전에 <b>훈련 계획</b> 칸을 채우세요. 프로그램마다 오르는 능력치와 비용이 다르고, 휴식을 빼면 컨디션이 떨어집니다. 잘 모르겠으면 "약점 보완"을 누르면 추천 계획이 채워집니다.</p>
         <p>준비가 되면 아래의 시즌 진행 버튼을 누르세요. 시즌이 끝나면 오프시즌으로 넘어가 다음 팀을 고릅니다.</p>
       </Tip>
-      <Card title={`훈련 계획 · 시즌 전 ${preSlotsOf(plan.length)}칸 + 시즌 중 2칸`} right={
+      <Card title={f1RaceSeat ? `훈련 계획 · 시즌 전 ${plan.length}칸 (+ 시즌 중 2칸은 그랑프리 사이 훈련 세션)` : `훈련 계획 · 시즌 전 ${preCount}칸 + 시즌 중 2칸`} right={
         <div className="flex gap-1">
           {MODES.map((m) => (
             <button key={m.id} onClick={() => setPlan(recommendedPlan(d.stats, m.id, slots, d.focus))} className="rounded-lg border border-white/15 px-2 py-1 text-xs hover:bg-white/5">{m.label}</button>
@@ -202,10 +204,10 @@ export function Dashboard() {
         <div className="grid gap-2 sm:grid-cols-3">
           {plan.map((id, i) => (
             <div key={i} className="flex flex-col gap-1">
-              {(i === 0 || i === preSlotsOf(plan.length)) && (
+              {(i === 0 || (i === preCount && preCount < plan.length)) && (
                 <div className="col-span-full text-xs font-bold text-zinc-300 sm:hidden">{i === 0 ? '시즌 전 훈련' : '시즌 중 훈련 · 5월(여름 휴식기 전)'}</div>
               )}
-              <span className="hidden text-[11px] font-bold text-zinc-400 sm:block">{i < preSlotsOf(plan.length) ? `시즌 전 ${i + 1}` : `시즌 중 ${i - preSlotsOf(plan.length) + 1} · 5월`}</span>
+              <span className="hidden text-[11px] font-bold text-zinc-400 sm:block">{i < preCount ? `시즌 전 ${i + 1}` : `시즌 중 ${i - preCount + 1} · 5월`}</span>
               <select aria-label={`훈련 ${i + 1}칸`} value={id} onChange={(e) => setPlan(plan.map((x, j) => (j === i ? (e.target.value as TrainingId) : x)))}
                 className="rounded-xl border border-white/15 bg-zinc-950 px-2 py-2 text-sm">
                 {(Object.keys(TRAINING) as TrainingId[]).map((t) => (
@@ -260,7 +262,10 @@ export function Dashboard() {
               <Button variant="ghost" disabled={running} onClick={() => {
                 const inLive = live && live.year === c.year;
                 setRunning(true);
-                setTimeout(() => (inLive ? finishLive() : playSeason(plan, endurance)), 30);
+                setTimeout(() => {
+                  if (inLive && beforeMidTraining(c, live)) { updateLive(advanceToMidTraining(c, live)); go('weekend'); setRunning(false); return; }
+                  if (inLive) finishLive(); else playSeason(plan, endurance);
+                }, 30);
               }}>
                 {running ? '시즌 진행 중…' : live && live.year === c.year ? '남은 시즌 한 번에 진행' : '한 번에 진행'}
               </Button>
