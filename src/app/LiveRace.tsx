@@ -524,6 +524,16 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
   // 순위표 보기: 앞차와 간격(INTERVAL, 기본) → 선두와 간격(LEADER) → 타이어(TIRE)
   const [towerMode, setTowerMode] = useState<TowerMode>('interval');
   // 휴대폰(768px 미만): 순위표를 트랙 위 왼쪽에 겹쳐 띄우고 안에서 스크롤, 트랙은 화면 폭을 다 쓴다(SPEC v0.55)
+  // 큰 레이스 영역이 화면에 보이는지(안 보이면 한 줄 요약 막대를 위에 붙인다)
+  const blockRef = useRef<HTMLDivElement>(null);
+  const [blockVisible, setBlockVisible] = useState(true);
+  useEffect(() => {
+    const el = blockRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(([e]) => setBlockVisible(!!e && e.intersectionRatio > 0.15), { threshold: [0, 0.15, 0.5] });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
   // 휴대폰 순위표 접기(접으면 트랙이 화면 폭을 다 쓴다)
   const [towerOpen, setTowerOpen] = useState(true);
   const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia?.('(max-width: 767px)').matches);
@@ -682,7 +692,22 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
   return (
     <div className="space-y-3">
       {/* 순위표(왼쪽) + 트랙 뷰. 넓은 화면에서는 스크롤해도 위에 붙어 있다 */}
-      <div className="z-30 -mx-1 flex gap-2 bg-zinc-900 px-1 pb-1 pt-1 md:sticky" style={{ top: navH }}>
+      {/* 큰 영역이 화면 밖으로 나가면 위에 한 줄 막대만 붙는다(PC에서 아래로 내릴 때 답답하지 않게, SPEC v0.56) */}
+      {!blockVisible && !finished && (
+        <div className="sticky z-30 -mx-1 flex h-9 items-center gap-2 overflow-hidden whitespace-nowrap rounded-b-xl border-b border-white/10 bg-zinc-900/95 px-2 text-xs backdrop-blur" style={{ top: navH }} aria-label="레이스 요약 막대">
+          <span className="font-black text-white">{input.kind === 'sprint' ? 'SPRINT' : 'RACE'}</span>
+          <Pill tone="zinc">L{shownLap} / {outcome.totalLaps}</Pill>
+          {phase !== 'green' && <Pill tone={phase === 'red' ? 'red' : 'amber'}>{phase === 'sc' ? '세이프티카' : phase === 'vsc' ? 'VSC' : '레드 플래그'}</Pill>}
+          <span className="text-zinc-400">내 순위 <b className="text-zinc-100">P{Math.max(1, order.findIndex((e) => e.id === ME) + 1)}</b></span>
+          <span className="hidden text-zinc-500 sm:inline">{order.slice(0, 3).map((e, n) => `${n + 1}. ${x.codeOf(e.id)}`).join('  ')}</span>
+          <span className="ml-auto flex gap-1">
+            <button onClick={() => setPlaying((v) => !v)} className={btn(false)} aria-label={playing ? '요약 막대 일시정지' : '요약 막대 재생'}>{playing ? '⏸' : '▶'}</button>
+            <button onClick={() => setSpeed(SPEEDS[(SPEEDS.indexOf(speed as typeof SPEEDS[number]) + 1) % SPEEDS.length]!)} className={btn(true)} aria-label="요약 막대 배속 바꾸기">×{speed} ▸</button>
+          </span>
+          <button onClick={() => blockRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="rounded-lg border border-white/15 px-2 py-1 text-xs">트랙 보기 ▲</button>
+        </div>
+      )}
+      <div ref={blockRef} className="z-20 -mx-1 flex gap-2 bg-zinc-900 px-1 pb-1 pt-1" style={{ scrollMarginTop: navH }}>
         {!narrow && tower(false)}
         <div className="flex min-w-0 flex-1 flex-col">
         <TrackView circuitId={input.circuit.id} realLayout={realLayout} laps={laps} grid={input.grid} progress={pt} phase={phase} baseLap={input.circuit.baseLap}
