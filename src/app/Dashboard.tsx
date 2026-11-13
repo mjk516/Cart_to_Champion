@@ -198,7 +198,7 @@ export function Dashboard() {
             </div>
           );
         })()}
-        {difficultyOf(c) === 'hard' && <p className="mb-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-200">어려움: 어떤 훈련을 하느냐가 크게 갈립니다. 평균보다 낮은 능력치를 키우는 훈련은 효과 ×1.4, 높은 능력치는 ×0.3이고, 능력치가 잠재력에 가까워지는 훨씬 전부터 잘 안 오릅니다.</p>}
+        {difficultyOf(c) === 'hard' && <p className="mb-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-200">어려움: 어떤 훈련을 하느냐가 크게 갈립니다.</p>}
         <div className="grid gap-2 sm:grid-cols-3">
           {plan.map((id, i) => (
             <div key={i} className="flex flex-col gap-1">

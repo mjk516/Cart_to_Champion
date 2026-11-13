@@ -1062,3 +1062,21 @@ describe('한 해 훈련 3번 (v0.46)', () => {
     expect(b.overtrained).toBe(a.overtrained);
   });
 });
+
+describe('베테랑 F1 시트 보장 (v0.47)', () => {
+  it('F1 경험이 있으면 39세까지는 레이스 시트 제안이 하나는 오고, F1 커리어가 길다', async () => {
+    const { VETERAN_MAX_AGE } = await import('../src/engine');
+    expect(VETERAN_MAX_AGE).toBe(39);
+    let checked = 0;
+    for (let i = 0; i < 12; i++) {
+      const c = autoplayCareer(setup(700 + i * 7));
+      const f1 = c.history.filter((h) => h.series === 'f1' && h.seat === 'race');
+      if (!f1.length) continue;
+      checked++;
+      // 데뷔 뒤 39세(다음 시즌 나이) 전에 F1 레이스 시트를 잃고 끝나는 커리어는 없다(6점 넘게 약하지 않다면)
+      const lastAge = f1[f1.length - 1]!.age;
+      expect(lastAge).toBeGreaterThanOrEqual(Math.min(38, c.age - 1));
+    }
+    expect(checked).toBeGreaterThan(5);
+  });
+});

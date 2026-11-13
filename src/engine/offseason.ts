@@ -74,6 +74,9 @@ function seatPlan(c: Career): SeatPlan {
 /** 처음 F1에 올라가는 신인이 레이스 시트를 받는 팀(SPEC §7 v0.33). 이 안에서는 확률이 같다 */
 const STAT_SHORT: Record<StatKey, string> = { pace: '페이스', racecraft: '레이스크래프트', consistency: '일관성', wet: '우천', tyre: '타이어 관리', feedback: '피드백' };
 
+/** 베테랑 보장 나이(이 나이까지 F1 레이스 시트 하나는 받는다, SPEC v0.47) */
+export const VETERAN_MAX_AGE = 39;
+
 export const ROOKIE_TEAMS = ['racing_bulls', 'haas', 'williams', 'audi', 'aston_martin', 'alpine', 'cadillac'] as const;
 /** 이 아카데미 소속이면 해당 팀으로 올라갈 확률이 오른다(가중치 ×ROOKIE_ACADEMY_WEIGHT). 다른 아카데미는 반영하지 않는다 */
 export const ROOKIE_ACADEMY_TEAM: Record<string, string> = { 'Red Bull Junior Team': 'racing_bulls', 'Ferrari Driver Academy': 'haas' };
@@ -288,6 +291,24 @@ export function getOffseason(c: Career): Offseason {
           id: `f1:${target.t.id}`, series: 'f1', team: target.t.name, teamId: target.t.id, seat: 'race', endYear: c.year + years,
           salary: Math.round(900_000 + target.t.budget * 600_000), seatCost: 0, teamQuality: target.t.quality, facility: target.t.budget,
           years, affordable: true, displaceDriverId: target.d.id, note: `F1 레이스 시트 · ${josa(target.t.name, '이/가')} 신인을 위해 ${target.d.name}의 자리를 비웠다`,
+        });
+      }
+    }
+    // 베테랑 보장(SPEC v0.47): F1 경험이 있고 39세 이하인데 레이스 제안이 하나도 없으면,
+    // 하위 6팀 중 가장 약한 드라이버를 둔 팀이 경험을 사서 자리를 내준다(그 드라이버보다 6점 넘게 약하면 없음)
+    const anyRace = offers.some((o) => o.series === 'f1' && o.seat === 'race');
+    if (!rookie && f1Eligible && c.f1Debut !== null && current === 'f1' && nextAge <= VETERAN_MAX_AGE && !anyRace) {
+      const lower = sortedTeams.slice(-6);
+      const target = lower
+        .flatMap((t) => c.world.drivers.filter((d) => d.teamId === t.id && !d.retired && !plan.retiring.includes(d.id) && !plan.released.includes(d.id)).map((d) => ({ t, d })))
+        .sort((a, b) => ovr(a.d.stats) - ovr(b.d.stats))[0];
+      if (target && ovr(c.driver.stats) >= ovr(target.d.stats) - 6) {
+        const years = Math.max(1, Math.min(maxYears(nextAge), nextAge <= 34 ? 2 : 1));
+        offers.push({
+          id: `f1:${target.t.id}`, series: 'f1', team: target.t.name, teamId: target.t.id, seat: 'race', endYear: c.year + years,
+          salary: Math.round(clamp(1_000_000 + (rating - 76) * 900_000, 900_000, 8_000_000) * (0.6 + target.t.budget * 0.6)), seatCost: 0,
+          teamQuality: target.t.quality, facility: target.t.budget, years, affordable: true, displaceDriverId: target.d.id,
+          note: `F1 레이스 시트 · ${josa(target.t.name, '이/가')} 경험을 높이 사 ${target.d.name}의 자리를 내줬다`,
         });
       }
     }

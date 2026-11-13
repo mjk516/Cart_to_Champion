@@ -302,7 +302,7 @@ function PostTrainingCard({ c }: { c: Career }) {
   const hard = difficultyOf(c) === 'hard';
   return (
     <Card title="시즌 후 훈련">
-      <p className="mb-2 text-xs text-zinc-400">한 해 마지막 훈련입니다. 비용이 없는 프로그램만 2칸(멘탈 코칭도 이때는 무료). 다음 시즌 팀을 고르면 함께 적용됩니다.{hard ? ' 어려움: 평균보다 낮은 능력치를 키우는 훈련이 훨씬 잘 듣습니다.' : ''}</p>
+      <p className="mb-2 text-xs text-zinc-400">한 해 마지막 훈련입니다. 비용이 없는 프로그램만 2칸(멘탈 코칭도 이때는 무료). 다음 시즌 팀을 고르면 함께 적용됩니다.{hard ? ' 어려움: 어떤 훈련을 하느냐가 크게 갈립니다.' : ''}</p>
       <div className="grid gap-2 sm:grid-cols-2">
         {plan.slice(0, POST_SLOTS).map((id, i) => (
           <div key={i} className="flex flex-col gap-1">
