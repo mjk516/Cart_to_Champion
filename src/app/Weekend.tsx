@@ -1,6 +1,6 @@
 // F1 그랑프리 주말(SPEC §5.3, §5.4): 주말 시작 → 세션마다 클릭 → 레이스 라이브 → 다음 그랑프리
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { midPlanFor, midTrainingAdvice, midTrainingPreview, midTrainingRound, TRAINING, type Career, type TrainingId,
   circuitType, strategyKey, enduranceOffer, f1Calendar, f1WeekendFor, homeGpEffect, forecastFinish, ovr, radioKey, runRace,
   type Classified, type F1Weekend, type F1WeekendSession,
@@ -85,6 +85,8 @@ export function Weekend() {
     () => (c && live && live.year === c.year ? f1WeekendFor(c, live.plan, live.round, live.radio, live.strategy ?? {}, live.midPlan) : null),
     [c, live?.plan, live?.round, live?.radio, live?.year, live?.strategy, live?.midPlan], // eslint-disable-line react-hooks/exhaustive-deps
   );
+  // 다음 세션·다음 그랑프리로 넘어가면 맨 위(세션 결과·순위)부터 보여 준다(SPEC v0.54, 휴대폰에서 스크롤이 그대로 남던 문제)
+  useEffect(() => { window.scrollTo({ top: 0 }); }, [live?.step, live?.round]);
   const mainRace = wk?.sessions.filter((s) => s.type === 'race').slice(-1)[0];
   const forecast = useMemo(
     () => (mainRace && mainRace.type === 'race' && live?.step === 0 ? forecastFinish({ ...mainRace.input, autoRadio: true }, ME, 80) : null),
@@ -263,6 +265,7 @@ export function Weekend() {
               <LiveRace
                 key={`${live.round}:${session.kind}:${skipped}`}
                 input={session.input}
+                personality={c.driver.personality}
                 realLayout
                 cars={displayCars}
                 colorOfTeam={teamColor}
@@ -293,7 +296,7 @@ export function Weekend() {
           )}
 
           {session?.type === 'race' && !raceDone && (
-            <div className="mt-3 flex justify-end">
+            <div className="mt-3 flex justify-start">
               <Button variant="ghost" size="sm" onClick={() => setSkipAsk(true)}>⏭ 이 {session.kind === 'sprint' ? '스프린트' : '레이스'} 넘기기</Button>
             </div>
           )}
@@ -316,7 +319,7 @@ export function Weekend() {
             </Button>
             {qualiStep > live.step && <Button variant="ghost" onClick={() => updateLive({ step: qualiStep })}>{wk.circuit.sprint ? '스프린트 퀄리파잉으로 바로 가기' : '퀄리파잉으로 바로 가기'}</Button>}
             {!lastStep && <Button variant="ghost" onClick={skipToResult}>레이스 결과로 바로 가기</Button>}
-            <Button variant="ghost" className="ml-auto" onClick={() => beforeMidTraining(c, live)
+            <Button variant="ghost" onClick={() => beforeMidTraining(c, live)
               ? confirmBox.ask(<>시즌 중 훈련 세션(라운드 {midTrainingRound(rounds) + 1})까지 자동으로 진행할까요? 훈련을 고른 뒤 남은 시즌을 계속 자동으로 돌리거나 직접 참여할 수 있습니다.</>, () => updateLive(advanceToMidTraining(c, live)), { confirmLabel: '훈련 세션까지 자동 진행' })
               : confirmBox.ask(<>남은 {rounds - live.round}개 라운드를 자동으로 진행하고 시즌을 마칠까요? 지금까지 고른 무전은 그대로 반영되고, 남은 무전은 엔지니어 추천을 따릅니다.</>, finishLive, { confirmLabel: '남은 시즌 자동 진행' })}>남은 시즌 자동 진행</Button>
           </div>
