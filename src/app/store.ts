@@ -4,7 +4,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 import {
-  applyOffseason, createCareer, getOffseason, renameDuplicateDrivers, resolveEvent, runSeason,
+  applyOffseason, createCareer, f1Calendar, f1WeekendFor, getOffseason, isF1RaceSeason, midPlanFor, midTrainingRound, renameDuplicateDrivers, resolveEvent, runRace, runSeason,
   type Career, type CareerSetup, type EnduranceChoices, type Offer, type RadioOptionId, type SeasonRecord, type StrategyMap, type TrainingId,
 } from '../engine';
 
@@ -58,6 +58,34 @@ export interface LiveSeason {
   /** 전략 회의 선택(라운드:종류 → 전략·출발 타이어)과 확정한 레이스 */
   strategy?: StrategyMap;
   strategyDone?: string[];
+  /** F1 시즌 중 훈련 세션(SPEC v0.48): 고른 2칸, 훈련을 마쳤는지, 자동 진행 중 훈련 때문에 멈췄는지 */
+  midPlan?: TrainingId[];
+  midDone?: boolean;
+  autoPaused?: boolean;
+}
+
+/** 시즌 중 훈련 전까지 남은 라운드를 자동으로 치르고(엔지니어 추천 무전), 훈련 세션 라운드에서 멈춘다 */
+export function advanceToMidTraining(c: Career, l: LiveSeason): LiveSeason {
+  const mid = midTrainingRound(f1Calendar(c).length);
+  const points = { ...l.points };
+  const skipped = [...l.skipped];
+  for (let r = l.round; r < mid; r++) {
+    const wk = f1WeekendFor(c, l.plan, r, l.radio, l.strategy ?? {}, l.midPlan);
+    // 이번 라운드에서 이미 치른 세션은 빼고 남은 레이스만 더한다
+    const from = r === l.round ? l.step : 0;
+    wk.sessions.forEach((s, i) => {
+      if (s.type !== 'race' || i + 1 <= from) return;
+      const out = runRace({ ...s.input, autoRadio: true });
+      if (out.status === 'finished') for (const row of out.classification) points[row.id] = (points[row.id] ?? 0) + row.points;
+    });
+    if (!skipped.includes(r)) skipped.push(r);
+  }
+  return { ...l, round: mid, step: 0, points, skipped, autoPaused: true };
+}
+
+/** 이 라이브 시즌이 아직 시즌 중 훈련 전인가(자동 진행이면 훈련 세션에서 멈춘다) */
+export function beforeMidTraining(c: Career, l: LiveSeason): boolean {
+  return !!midPlanFor(c, l.midPlan) && !l.midDone && l.round <= midTrainingRound(f1Calendar(c).length);
 }
 
 /** 대시보드에서 짜던 훈련 계획(시즌 시작 전에 닫아도 남는다) */
@@ -259,7 +287,7 @@ export const useGame = create<State>()(
         const c = get().career;
         const l = get().live;
         if (!c || !l) return;
-        const { career, record } = runSeason(c, l.plan, l.radio, { endurance: l.endurance, enduranceChoices: l.enduranceChoices, sns: l.sns, strategy: l.strategy });
+        const { career, record } = runSeason(c, l.plan, l.radio, { endurance: l.endurance, enduranceChoices: l.enduranceChoices, sns: l.sns, strategy: l.strategy, midPlan: l.midPlan });
         set({ career: autoInterview(career, get().interviewAuto), lastRecord: record, live: null, screen: 'offseason' });
       },
       startCareer: (setup, signature) =>
@@ -267,6 +295,12 @@ export const useGame = create<State>()(
       playSeason: (plan, endurance = false) => {
         const c = get().career;
         if (!c) return;
+        // F1 레이스 시즌은 시즌 중 훈련 세션에서 멈춘다(SPEC v0.48): 훈련을 고른 뒤 남은 시즌을 자동으로 돌리거나 직접 참여한다
+        if (isF1RaceSeason(c) && midPlanFor(c)) {
+          const l0: LiveSeason = { year: c.year, plan, round: 0, step: 0, radio: {}, points: {}, skipped: [], endurance };
+          set({ live: advanceToMidTraining(c, l0), screen: 'weekend' });
+          return;
+        }
         const { career, record } = runSeason(c, plan, {}, { endurance });
         set({ career: autoInterview(career, get().interviewAuto), lastRecord: record, live: null, screen: 'offseason' });
       },

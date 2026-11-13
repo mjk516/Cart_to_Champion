@@ -1080,3 +1080,39 @@ describe('베테랑 F1 시트 보장 (v0.47)', () => {
     expect(checked).toBeGreaterThan(5);
   });
 });
+
+describe('F1 시즌 중 훈련 세션 (v0.48)', () => {
+  function f1Ready() {
+    for (let seed = 1; seed <= 200; seed++) {
+      let c = createCareer(setup(seed, { wealthTier: 5 }));
+      for (let i = 0; i < 30 && !c.retired; i++) {
+        if (isF1RaceSeason(c)) return c;
+        c = runSeason(c, DEFAULT_POLICY.training(c)).career;
+        for (const card of pendingEventCards(c)) c = resolveEvent(c, card.id, card.options[0]!.id).career;
+        c = applyOffseason(c, DEFAULT_POLICY.offseason(c, getOffseason(c)));
+      }
+    }
+    throw new Error('no F1');
+  }
+  it('F1은 시즌 전 6칸 + 시즌 중 2칸: 훈련 세션 뒤 그랑프리부터 오른 능력치로 달리고, 기록·재생된다', async () => {
+    const { midTrainingRound, midTrainingPreview, f1Calendar: cal } = await import('../src/engine');
+    const c = f1Ready();
+    const plan = DEFAULT_POLICY.training(c);
+    expect(plan).toHaveLength(6);
+    const mid = midTrainingRound(cal(c).length);
+    // 약한 능력치를 크게 올리는 훈련을 찾는다
+    const weak = [...STAT_KEYS].sort((a, b) => c.driver.stats[a] - c.driver.stats[b])[0]!;
+    const prog = (Object.keys(TRAINING) as Array<keyof typeof TRAINING>).sort((a, b) => (TRAINING[b].xp[weak] ?? 0) - (TRAINING[a].xp[weak] ?? 0))[0]!;
+    const midPlan = [prog, prog];
+    const gains = midTrainingPreview(c, midPlan);
+    const before = f1WeekendFor(c, plan, mid - 1, {}, {}, midPlan).cars.find((x) => x.id === PLAYER_ID)!.stats;
+    const after = f1WeekendFor(c, plan, mid, {}, {}, midPlan).cars.find((x) => x.id === PLAYER_ID)!.stats;
+    for (const k of STAT_KEYS) expect(after[k] - before[k]).toBe(gains[k] ?? 0);
+    const out = runSeason(c, plan, {}, { midPlan });
+    expect(out.career.choiceLog.at(-1)).toMatchObject({ kind: 'training', mid: midPlan });
+    expect(out.record.notes.join(' ')).toContain('시즌 중 훈련');
+    // 고르지 않으면 코치 추천으로 하고, 재생해도 같다
+    const auto = runSeason(c, plan);
+    expect((auto.career.choiceLog.at(-1) as { mid?: string[] }).mid).toHaveLength(2);
+  });
+});
