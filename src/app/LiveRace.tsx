@@ -4,6 +4,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  TYRE_NAME,
   type Compound,
   raceChat, rngFor, runRace, type Chat, type RaceChatKey,
   type Classified, type Incident, type LapRecord, type Neutralization, type RaceCar, type RaceInput, type RadioDecision, type RadioOptionId,
@@ -135,33 +136,77 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
   const order = cur?.order ?? grid.map((id, n) => ({ id, gap: n * 0.22 }));
   const hazard = neutral ? at(neutral.at) : null;
   const shownCars = order.filter((e) => !outIds.has(e.id));
-  // 피트레인: 출발·결승선 앞뒤를 트랙 안쪽으로 평행 이동한 선
+  // 서킷 모양에 맞춰 화면을 채운다(SPEC v0.50): 경로 경계 상자 + 여백을 viewBox로. 동그라미·글자는 화면에서 같은 크기로 보이게 z를 곱한다
   const bbox = (() => { try { return pathRef.current?.getBBox() ?? null; } catch { return null; } })();
+  const pad = 46;
+  const vb = bbox && bbox.width > 0 ? { x: bbox.x - pad, y: bbox.y - pad, w: bbox.width + pad * 2, h: bbox.height + pad * 2 } : { x: 0, y: 0, w: W, h: H };
+  const z = Math.max(0.35, Math.min(1, vb.w / W));
+  const u = k * z;
   const cx0 = bbox ? bbox.x + bbox.width / 2 : W / 2, cy0 = bbox ? bbox.y + bbox.height / 2 : H / 2;
-  const laneOff = 20 + 6 * k;
-  const pitLane = (f: number) => {
+  // 피트레인: 출발·결승선 앞뒤를 트랙 안쪽(경로 중심 방향)으로 평행 이동한 선
+  const laneOff = (24 + 4 * k) * z;
+  const normalAt = (f: number) => {
     const a = at(f), b = at(f + 0.003);
     if (!a || !b) return null;
     let nx = -(b.y - a.y), ny = b.x - a.x;
     const len = Math.hypot(nx, ny) || 1;
     nx /= len; ny /= len;
     if ((cx0 - a.x) * nx + (cy0 - a.y) * ny < 0) { nx = -nx; ny = -ny; }
-    return { x: a.x + nx * laneOff, y: a.y + ny * laneOff };
+    return { a, nx, ny };
   };
-  const laneD = L ? Array.from({ length: 19 }, (_, n) => pitLane(PIT_IN + ((PIT_OUT - PIT_IN) * n) / 18)).filter(Boolean).map((q, n) => `${n ? 'L' : 'M'}${q!.x.toFixed(1)} ${q!.y.toFixed(1)}`).join(' ') : '';
+  const pitLane = (f: number) => { const q = normalAt(f); return q ? { x: q.a.x + q.nx * laneOff, y: q.a.y + q.ny * laneOff } : null; };
+  const laneD = L ? Array.from({ length: 25 }, (_, n) => pitLane(PIT_IN + ((PIT_OUT - PIT_IN) * n) / 24)).filter(Boolean).map((q, n) => `${n ? 'L' : 'M'}${q!.x.toFixed(1)} ${q!.y.toFixed(1)}`).join(' ') : '';
   const boxPt = L ? pitLane(PIT_BOX) : null;
+  const inA = L ? at(PIT_IN - 0.015) : null, inB = L ? pitLane(PIT_IN) : null;
+  const outA = L ? pitLane(PIT_OUT) : null, outB = L ? at(PIT_OUT + 0.015) : null;
+  const tag = (q: { x: number; y: number } | null, f: number, dist: number) => { const n = normalAt(f); return q && n ? { x: q.x + n.nx * dist, y: q.y + n.ny * dist } : null; };
   // 랩별 차 간격(피트 랩 앞뒤 간격으로 피트에서 잃은 시간을 구한다)
   const gapAt = (lapNo: number, id: string) => (lapNo <= 0 ? (grid.indexOf(id) * 0.22) : laps[lapNo - 1]?.order.find((o) => o.id === id)?.gap ?? 0);
   const P = Math.min(progress, laps.length);
+  const LANE_IN = PIT_BOX - PIT_IN, LANE_OUT = PIT_OUT - PIT_BOX;
+  const pitStatus: Array<{ id: string; state: 'in' | 'stopped' | 'out'; compound: Compound }> = [];
+  const placed = shownCars.slice().reverse().map((e, n) => {
+    const g = (prevGap.get(e.id) ?? e.gap) * (1 - frac) + e.gap * frac;
+    let pt: { x: number; y: number } | null = at(frac - g / baseLap);
+    let state: 'in' | 'stopped' | 'out' | null = null;
+    let pitting: PitMark | null = null;
+    // 피트 랩 앞뒤: 진입 → 피트레인 저속(절반 속도) → 박스 정지 → 저속 → 출구. 잃는 시간 합 = 피트 랩 앞뒤 간격 차이
+    const pit = pits.find((q) => q.car === e.id && P >= q.lap - 1 && P < q.lap + 1);
+    if (pit) {
+      const gPrev = gapAt(pit.lap - 1, e.id), gNew = gapAt(pit.lap, e.id);
+      const loss = Math.max(0.09 + 0.03, (gNew - gPrev) / baseLap);
+      const stop = Math.max(0.03, loss - (PIT_OUT - PIT_IN));
+      const adv = P - gPrev / baseLap;
+      const e0 = pit.lap + PIT_IN;
+      let pos: number;
+      if (adv < e0) pos = adv;
+      else if (adv < e0 + 2 * LANE_IN) { pos = e0 + (adv - e0) / 2; state = 'in'; }
+      else if (adv < e0 + 2 * LANE_IN + stop) { pos = pit.lap + PIT_BOX; state = 'stopped'; }
+      else if (adv < e0 + 2 * LANE_IN + stop + 2 * LANE_OUT) { pos = pit.lap + PIT_BOX + (adv - (e0 + 2 * LANE_IN + stop)) / 2; state = 'out'; }
+      else pos = adv - (LANE_IN + stop + LANE_OUT);
+      if (state) { pt = pitLane(pos - pit.lap); pitting = pit; pitStatus.push({ id: e.id, state, compound: pit.compound }); } else pt = at(pos);
+    }
+    return { e, n, pt, state, pitting };
+  });
+  const STATE_LABEL = { in: 'PIT IN', stopped: '정지', out: 'PIT OUT' } as const;
   return (
     <div ref={boxRef} className="relative rounded-xl border bg-zinc-950 p-2 transition-colors duration-500" style={{ borderColor: flag.border }} data-flag={phase}>
-      <svg viewBox={`0 0 ${W} ${H}`} className="mx-auto block max-h-[44vh] w-full" role="img" aria-label={`트랙 뷰: ${banner}`}>
-        {flag.glow && <path d={d} fill="none" stroke={flag.glow} strokeOpacity={0.35} strokeWidth={30 * Math.min(k, 1.6)} strokeLinejoin="round" />}
-        <path d={d} fill="none" stroke={flag.track} strokeWidth={18 * Math.min(k, 1.6)} strokeLinejoin="round" style={{ transition: 'stroke 400ms' }} />
-        <path ref={pathRef} d={d} fill="none" stroke={flag.dash} strokeWidth={2} strokeDasharray="6 8" />
+      <svg viewBox={`${vb.x.toFixed(1)} ${vb.y.toFixed(1)} ${vb.w.toFixed(1)} ${vb.h.toFixed(1)}`} className="mx-auto block max-h-[60vh] w-full" role="img" aria-label={`트랙 뷰: ${banner}`}>
+        {flag.glow && <path d={d} fill="none" stroke={flag.glow} strokeOpacity={0.35} strokeWidth={26 * Math.min(k, 1.6) * z} strokeLinejoin="round" />}
+        <path d={d} fill="none" stroke={flag.track} strokeWidth={15 * Math.min(k, 1.6) * z} strokeLinejoin="round" style={{ transition: 'stroke 400ms' }} />
+        <path ref={pathRef} d={d} fill="none" stroke={flag.dash} strokeWidth={2 * z} strokeDasharray={`${6 * z} ${8 * z}`} />
+        {/* 피트레인: 진입·출구 연결선, 박스 */}
+        {laneD && <path d={laneD} fill="none" stroke="#3f3f46" strokeWidth={10 * Math.min(k, 1.6) * z} strokeLinecap="round" />}
+        {laneD && <path d={laneD} fill="none" stroke="#a1a1aa" strokeWidth={1.2 * z} strokeDasharray={`${3 * z} ${4 * z}`} />}
+        {inA && inB && <line x1={inA.x} y1={inA.y} x2={inB.x} y2={inB.y} stroke="#facc15" strokeWidth={3 * u} strokeLinecap="round" />}
+        {outA && outB && <line x1={outA.x} y1={outA.y} x2={outB.x} y2={outB.y} stroke="#4ade80" strokeWidth={3 * u} strokeLinecap="round" />}
+        {(() => { const q = tag(inB, PIT_IN, 16 * u); return q && <text x={q.x} y={q.y + 3 * u} textAnchor="middle" fontSize={9 * u} fontWeight={900} fill="#facc15" stroke="#09090b" strokeWidth={3 * u} paintOrder="stroke">PIT IN</text>; })()}
+        {(() => { const q = tag(outA, PIT_OUT, 16 * u); return q && <text x={q.x} y={q.y + 3 * u} textAnchor="middle" fontSize={9 * u} fontWeight={900} fill="#4ade80" stroke="#09090b" strokeWidth={3 * u} paintOrder="stroke">PIT OUT</text>; })()}
+        {boxPt && <rect x={boxPt.x - 9 * u} y={boxPt.y - 9 * u} width={18 * u} height={18 * u} rx={3 * u} fill="none" stroke="#e4e4e7" strokeWidth={1.5 * u} strokeDasharray={`${3 * u} ${2 * u}`} />}
+        {(() => { const q = tag(boxPt, PIT_BOX, 18 * u); return q && <text x={q.x} y={q.y + 3 * u} textAnchor="middle" fontSize={9 * u} fontWeight={900} fill="#e4e4e7" stroke="#09090b" strokeWidth={3 * u} paintOrder="stroke">BOX</text>; })()}
         {/* 출발·결승선(체커 무늬) */}
         {finishLine && (
-          <g transform={`translate(${finishLine.x} ${finishLine.y})`}>
+          <g transform={`translate(${finishLine.x} ${finishLine.y}) scale(${z})`}>
             {[0, 1, 2, 3, 4, 5].map((n) => (
               <rect key={n} x={-6 + (n % 2) * 6} y={-9 + Math.floor(n / 2) * 6} width={6} height={6} fill={(n + Math.floor(n / 2)) % 2 ? '#18181b' : '#fafafa'} />
             ))}
@@ -170,51 +215,46 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
         {/* 사고 지점 */}
         {hazard && (
           <g transform={`translate(${hazard.x} ${hazard.y})`} aria-label="사고 지점">
-            <circle r={16 * k} fill="none" stroke="#fb923c" strokeWidth={3}><animate attributeName="r" values={`${10 * k};${20 * k};${10 * k}`} dur="1.4s" repeatCount="indefinite" /></circle>
-            <text y={5 * k} textAnchor="middle" fontSize={16 * k}>⚠️</text>
+            <circle r={16 * u} fill="none" stroke="#fb923c" strokeWidth={3 * z}><animate attributeName="r" values={`${10 * u};${20 * u};${10 * u}`} dur="1.4s" repeatCount="indefinite" /></circle>
+            <text y={5 * u} textAnchor="middle" fontSize={16 * u}>⚠️</text>
             {culprits.map((id, n) => (
-              <g key={id} transform={`translate(0 ${(24 + n * 18) * k})`}>
-                <rect x={-30 * k} y={-10 * k} width={60 * k} height={16 * k} rx={4 * k} fill="#dc2626" />
-                <text y={2.5 * k} textAnchor="middle" fontSize={11 * k} fontWeight={900} fill="#fff">{x.codeOf(id)} OUT</text>
+              <g key={id} transform={`translate(0 ${(24 + n * 18) * u})`}>
+                <rect x={-30 * u} y={-10 * u} width={60 * u} height={16 * u} rx={4 * u} fill="#dc2626" />
+                <text y={2.5 * u} textAnchor="middle" fontSize={11 * u} fontWeight={900} fill="#fff">{x.codeOf(id)} OUT</text>
               </g>
             ))}
           </g>
         )}
-        {/* 피트레인과 박스 */}
-        {laneD && <path d={laneD} fill="none" stroke="#52525b" strokeWidth={6 * Math.min(k, 1.6)} strokeLinecap="round" opacity={0.85} />}
-        {boxPt && <text x={boxPt.x} y={boxPt.y + 22 * k} textAnchor="middle" fontSize={9 * k} fontWeight={900} fill="#71717a">PIT LANE</text>}
-        {shownCars.reverse().map((e, n) => {
-          const g = (prevGap.get(e.id) ?? e.gap) * (1 - frac) + e.gap * frac;
-          let pt: { x: number; y: number } | null = at(frac - g / baseLap);
-          let pitting: PitMark | null = null;
-          let stopped = false;
-          // 이 랩이나 다음 랩에 피트스톱이 있으면 피트레인으로 들어가 박스에서 잃은 시간만큼 섰다가 나온다
-          const pit = pits.find((q) => q.car === e.id && P >= q.lap - 1 && P < q.lap + 1);
-          if (pit) {
-            const gPrev = gapAt(pit.lap - 1, e.id), gNew = gapAt(pit.lap, e.id);
-            const d = Math.max(0.04, (gNew - gPrev) / baseLap);
-            const adv = P - gPrev / baseLap;
-            const box = pit.lap + PIT_BOX;
-            const pos = adv < box ? adv : adv < box + d ? box : adv - d;
-            stopped = adv >= box && adv < box + d;
-            const rel = pos - pit.lap;
-            if (rel >= PIT_IN && rel <= PIT_OUT) { pt = pitLane(rel); pitting = pit; } else pt = at(pos);
-          }
+        {placed.map(({ e, n, pt, state, pitting }) => {
           if (!pt) return null;
           const mine = e.id === ME;
-          const leader = n === shownCars.length - 1;
+          const leader = n === placed.length - 1;
+          const labelDy = state ? (pitStatus.findIndex((q) => q.id === e.id) % 2 ? 26 : -15) * u : -13 * u;
           return (
-            <g key={e.id} data-pit={pitting ? (stopped ? 'stopped' : 'lane') : undefined}>
-              {pitting && stopped && <circle cx={pt.x} cy={pt.y} r={(mine ? 13 : 11) * k} fill="none" stroke={TYRE_COLOR[pitting.compound]} strokeWidth={3 * k} />}
-              <circle cx={pt.x} cy={pt.y} r={(mine ? 9 : 7) * k} fill={x.colorOf(e.id)} stroke={mine ? '#ffffff' : '#18181b'} strokeWidth={(mine ? 3 : 2) * k} />
-              {pitting
-                ? <text x={pt.x} y={pt.y + (n % 2 ? 24 : -14) * k} textAnchor="middle" fontSize={11 * k} fontWeight={900} fill="#fbbf24" stroke="#09090b" strokeWidth={3 * k} paintOrder="stroke">{x.codeOf(e.id)} PIT{stopped ? ` → ${pitting.compound}` : ''}</text>
-                : (mine || leader || focus.includes(e.id)) && <text x={pt.x} y={pt.y - 13 * k} textAnchor="middle" fontSize={12 * k} fontWeight={700} fill={mine ? '#fafafa' : '#d4d4d8'}>{x.codeOf(e.id)}</text>}
+            <g key={e.id} data-pit={state ?? undefined}>
+              {state === 'stopped' && pitting && (
+                <circle cx={pt.x} cy={pt.y} r={(mine ? 14 : 12) * u} fill="none" stroke={TYRE_COLOR[pitting.compound]} strokeWidth={3.5 * u}>
+                  <animate attributeName="stroke-opacity" values="1;0.35;1" dur="0.9s" repeatCount="indefinite" />
+                </circle>
+              )}
+              <circle cx={pt.x} cy={pt.y} r={(mine ? 9 : 7) * u} fill={x.colorOf(e.id)} stroke={mine ? '#ffffff' : '#18181b'} strokeWidth={(mine ? 3 : 2) * u} />
+              {state && pitting
+                ? k < 1.4 && <text x={pt.x} y={pt.y + labelDy} textAnchor="middle" fontSize={11 * u} fontWeight={900} fill={state === 'in' ? '#facc15' : state === 'out' ? '#4ade80' : '#fafafa'} stroke="#09090b" strokeWidth={3 * u} paintOrder="stroke">{x.codeOf(e.id)} {STATE_LABEL[state]}{state === 'stopped' ? ` → ${pitting.compound}` : ''}</text>
+                : (mine || leader || focus.includes(e.id)) && <text x={pt.x} y={pt.y + labelDy} textAnchor="middle" fontSize={12 * u} fontWeight={700} fill={mine ? '#fafafa' : '#d4d4d8'}>{x.codeOf(e.id)}</text>}
             </g>
           );
         })}
       </svg>
       <div className="absolute left-2 top-2 max-w-[85%] truncate rounded-lg px-2 py-0.5 text-xs font-black sm:left-3 sm:top-3 sm:px-3 sm:py-1 sm:text-sm" style={{ background: flag.bannerBg, color: flag.bannerFg }}>{banner}</div>
+      {pitStatus.length > 0 && (
+        <div className="mt-1 flex flex-wrap gap-1" aria-label="피트 상황">
+          {pitStatus.map((q) => (
+            <span key={q.id} className={`rounded-md px-1.5 py-0.5 text-[11px] font-black ${q.state === 'in' ? 'bg-yellow-400 text-zinc-900' : q.state === 'out' ? 'bg-green-400 text-zinc-900' : 'bg-white text-zinc-900'}`}>
+              🔧 {x.codeOf(q.id)} {q.state === 'in' ? '피트 인' : q.state === 'out' ? '피트 아웃' : `정지 · 새 타이어 ${TYRE_NAME[q.compound]}`}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
