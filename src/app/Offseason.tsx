@@ -1,7 +1,7 @@
 // 시즌 결과 + 오프시즌(SPEC §5.2, §7, §3.3): 결과 요약, 제안 비교, 계약서 서명, 무소속, 은퇴
 
-import { useMemo, useState } from 'react';
-import {
+import { useEffect, useMemo, useState } from 'react';
+import { type Career, difficultyOf, inMilitary, POST_SLOTS, POST_TRAINING_IDS, postTrainingAdvice, TRAINING, type TrainingId,
   EVENT_CATEGORY_LABEL, LADDER, MANAGER_STYLE_LABEL, managerAdvice, newAchievements, pendingEventCards, seriesLabel, VERDICT_LABEL,
   type ManagerAdvice, type Offer, type OfferAdvice, type SeasonRecord, type F1Standings, type EnduranceResult, enduranceLine, h2hClose, type TeammateH2H, PLAYER_ID,
   draftedNext, seasonChatter,
@@ -294,6 +294,31 @@ function OfferCard({ o, onPick, advice }: { o: Offer; onPick: () => void; advice
   );
 }
 
+/** 시즌 후 훈련(SPEC v0.46): 비용 없는 프로그램 2칸. 제안을 고르거나 시트 없이 넘길 때 함께 적용된다 */
+function PostTrainingCard({ c }: { c: Career }) {
+  const { postPlan, setPostPlan } = useGame();
+  const plan = postPlan && postPlan.year === c.year ? postPlan.plan : postTrainingAdvice(c);
+  useEffect(() => { if (!postPlan || postPlan.year !== c.year) setPostPlan({ year: c.year, plan: postTrainingAdvice(c) }); }, [c.year]); // eslint-disable-line react-hooks/exhaustive-deps
+  const hard = difficultyOf(c) === 'hard';
+  return (
+    <Card title="시즌 후 훈련">
+      <p className="mb-2 text-xs text-zinc-400">한 해 마지막 훈련입니다. 비용이 없는 프로그램만 2칸(멘탈 코칭도 이때는 무료). 다음 시즌 팀을 고르면 함께 적용됩니다.{hard ? ' 어려움: 어떤 훈련을 하느냐가 크게 갈립니다.' : ''}</p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {plan.slice(0, POST_SLOTS).map((id, i) => (
+          <div key={i} className="flex flex-col gap-1">
+            <select aria-label={`시즌 후 훈련 ${i + 1}칸`} value={id}
+              onChange={(e) => setPostPlan({ year: c.year, plan: plan.map((x, j) => (j === i ? (e.target.value as TrainingId) : x)) })}
+              className="rounded-xl border border-white/15 bg-zinc-950 px-2 py-2 text-sm">
+              {POST_TRAINING_IDS.map((t) => <option key={t} value={t}>{TRAINING[t].label}</option>)}
+            </select>
+            <span className="text-[11px] text-zinc-500">{TRAINING[id].desc}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 export function Offseason() {
   const { career: c, lastRecord, signature, firstF1Signature, acceptOffer, skipSeat, retire, chooseEvent } = useGame();
   const confirmBox = useConfirm();
@@ -370,6 +395,7 @@ export function Offseason() {
         <p>팀들의 <b>제안</b>을 비교하세요. 매니저가 제안마다 추천·괜찮음·비추천과 이유를 달아 줍니다. 팀 성능이 높을수록 성적을 내기 쉽고, 시설이 좋을수록 훈련 효율이 오릅니다.</p>
         <p>"계약서 보기"를 눌러 서명하면 다음 시즌 팀이 정해집니다. 시트를 사야 하는 제안은 자금을 확인하세요.</p>
       </Tip>
+      {!pending.length && !inMilitary(c) && !draftedNext(c) && <PostTrainingCard c={c} />}
       <Card title={`${c.year} 오프시즌 · ${c.year + 1} 시즌 제안`}>
         {advice && <ManagerCard a={advice} />}
         {off.released && <div className="mb-3 rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm font-bold text-red-200">방출 통보를 받았습니다.</div>}

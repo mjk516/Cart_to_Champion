@@ -3,7 +3,7 @@
 
 import { type Career } from './careerCore';
 import { WEALTH_TIERS } from './creation';
-import { recommendedPlan, TRAINING, TRAINING_SLOTS, TRAINING_SLOTS_RESERVE, type TrainingId } from './growth';
+import { preSlotsOf, recommendedPlan, TRAINING, TRAINING_SLOTS, TRAINING_SLOTS_RESERVE, type TrainingId } from './growth';
 import { fictionalName } from './names';
 import { rngFor } from './rng';
 import { STAT_KEYS, type StatKey } from './types';
@@ -122,6 +122,27 @@ export function coachAdvice(c: Career): CoachAdvice {
 
   const bonus = 1 + 0.02 * (staff.coach.skill + staff.trainer.skill) / 2;
   return { staff, plan, coachLines, trainerLines, bonus: Math.round(bonus * 1000) / 1000 };
+}
+
+/** 시즌 후 훈련 추천(SPEC v0.46): 압박이 높으면 멘탈 코칭, 나머지는 약한 쪽(피드백 → 데이터 분석, 타이어·일관성 → 롱런) */
+export function postTrainingAdvice(c: Career): TrainingId[] {
+  const s = c.driver.stats;
+  const out: TrainingId[] = [];
+  if (c.media.pressure >= c.driver.hidden.pressureResist - 10) out.push('mental');
+  const dataNeed = 100 - s.feedback;
+  const longNeed = 100 - (s.tyre + s.consistency) / 2;
+  const order: TrainingId[] = dataNeed >= longNeed ? ['data', 'longrun'] : ['longrun', 'data'];
+  for (const id of order) if (out.length < 2) out.push(id);
+  return out;
+}
+
+/** 시즌 전 칸이 코치 조언의 시즌 전 칸과 같은가(압박 실수·과훈련 면제 판단, SPEC v0.46) */
+export function followsCoachPre(c: Career, plan: TrainingId[]): boolean {
+  const slots = slotsOf(c);
+  const pre = preSlotsOf(slots);
+  const want = coachAdvice(c).plan.slice(0, pre);
+  const p = plan.slice(0, pre);
+  return p.length === want.length && [...p].sort().join(',') === [...want].sort().join(',');
 }
 
 /** 계획이 코치 조언과 같은가(칸 순서는 상관없다) */

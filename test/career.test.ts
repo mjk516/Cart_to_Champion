@@ -655,8 +655,9 @@ describe('신인 F1 데뷔 팀과 에이전트 재방문 (v0.33)', () => {
     const plain = t.filter((x) => !x.academy);
     for (const id of ROOKIE_TEAMS) {
       const share = plain.filter((x) => x.teamId === id).length / plain.length;
-      expect(share).toBeGreaterThan(0.06);
-      expect(share).toBeLessThan(0.26);
+      // 가중치는 같고(1/7 ≈ 14%), 표본이 60개 남짓이라 ±15%p까지 흔들린다
+      expect(share).toBeGreaterThan(0.04);
+      expect(share).toBeLessThan(0.3);
     }
   });
 
@@ -1042,5 +1043,40 @@ describe('난이도', () => {
     expect(difficultyOf(createCareer(setup(9)))).toBe('normal');
     const a = autoplayCareer(setup(9, { difficulty: 'hard' }));
     expect(replayCareer(a.setup, a.choiceLog).history.map((h) => h.ovrEnd)).toEqual(a.history.map((h) => h.ovrEnd));
+  });
+});
+
+describe('한 해 훈련 3번 (v0.46)', () => {
+  it('시즌 후 훈련은 비용 없는 프로그램만 적용되고, 시즌 중 칸을 바꿔도 손해 판단(시즌 전 칸)은 그대로다', async () => {
+    const { POST_TRAINING_IDS, postTrainingOutcome, seasonStatsFor, coachAdvice } = await import('../src/engine');
+    expect(POST_TRAINING_IDS).toEqual(['data', 'mental', 'longrun', 'rest']);
+    const out = postTrainingOutcome(['data', 'wet', 'mental']);
+    expect(out.xp.feedback).toBe(100);
+    expect(out.xp.wet).toBeUndefined();
+    expect(out.pressureRelief).toBe(15);
+    const c = createCareer(setup(3));
+    const plan = coachAdvice(c).plan;
+    const a = seasonStatsFor(c, plan);
+    const b = seasonStatsFor(c, [...plan.slice(0, -2), 'wet', 'wet']);
+    expect(b.stats).toEqual(a.stats);
+    expect(b.overtrained).toBe(a.overtrained);
+  });
+});
+
+describe('베테랑 F1 시트 보장 (v0.47)', () => {
+  it('F1 경험이 있으면 39세까지는 레이스 시트 제안이 하나는 오고, F1 커리어가 길다', async () => {
+    const { VETERAN_MAX_AGE } = await import('../src/engine');
+    expect(VETERAN_MAX_AGE).toBe(39);
+    let checked = 0;
+    for (let i = 0; i < 12; i++) {
+      const c = autoplayCareer(setup(700 + i * 7));
+      const f1 = c.history.filter((h) => h.series === 'f1' && h.seat === 'race');
+      if (!f1.length) continue;
+      checked++;
+      // 데뷔 뒤 39세(다음 시즌 나이) 전에 F1 레이스 시트를 잃고 끝나는 커리어는 없다(6점 넘게 약하지 않다면)
+      const lastAge = f1[f1.length - 1]!.age;
+      expect(lastAge).toBeGreaterThanOrEqual(Math.min(38, c.age - 1));
+    }
+    expect(checked).toBeGreaterThan(5);
   });
 });

@@ -1,7 +1,7 @@
 // 오프시즌(SPEC §7·§2.1): 제안 만들기, 선택 반영, 팀·캘린더·AI 드라이버 세계 진행.
 
 import { josa } from './josa';
-import { CALENDAR_2026_SLOTS, type Career, HOME_MARKET_BONUS, type Offer, type Offseason, type OffseasonChoice, PRINCIPAL_CHANGE_CHANCE, draftedNext, MILITARY_SEASONS, ROOKIE_GUARANTEE_POS, ROOKIE_GUARANTEE_POS_HOME, hasHomeGp } from './careerCore';
+import { CALENDAR_2026_SLOTS, type Career, HOME_MARKET_BONUS, type Offer, type Offseason, type OffseasonChoice, PRINCIPAL_CHANGE_CHANCE, draftedNext, inMilitary, MILITARY_SEASONS, ROOKIE_GUARANTEE_POS, ROOKIE_GUARANTEE_POS_HOME, hasHomeGp } from './careerCore';
 import { MAJOR_FLOOR, OTHERS_CAP, newRookie, superLicencePoints } from './season';
 import { clamp, juniorTeams, lerp } from './careerInternal';
 import { WEALTH_TIERS } from './creation';
@@ -12,7 +12,8 @@ import { int, normal, pick, rngFor, type Rng } from './rng';
 import { ACADEMIES, nextSeries, SERIES, seriesLabel, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, type SeriesId } from './series';
 import { firstNameOf } from './names';
 import { runOffseason } from './teams';
-import { STAT_KEYS } from './types';
+import { STAT_KEYS, type StatKey, type Stats } from './types';
+import { ageCurve, applyXp, difficultyOf, growthWindow, postTrainingOutcome, TRAINING, trainEffect } from './growth';
 
 // ── 오프시즌 ────────────────────────────────────────────────────────
 interface SeatPlan {
@@ -71,6 +72,11 @@ function seatPlan(c: Career): SeatPlan {
 }
 
 /** 처음 F1에 올라가는 신인이 레이스 시트를 받는 팀(SPEC §7 v0.33). 이 안에서는 확률이 같다 */
+const STAT_SHORT: Record<StatKey, string> = { pace: '페이스', racecraft: '레이스크래프트', consistency: '일관성', wet: '우천', tyre: '타이어 관리', feedback: '피드백' };
+
+/** 베테랑 보장 나이(이 나이까지 F1 레이스 시트 하나는 받는다, SPEC v0.47) */
+export const VETERAN_MAX_AGE = 39;
+
 export const ROOKIE_TEAMS = ['racing_bulls', 'haas', 'williams', 'audi', 'aston_martin', 'alpine', 'cadillac'] as const;
 /** 이 아카데미 소속이면 해당 팀으로 올라갈 확률이 오른다(가중치 ×ROOKIE_ACADEMY_WEIGHT). 다른 아카데미는 반영하지 않는다 */
 export const ROOKIE_ACADEMY_TEAM: Record<string, string> = { 'Red Bull Junior Team': 'racing_bulls', 'Ferrari Driver Academy': 'haas' };
@@ -288,6 +294,24 @@ export function getOffseason(c: Career): Offseason {
         });
       }
     }
+    // 베테랑 보장(SPEC v0.47): F1 경험이 있고 39세 이하인데 레이스 제안이 하나도 없으면,
+    // 하위 6팀 중 가장 약한 드라이버를 둔 팀이 경험을 사서 자리를 내준다(그 드라이버보다 6점 넘게 약하면 없음)
+    const anyRace = offers.some((o) => o.series === 'f1' && o.seat === 'race');
+    if (!rookie && f1Eligible && c.f1Debut !== null && current === 'f1' && nextAge <= VETERAN_MAX_AGE && !anyRace) {
+      const lower = sortedTeams.slice(-6);
+      const target = lower
+        .flatMap((t) => c.world.drivers.filter((d) => d.teamId === t.id && !d.retired && !plan.retiring.includes(d.id) && !plan.released.includes(d.id)).map((d) => ({ t, d })))
+        .sort((a, b) => ovr(a.d.stats) - ovr(b.d.stats))[0];
+      if (target && ovr(c.driver.stats) >= ovr(target.d.stats) - 6) {
+        const years = Math.max(1, Math.min(maxYears(nextAge), nextAge <= 34 ? 2 : 1));
+        offers.push({
+          id: `f1:${target.t.id}`, series: 'f1', team: target.t.name, teamId: target.t.id, seat: 'race', endYear: c.year + years,
+          salary: Math.round(clamp(1_000_000 + (rating - 76) * 900_000, 900_000, 8_000_000) * (0.6 + target.t.budget * 0.6)), seatCost: 0,
+          teamQuality: target.t.quality, facility: target.t.budget, years, affordable: true, displaceDriverId: target.d.id,
+          note: `F1 레이스 시트 · ${josa(target.t.name, '이/가')} 경험을 높이 사 ${target.d.name}의 자리를 내줬다`,
+        });
+      }
+    }
   }
 
   // 아카데미
@@ -401,6 +425,20 @@ export function applyOffseason(input: Career, choice: OffseasonChoice): Career {
     c.retired = true;
     if (c.contract?.series === 'f1' && c.contract.seat === 'race') c.contract = null;
     return c;
+  }
+
+  // 시즌 후 훈련(SPEC v0.46): 비용 없는 프로그램만. 군 복무 중에는 없다
+  if (choice.postTraining?.length && !inMilitary(input)) {
+    const post = postTrainingOutcome(choice.postTraining);
+    const eff = ageCurve(c.age, c.driver.hidden.growthType);
+    const gains: Partial<Stats> = {};
+    for (const k of STAT_KEYS) if (post.xp[k]) gains[k] = (post.xp[k] ?? 0) * eff * trainEffect(c.driver.stats, k, difficultyOf(c));
+    const raised = applyXp(c.driver.stats, c.driver.xp, gains, c.driver.hidden.potential, growthWindow(difficultyOf(c)));
+    if (post.pressureRelief) c.media.pressure = Math.max(0, c.media.pressure - post.pressureRelief);
+    const lastRec = c.history[c.history.length - 1];
+    const ups = Object.entries(raised).map(([k, v]) => `${STAT_SHORT[k as StatKey]} +${v}`);
+    const line = `시즌 후 훈련(${choice.postTraining.slice(0, 2).map((id) => TRAINING[id].label).join(', ')})${ups.length ? `: ${ups.join(', ')}` : ''}${post.pressureRelief ? ` · 압박 −${post.pressureRelief}` : ''}`;
+    if (lastRec) lastRec.notes = [...lastRec.notes, line];
   }
 
   if (choice.joinAcademy && off.academyOffer) c.academy = off.academyOffer;
