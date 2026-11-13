@@ -250,7 +250,6 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
   const maxH = typeof window !== 'undefined' ? window.innerHeight * 0.62 : 500;
   const shown = Math.min(cw / vb.w, maxH / vb.h);
   const u = Math.max(1 / shown, vb.w / 640) * (portrait ? 1.15 : 1);
-  const showAllTags = k < 1.4;
   const STATE_LABEL = { in: 'PIT IN', stopped: '정지', out: 'PIT OUT' } as const;
   const trackGlow = flag.glow ?? '#ef4444';
   // 바닥 격자·트랙은 매 프레임 다시 만들지 않는다
@@ -263,23 +262,6 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
       <path d={geo.trackD} fill="none" stroke="#e5e7eb" strokeOpacity={0.55} strokeWidth={0.9 * u} strokeDasharray={`${5 * u} ${5 * u}`} strokeLinejoin="round" />
     </g>
   ), [geo, u, phase]); // eslint-disable-line react-hooks/exhaustive-deps
-  // 태그 겹침 피하기: 왼쪽부터 놓으며 같은 줄에서 앞 태그와 겹치면 한 줄 위로(최대 6줄)
-  const tagLevel = new Map<string, number>();
-  {
-    const lastRight: number[] = [];
-    const items = placed.filter((c) => c.pt && (c.e.id === ME || c.rank === 0 || (!c.parked && (showAllTags || focus.includes(c.e.id) || !!c.state)))).map((c) => {
-      const label = c.state && c.pitting ? `${x.codeOf(c.e.id)} ${STATE_LABEL[c.state]}${c.state === 'stopped' ? ` → ${c.pitting.compound}` : ''}` : `${c.rank + 1} | ${x.codeOf(c.e.id)}`;
-      const tw = (label.length * 5.6 + 8) * u;
-      return { id: c.e.id, x0: c.pt!.x - tw / 2, x1: c.pt!.x + tw / 2 };
-    }).sort((a, b) => a.x0 - b.x0);
-    for (const it of items) {
-      let lv = 0;
-      while (lv < 6 && (lastRight[lv] ?? -Infinity) > it.x0 - 2 * u) lv++;
-      lv = Math.min(lv, 5);
-      lastRight[lv] = it.x1;
-      tagLevel.set(it.id, lv);
-    }
-  }
   return (
     <div ref={boxRef} className="relative overflow-hidden rounded-xl border transition-colors duration-500" style={{ borderColor: flag.border, background: 'radial-gradient(120% 90% at 50% 100%, #111827 0%, #05070d 70%)' }} data-flag={phase}>
       {/* 길이 재기용 원래 경로(보이지 않음) */}
@@ -323,11 +305,12 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
         {drawOrder.map(({ e, rank, pt, state, pitting, parked }) => {
           const p = pt!;
           const mine = e.id === ME;
-          const tagged = mine || rank === 0 || (!parked && (showAllTags || focus.includes(e.id) || !!state));
+          // 모든 차에 태그를 바로 위에 단다(겹쳐도 된다, SPEC v0.53). 결승선을 지나 늘어선 차는 나·우승자만
+          const tagged = mine || rank === 0 || !parked;
           const r = (mine ? 5.5 : 4.5) * u * p.s;
           const label = state && pitting ? `${x.codeOf(e.id)} ${STATE_LABEL[state]}${state === 'stopped' ? ` → ${pitting.compound}` : ''}` : `${rank + 1} | ${x.codeOf(e.id)}`;
           const tw = (label.length * 5.6 + 8) * u;
-          const lift = (16 + (tagLevel.get(e.id) ?? 0) * 13) * u;
+          const lift = 13 * u;
           return (
             <g key={e.id} data-pit={state ?? undefined}>
               {state === 'stopped' && pitting && (
@@ -337,7 +320,7 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
               )}
               <circle cx={p.x} cy={p.y} r={r * 2.1} fill={x.colorOf(e.id)} opacity={0.22} />
               <circle cx={p.x} cy={p.y} r={r} fill={x.colorOf(e.id)} stroke={mine ? '#ffffff' : '#0b0f19'} strokeWidth={(mine ? 2 : 1.2) * u} />
-              {tagged && (!state || showAllTags) && (
+              {tagged && (
                 <g>
                   <line x1={p.x} y1={p.y - r} x2={p.x} y2={p.y - lift + 6 * u} stroke={mine ? '#ffffff' : '#9ca3af'} strokeOpacity={0.6} strokeWidth={0.8 * u} />
                   <rect x={p.x - tw / 2} y={p.y - lift - 6 * u} width={tw} height={12 * u} rx={2 * u}
