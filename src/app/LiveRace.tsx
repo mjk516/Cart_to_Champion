@@ -4,6 +4,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  type Compound,
   raceChat, rngFor, runRace, type Chat, type RaceChatKey,
   type Classified, type Incident, type LapRecord, type Neutralization, type RaceCar, type RaceInput, type RadioDecision, type RadioOptionId,
 } from '../engine';
@@ -92,11 +93,18 @@ const TRACK_FLAG: Record<LapRecord['phase'], { track: string; dash: string; bord
  * 트랙 뷰: 레이스 내내 보인다. progress는 지금까지 달린 랩 수(소수). 차 위치는 앞 랩과 이번 랩의
  * 선두와의 간격을 이어 그려 랩 경계에서도 끊기지 않는다.
  */
-function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap, banner, focus, neutral, x, outIds = new Set<string>(), culprits = [] }: {
+/** 피트스톱(SPEC v0.49): 이 랩에 들어오는 차와 새 타이어 */
+interface PitMark { car: string; lap: number; compound: Compound }
+
+/** 피트레인 구간(출발·결승선 기준 랩 비율): 진입 −6%, 박스 −1.2%, 출구 +3% */
+const PIT_IN = -0.06, PIT_BOX = -0.012, PIT_OUT = 0.03;
+
+function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap, banner, focus, neutral, x, outIds = new Set<string>(), culprits = [], pits = [] }: {
   circuitId: string; realLayout: boolean; laps: LapRecord[]; grid: string[]; progress: number; phase: LapRecord['phase']; baseLap: number;
   banner: string; focus: string[]; neutral: Neutralization | null; x: Ctx;
   /** 리타이어한 차(트랙에서 뺀다) */ outIds?: Set<string>;
   /** 지금 깃발을 부른 차(사고 지점에 OUT 표시) */ culprits?: string[];
+  /** 피트스톱(차가 피트레인으로 들어가 박스에 섰다 나온다) */ pits?: PitMark[];
 }) {
   const W = 640, H = 300;
   const pathRef = useRef<SVGPathElement>(null);
@@ -127,6 +135,24 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
   const order = cur?.order ?? grid.map((id, n) => ({ id, gap: n * 0.22 }));
   const hazard = neutral ? at(neutral.at) : null;
   const shownCars = order.filter((e) => !outIds.has(e.id));
+  // 피트레인: 출발·결승선 앞뒤를 트랙 안쪽으로 평행 이동한 선
+  const bbox = (() => { try { return pathRef.current?.getBBox() ?? null; } catch { return null; } })();
+  const cx0 = bbox ? bbox.x + bbox.width / 2 : W / 2, cy0 = bbox ? bbox.y + bbox.height / 2 : H / 2;
+  const laneOff = 20 + 6 * k;
+  const pitLane = (f: number) => {
+    const a = at(f), b = at(f + 0.003);
+    if (!a || !b) return null;
+    let nx = -(b.y - a.y), ny = b.x - a.x;
+    const len = Math.hypot(nx, ny) || 1;
+    nx /= len; ny /= len;
+    if ((cx0 - a.x) * nx + (cy0 - a.y) * ny < 0) { nx = -nx; ny = -ny; }
+    return { x: a.x + nx * laneOff, y: a.y + ny * laneOff };
+  };
+  const laneD = L ? Array.from({ length: 19 }, (_, n) => pitLane(PIT_IN + ((PIT_OUT - PIT_IN) * n) / 18)).filter(Boolean).map((q, n) => `${n ? 'L' : 'M'}${q!.x.toFixed(1)} ${q!.y.toFixed(1)}`).join(' ') : '';
+  const boxPt = L ? pitLane(PIT_BOX) : null;
+  // 랩별 차 간격(피트 랩 앞뒤 간격으로 피트에서 잃은 시간을 구한다)
+  const gapAt = (lapNo: number, id: string) => (lapNo <= 0 ? (grid.indexOf(id) * 0.22) : laps[lapNo - 1]?.order.find((o) => o.id === id)?.gap ?? 0);
+  const P = Math.min(progress, laps.length);
   return (
     <div ref={boxRef} className="relative rounded-xl border bg-zinc-950 p-2 transition-colors duration-500" style={{ borderColor: flag.border }} data-flag={phase}>
       <svg viewBox={`0 0 ${W} ${H}`} className="mx-auto block max-h-[44vh] w-full" role="img" aria-label={`트랙 뷰: ${banner}`}>
@@ -154,16 +180,36 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
             ))}
           </g>
         )}
+        {/* 피트레인과 박스 */}
+        {laneD && <path d={laneD} fill="none" stroke="#52525b" strokeWidth={6 * Math.min(k, 1.6)} strokeLinecap="round" opacity={0.85} />}
+        {boxPt && <text x={boxPt.x} y={boxPt.y + 22 * k} textAnchor="middle" fontSize={9 * k} fontWeight={900} fill="#71717a">PIT LANE</text>}
         {shownCars.reverse().map((e, n) => {
           const g = (prevGap.get(e.id) ?? e.gap) * (1 - frac) + e.gap * frac;
-          const pt = at(frac - g / baseLap);
+          let pt: { x: number; y: number } | null = at(frac - g / baseLap);
+          let pitting: PitMark | null = null;
+          let stopped = false;
+          // 이 랩이나 다음 랩에 피트스톱이 있으면 피트레인으로 들어가 박스에서 잃은 시간만큼 섰다가 나온다
+          const pit = pits.find((q) => q.car === e.id && P >= q.lap - 1 && P < q.lap + 1);
+          if (pit) {
+            const gPrev = gapAt(pit.lap - 1, e.id), gNew = gapAt(pit.lap, e.id);
+            const d = Math.max(0.04, (gNew - gPrev) / baseLap);
+            const adv = P - gPrev / baseLap;
+            const box = pit.lap + PIT_BOX;
+            const pos = adv < box ? adv : adv < box + d ? box : adv - d;
+            stopped = adv >= box && adv < box + d;
+            const rel = pos - pit.lap;
+            if (rel >= PIT_IN && rel <= PIT_OUT) { pt = pitLane(rel); pitting = pit; } else pt = at(pos);
+          }
           if (!pt) return null;
           const mine = e.id === ME;
           const leader = n === shownCars.length - 1;
           return (
-            <g key={e.id}>
+            <g key={e.id} data-pit={pitting ? (stopped ? 'stopped' : 'lane') : undefined}>
+              {pitting && stopped && <circle cx={pt.x} cy={pt.y} r={(mine ? 13 : 11) * k} fill="none" stroke={TYRE_COLOR[pitting.compound]} strokeWidth={3 * k} />}
               <circle cx={pt.x} cy={pt.y} r={(mine ? 9 : 7) * k} fill={x.colorOf(e.id)} stroke={mine ? '#ffffff' : '#18181b'} strokeWidth={(mine ? 3 : 2) * k} />
-              {(mine || leader || focus.includes(e.id)) && <text x={pt.x} y={pt.y - 13 * k} textAnchor="middle" fontSize={12 * k} fontWeight={700} fill={mine ? '#fafafa' : '#d4d4d8'}>{x.codeOf(e.id)}</text>}
+              {pitting
+                ? <text x={pt.x} y={pt.y + (n % 2 ? 24 : -14) * k} textAnchor="middle" fontSize={11 * k} fontWeight={900} fill="#fbbf24" stroke="#09090b" strokeWidth={3 * k} paintOrder="stroke">{x.codeOf(e.id)} PIT{stopped ? ` → ${pitting.compound}` : ''}</text>
+                : (mine || leader || focus.includes(e.id)) && <text x={pt.x} y={pt.y - 13 * k} textAnchor="middle" fontSize={12 * k} fontWeight={700} fill={mine ? '#fafafa' : '#d4d4d8'}>{x.codeOf(e.id)}</text>}
             </g>
           );
         })}
@@ -341,6 +387,8 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
     }
   }, [finished]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 피트스톱: 트랙 뷰 피트레인 연출과 타이밍 타워 PIT 표시(SPEC v0.49)
+  const pitMarks: PitMark[] = outcome.incidents.flatMap((i) => (i.type === 'pit' ? [{ car: i.car, lap: i.lap, compound: i.compound }] : []));
   // 타이밍 타워는 다 달린 랩 기준
   const rec = cur > 0 ? laps[cur - 1] : null;
   const order = rec ? rec.order : input.grid.map((id) => ({ id, gap: 0, compound: 'M' as const, stops: 0 }));
@@ -391,7 +439,7 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
       {/* 트랙 뷰는 스크롤해도 화면 위에 붙어 있다 */}
       <div className="sticky z-30 -mx-1 bg-zinc-900 px-1 pb-1 pt-1" style={{ top: navH }}>
         <TrackView circuitId={input.circuit.id} realLayout={realLayout} laps={laps} grid={input.grid} progress={p} phase={phase} baseLap={input.circuit.baseLap}
-          banner={banner} focus={focus} neutral={neutral} x={x} />
+          banner={banner} focus={focus} neutral={neutral} x={x} pits={pitMarks} />
         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
           <Pill tone="zinc">L{shownLap} / {outcome.totalLaps}</Pill>
           {phase !== 'green' && <Pill tone={phase === 'red' ? 'red' : 'amber'}>{phase === 'sc' ? '세이프티카' : phase === 'vsc' ? 'VSC' : '레드 플래그'}</Pill>}
@@ -438,7 +486,9 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
               <span className="w-12">{x.codeOf(e.id)}</span>
               <span className="flex-1 text-right tabular-nums text-zinc-300">{i === 0 ? '선두' : `+${e.gap.toFixed(1)}`}</span>
               <span className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-black text-zinc-900" style={{ background: TYRE_COLOR[e.compound] }}>{e.compound}</span>
-              <span className="w-10 text-right text-xs text-zinc-500">{e.stops}스톱</span>
+              {pitMarks.some((q) => q.car === e.id && q.lap === cur) && !finished
+                ? <span className="w-10 rounded bg-amber-400 text-center text-[11px] font-black text-zinc-900" aria-label={`${x.codeOf(e.id)} 피트인`}>PIT</span>
+                : <span className="w-10 text-right text-xs text-zinc-500">{e.stops}스톱</span>}
             </li>
           ))}
           {outs.map((o) => (
