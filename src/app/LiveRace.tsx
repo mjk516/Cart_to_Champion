@@ -174,7 +174,7 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
 }
 
 function RadioModal({ decision, onPick }: { decision: RadioDecision; onPick: (o: RadioOptionId) => void }) {
-  const title = { sc: '세이프티카 출동!', vsc: 'VSC 발령!', rain_start: '비가 오기 시작했다.', rain_stop: '트랙이 마르고 있다.', pit_window: '피트 창이 열렸다.' }[decision.trigger];
+  const title = { sc: '세이프티카 출동!', vsc: 'VSC 발령!', rain_start: '비가 오기 시작했다.', rain_stop: '트랙이 마르고 있다.', pit_window: '피트 창이 열렸다.', red_flag: '레드 플래그! 세션 중단.' }[decision.trigger];
   const n = decision.neutral;
   return (
     <div className="rounded-xl border border-racing/60 bg-racing/10 p-4" role="dialog" aria-label="엔지니어 무전">

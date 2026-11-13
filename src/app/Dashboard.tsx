@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  DIFFICULTY_INFO, difficultyOf,
+  DIFFICULTY_INFO, difficultyOf, growthWindow, preSlotsOf,
   circuitById, coachAdvice, enduranceOdds, enduranceOffer, followsCoach, inMilitary, seasonChatter, isF1RaceSeason, managerOf, MANAGER_STYLE_LABEL, ovr, PERSONALITIES, recommendedPlan, seriesLabel, STAT_KEYS, superLicencePoints, TRAINING, TRAINING_SLOTS,
   TRAINING_SLOTS_RESERVE, xpNeeded, type TrainingId,
 } from '../engine';
@@ -130,7 +130,7 @@ export function Dashboard() {
       <Card title="능력치">
         <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
           {STAT_KEYS.map((k) => {
-            const need = xpNeeded(d.stats[k], d.hidden.potential);
+            const need = xpNeeded(d.stats[k], d.hidden.potential, growthWindow(difficultyOf(c)));
             return (
               <div key={k}>
                 <div className="flex justify-between text-sm"><span>{STAT_LABELS[k]}</span><b>{d.stats[k]}</b></div>
@@ -161,7 +161,7 @@ export function Dashboard() {
         <p>시즌을 시작하기 전에 <b>훈련 계획</b> 칸을 채우세요. 프로그램마다 오르는 능력치와 비용이 다르고, 휴식을 빼면 컨디션이 떨어집니다. 잘 모르겠으면 "약점 보완"을 누르면 추천 계획이 채워집니다.</p>
         <p>준비가 되면 아래의 시즌 진행 버튼을 누르세요. 시즌이 끝나면 오프시즌으로 넘어가 다음 팀을 고릅니다.</p>
       </Tip>
-      <Card title={`훈련 계획 (${plan.length}칸)`} right={
+      <Card title={`훈련 계획 · 시즌 전 ${preSlotsOf(plan.length)}칸 + 시즌 중 2칸`} right={
         <div className="flex gap-1">
           {MODES.map((m) => (
             <button key={m.id} onClick={() => setPlan(recommendedPlan(d.stats, m.id, slots, d.focus))} className="rounded-lg border border-white/15 px-2 py-1 text-xs hover:bg-white/5">{m.label}</button>
@@ -198,9 +198,14 @@ export function Dashboard() {
             </div>
           );
         })()}
+        {difficultyOf(c) === 'hard' && <p className="mb-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-200">어려움: 어떤 훈련을 하느냐가 크게 갈립니다. 평균보다 낮은 능력치를 키우는 훈련은 효과 ×1.4, 높은 능력치는 ×0.3이고, 능력치가 잠재력에 가까워지는 훨씬 전부터 잘 안 오릅니다.</p>}
         <div className="grid gap-2 sm:grid-cols-3">
           {plan.map((id, i) => (
             <div key={i} className="flex flex-col gap-1">
+              {(i === 0 || i === preSlotsOf(plan.length)) && (
+                <div className="col-span-full text-xs font-bold text-zinc-300 sm:hidden">{i === 0 ? '시즌 전 훈련' : '시즌 중 훈련 · 5월(여름 휴식기 전)'}</div>
+              )}
+              <span className="hidden text-[11px] font-bold text-zinc-400 sm:block">{i < preSlotsOf(plan.length) ? `시즌 전 ${i + 1}` : `시즌 중 ${i - preSlotsOf(plan.length) + 1} · 5월`}</span>
               <select aria-label={`훈련 ${i + 1}칸`} value={id} onChange={(e) => setPlan(plan.map((x, j) => (j === i ? (e.target.value as TrainingId) : x)))}
                 className="rounded-xl border border-white/15 bg-zinc-950 px-2 py-2 text-sm">
                 {(Object.keys(TRAINING) as TrainingId[]).map((t) => (

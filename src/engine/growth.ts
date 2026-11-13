@@ -20,9 +20,9 @@ const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x
 
 /** 난이도별 잠재력 보정(SPEC v0.45): 쉬움 +2~3(반반, 시드로), 어려움 −2, 보통은 그대로. 1점 차이가 챔피언 확률을 크게 바꿔서 쉬움은 반반으로 맞춘다 */
 export const DIFFICULTY_INFO: Record<Difficulty, { label: string; desc: string; champion: string }> = {
-  easy: { label: '쉬움', desc: '잠재력 한도가 조금 높다. 월드 챔피언의 꿈을 맛보고 싶다면', champion: '약 30%' },
-  normal: { label: '보통', desc: '기본 밸런스. 노력과 운, 좋은 팀이 모두 맞아야 챔피언', champion: '약 13%' },
-  hard: { label: '어려움', desc: '잠재력 한도가 낮다. 실제 F1처럼 챔피언은 극소수만', champion: '약 5%' },
+  easy: { label: '쉬움', desc: '키울 수 있는 능력치가 높다. 월드 챔피언의 꿈을 맛보고 싶다면', champion: '약 40%' },
+  normal: { label: '보통', desc: '기본 밸런스. 노력과 운, 좋은 팀이 모두 맞아야 챔피언', champion: '약 20%' },
+  hard: { label: '어려움', desc: '어떤 훈련을 하느냐에 따라 성장이 크게 갈린다. 실제 F1처럼 챔피언은 극소수만', champion: '약 6%' },
 };
 
 /** 커리어의 난이도(이전 저장 파일은 보통) */
@@ -31,8 +31,9 @@ export function difficultyOf(c: { setup?: { difficulty?: Difficulty } }): Diffic
 }
 
 export function difficultyPotential(seed: number, difficulty: Difficulty): number {
-  if (difficulty === 'easy') return rngFor(seed, 'difficulty')() < 0.5 ? 2 : 3;
-  return difficulty === 'hard' ? -2 : 0;
+  // v0.46: 쉬움·보통은 키울 수 있는 능력치를 올렸다(보통 +1, 쉬움 +3~4)
+  if (difficulty === 'easy') return rngFor(seed, 'difficulty')() < 0.5 ? 3 : 4;
+  return difficulty === 'hard' ? -1 : 1;
 }
 
 export function generateHidden(seed: number, personality: Personality, difficulty: Difficulty = 'normal'): Hidden {
@@ -101,6 +102,38 @@ export const TRAINING: Record<TrainingId, TrainingProgram> = {
 export const TRAINING_SLOTS = 6;
 export const TRAINING_SLOTS_RESERVE = 8;
 
+/**
+ * 한 해 훈련 3번(SPEC v0.46): 시즌 전 + 시즌 중 1번(여름 휴식기 전) + 시즌 후.
+ * 시즌 계획(6칸, 리저브 8칸) 중 마지막 2칸이 시즌 중 훈련이다. 시즌 후 훈련은 비용 없는 프로그램만 2칸.
+ */
+export const MID_SLOTS = 2;
+export const POST_SLOTS = 2;
+export const POST_TRAINING_IDS: TrainingId[] = ['data', 'mental', 'longrun', 'rest'];
+export function preSlotsOf(slots: number): number { return slots - MID_SLOTS; }
+/** 시즌 중 훈련을 바꿀 수 있는 라운드(캘린더 30% 무렵, 여름 휴식기 전) */
+export function midTrainingRound(rounds: number): number { return Math.max(1, Math.round(rounds * 0.3)); }
+
+/** 어려움(SPEC v0.46): 어떤 훈련을 하느냐에 따라 효과 차이가 크다. 평균보다 낮은 능력치를 키우면 ×1.4, 높은 능력치는 ×0.3 */
+export function trainEffect(stats: Stats, k: StatKey, difficulty: Difficulty): number {
+  if (difficulty !== 'hard') return 1;
+  const mean = STAT_KEYS.reduce((a, s) => a + stats[s], 0) / STAT_KEYS.length;
+  return stats[k] < mean ? 1.4 : 0.3;
+}
+
+/** 시즌 후 훈련 결과(비용 없음, 멘탈 코칭도 이때는 무료) */
+export function postTrainingOutcome(plan: TrainingId[]): { xp: Partial<Stats>; pressureRelief: number; fatigue: number } {
+  const xp: Partial<Stats> = {};
+  let pressureRelief = 0;
+  let fatigue = 0;
+  for (const id of plan.filter((p) => POST_TRAINING_IDS.includes(p)).slice(0, POST_SLOTS)) {
+    const p = TRAINING[id];
+    for (const k of STAT_KEYS) if (p.xp[k]) xp[k] = (xp[k] ?? 0) + (p.xp[k] ?? 0);
+    pressureRelief += p.pressureRelief ?? 0;
+    fatigue += p.fatigue;
+  }
+  return { xp, pressureRelief, fatigue };
+}
+
 /** "추천 계획" 버튼(SPEC §4.1). 휴식 1칸 + 나머지를 약점/강점/균형으로 채운다. 같은 프로그램은 최대 2칸 */
 export function recommendedPlan(stats: Stats, mode: 'weakness' | 'strength' | 'balanced', slots = TRAINING_SLOTS, focus: StatKey[] = []): TrainingId[] {
   const plan: TrainingId[] = ['rest'];
@@ -148,7 +181,9 @@ export function trainingOutcome(plan: TrainingId[], freeSim: boolean): TrainingR
     fatigue += p.fatigue;
     pressureRelief += p.pressureRelief ?? 0;
   }
-  return { xp, cost, fatigue, pressureRelief, overtrained: !plan.includes('rest') && plan.length >= TRAINING_SLOTS };
+  // 과훈련은 시즌 전 계획으로 판단한다(시즌 중 훈련을 바꿔도 이미 치른 레이스가 달라지지 않게, SPEC v0.46)
+  const pre = plan.slice(0, preSlotsOf(Math.max(plan.length, TRAINING_SLOTS)));
+  return { xp, cost, fatigue, pressureRelief, overtrained: !pre.includes('rest') && plan.length >= TRAINING_SLOTS };
 }
 
 /** 세션별 경기 XP(SPEC §4.2) */
@@ -164,23 +199,26 @@ export function addXp(into: Partial<Stats>, add: Partial<Stats>, mult = 1): void
 }
 
 /** 다음 1점까지 필요한 XP. 잠재력에 가까울수록 급격히 커진다 */
-export function xpNeeded(value: number, potential: number): number {
-  // 잠재력을 넘는 성장은 거의 막는다(×25). 잠재력 8점 전부터 점점 느려진다
-  const near = value >= potential ? 25 : value >= potential - 8 ? 1 + (value - (potential - 8)) * 0.6 : 1;
+export function xpNeeded(value: number, potential: number, window = 8): number {
+  // 잠재력을 넘는 성장은 거의 막는다(×25). 잠재력 window점 전부터 점점 느려진다(어려움은 16점 전부터, SPEC v0.46)
+  const near = value >= potential ? 25 : value >= potential - window ? 1 + (value - (potential - window)) * (4.8 / window) : 1;
   return 40 * (1 + value / 50) * near;
 }
 
 /** XP를 반영한다. 돌려주는 raised는 오른 점수 */
-export function applyXp(stats: Stats, bank: Stats, gains: Partial<Stats>, potential: number): Partial<Stats> {
+/** 난이도별 성장 둔화 구간(어려움은 잠재력 16점 전부터 느려져 훈련량이 최종 능력치를 크게 좌우한다) */
+export function growthWindow(difficulty: Difficulty): number { return difficulty === 'hard' ? 16 : 8; }
+
+export function applyXp(stats: Stats, bank: Stats, gains: Partial<Stats>, potential: number, window = 8): Partial<Stats> {
   const raised: Partial<Stats> = {};
   for (const k of STAT_KEYS) {
     bank[k] += Math.round(gains[k] ?? 0);
-    let need = xpNeeded(stats[k], potential);
+    let need = xpNeeded(stats[k], potential, window);
     while (bank[k] >= need && stats[k] < 99) {
       bank[k] -= need;
       stats[k] += 1;
       raised[k] = (raised[k] ?? 0) + 1;
-      need = xpNeeded(stats[k], potential);
+      need = xpNeeded(stats[k], potential, window);
     }
   }
   return raised;

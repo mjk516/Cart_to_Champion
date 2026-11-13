@@ -84,6 +84,8 @@ export interface OffseasonChoice {
   offerId: string | null;
   joinAcademy?: boolean;
   retire?: boolean;
+  /** 시즌 후 훈련(SPEC v0.46): 비용 없는 프로그램 2칸 */
+  postTraining?: TrainingId[];
 }
 
 export interface SeasonRecord {

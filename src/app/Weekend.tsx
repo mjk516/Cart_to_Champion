@@ -1,7 +1,7 @@
 // F1 그랑프리 주말(SPEC §5.3, §5.4): 주말 시작 → 세션마다 클릭 → 레이스 라이브 → 다음 그랑프리
 
 import { useMemo, useState } from 'react';
-import {
+import { MID_SLOTS, midTrainingRound, TRAINING, type TrainingId,
   circuitType, strategyKey, enduranceOffer, f1Calendar, f1WeekendFor, homeGpEffect, forecastFinish, ovr, radioKey, runRace,
   type Classified, type F1Weekend, type F1WeekendSession,
 } from '../engine';
@@ -129,6 +129,24 @@ export function Weekend() {
                 <p>위쪽 단계 표시처럼 <b>다음 세션</b>을 누를 때마다 프랙티스 → 퀄리파잉 → 레이스로 넘어갑니다. 레이스와 스프린트는 첫 랩부터 체커기까지 트랙 뷰로 진행되고(배속은 ×2부터, 트랙 뷰 안 버튼으로 바꿈), 세이프티카·비가 오면 <b>엔지니어 무전</b>을 고릅니다. 세이프티카 때는 사고 지점·크기·예상 시간이 함께 나옵니다.</p>
                 <p>바쁘면 "레이스 결과로 바로 가기"나 "남은 시즌 자동 진행"을 쓰세요.</p>
               </Tip>
+              {live.round === midTrainingRound(rounds) && live.plan.length > MID_SLOTS && (
+                <div className="rounded-xl border border-emerald-400/40 bg-emerald-400/5 p-3 text-sm" aria-label="시즌 중 훈련">
+                  <div className="font-bold">🏋️ 시즌 중 훈련 · 여름 휴식기 전</div>
+                  <p className="mt-1 text-xs text-zinc-400">시즌 전에 정한 시즌 중 훈련 2칸을 지금 바꿀 수 있습니다. 이번 주말을 넘기면 확정됩니다. 경기 결과에는 영향이 없고 시즌 끝 성장에 반영됩니다.</p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    {live.plan.slice(-MID_SLOTS).map((id, i) => {
+                      const idx = live.plan.length - MID_SLOTS + i;
+                      return (
+                        <select key={i} aria-label={`시즌 중 훈련 ${i + 1}칸`} value={id} disabled={live.step > 0}
+                          onChange={(e) => updateLive({ plan: live.plan.map((x, j) => (j === idx ? (e.target.value as TrainingId) : x)) })}
+                          className="rounded-xl border border-white/15 bg-zinc-950 px-2 py-2 text-sm">
+                          {(Object.keys(TRAINING) as TrainingId[]).map((t) => <option key={t} value={t}>{TRAINING[t].label}{TRAINING[t].cost ? ` · €${TRAINING[t].cost / 1000}k` : ''}</option>)}
+                        </select>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               {endurHere && (
                 <div className={`rounded-xl border p-3 text-sm ${live.endurance ? 'border-amber-400/40 bg-amber-400/5' : 'border-white/10 bg-white/5'}`} aria-label="내구레이스">
                   <div className="font-bold">🏁 {endurHere.when} · {endurHere.name}</div>

@@ -4,7 +4,7 @@ import { josa } from './josa';
 import { type Career, type F1Driver, type F1Standings, type RaceHighlight, type TeammateH2H, PLAYER_ID, type SeasonRecord, f1Calendar, homeGpEffect, inMilitary, playerBehavior, withHomeGp } from './careerCore';
 import { clamp, juniorTeams, lerp, statsAround } from './careerInternal';
 import { WEALTH_TIERS } from './creation';
-import { coachAdvice, followsCoach } from './coach';
+import { coachAdvice, followsCoach, followsCoachPre } from './coach';
 import { applyEndurance, enduranceResult, type EnduranceChoices } from './endurance';
 import { myRaceResult, neutralCounts, snsReaction, sumSnsEffects, type MyRaceResult, type NeutralCounts } from './raceNews';
 import { strategyKey, type StrategyMap } from './strategy';
@@ -12,7 +12,7 @@ import { pickEvents } from './events';
 import { seasonFeed } from './feed';
 import { CAR_WEIGHT, F1_WINNER_TEAMS, ovr, POINTS_RACE } from './data';
 import { teamForm } from './form';
-import { addXp, ageCurve, applyAging, applyXp, SESSION_XP, TRAINING, trainingOutcome, TRAINING_SLOTS, TRAINING_SLOTS_RESERVE, type TrainingId } from './growth';
+import { addXp, ageCurve, applyAging, applyXp, difficultyOf, growthWindow, SESSION_XP, TRAINING, trainEffect, trainingOutcome, TRAINING_SLOTS, TRAINING_SLOTS_RESERVE, type TrainingId } from './growth';
 import { updateMediaSeason } from './media';
 import { fictionalName } from './names';
 import { enforceOrder, runRace, simulateQualifying, type QualiResult, type RaceCar, type RaceInput, type RaceOutcome, type RadioOptionId, type ResultRules } from './race';
@@ -480,8 +480,10 @@ export function seasonStatsFor(c: Career, plan: TrainingId[]): { stats: Stats; p
   const stats = { ...c.driver.stats };
   // 코치 조언대로 짠 계획이면 압박 실수·과훈련 손해가 없다(SPEC v0.34)
   const coached = plan.length > 0 && !inMilitary(c) && followsCoach(c, plan);
-  const pressured = !coached && c.media.pressure > c.driver.hidden.pressureResist;
-  const overtrained = !coached && trainingOutcome(plan.slice(0, slots), false).overtrained;
+  // 손해 면제는 시즌 전 칸으로만 판단한다: 시즌 중 훈련을 바꿔도 이미 치른 레이스가 달라지지 않는다(SPEC v0.46)
+  const safe = plan.length > 0 && !inMilitary(c) && followsCoachPre(c, plan);
+  const pressured = !safe && c.media.pressure > c.driver.hidden.pressureResist;
+  const overtrained = !safe && trainingOutcome(plan.slice(0, slots), false).overtrained;
   if (pressured) stats.consistency = Math.max(20, stats.consistency - 3);
   if (overtrained) stats.consistency = Math.max(20, stats.consistency - 2);
   return { stats, pressured, overtrained, coached };
@@ -566,14 +568,14 @@ export function runSeason(input: Career, plan: TrainingId[], radio: Record<strin
   const trainGain: Partial<Stats> = {};
   const raceGain: Partial<Stats> = {};
   for (const k of STAT_KEYS) {
-    trainGain[k] = (training.xp[k] ?? 0) * eff * envMult * focusMult(k) * coachBonus;
+    trainGain[k] = (training.xp[k] ?? 0) * eff * envMult * focusMult(k) * coachBonus * trainEffect(c.driver.stats, k, difficultyOf(c));
     raceGain[k] = (sim.raceXp[k] ?? 0) * eff * focusMult(k);
   }
   const total: Partial<Stats> = {};
   addXp(total, trainGain);
   addXp(total, raceGain);
   const before = { ...c.driver.stats };
-  applyXp(c.driver.stats, c.driver.xp, total, c.driver.hidden.potential);
+  applyXp(c.driver.stats, c.driver.xp, total, c.driver.hidden.potential, growthWindow(difficultyOf(c)));
   const grownOvr = ovr(c.driver.stats) - ovr(before);
   const tSum = STAT_KEYS.reduce((a, k) => a + (trainGain[k] ?? 0), 0);
   const rSum = STAT_KEYS.reduce((a, k) => a + (raceGain[k] ?? 0), 0);

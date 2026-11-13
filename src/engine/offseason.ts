@@ -1,7 +1,7 @@
 // 오프시즌(SPEC §7·§2.1): 제안 만들기, 선택 반영, 팀·캘린더·AI 드라이버 세계 진행.
 
 import { josa } from './josa';
-import { CALENDAR_2026_SLOTS, type Career, HOME_MARKET_BONUS, type Offer, type Offseason, type OffseasonChoice, PRINCIPAL_CHANGE_CHANCE, draftedNext, MILITARY_SEASONS, ROOKIE_GUARANTEE_POS, ROOKIE_GUARANTEE_POS_HOME, hasHomeGp } from './careerCore';
+import { CALENDAR_2026_SLOTS, type Career, HOME_MARKET_BONUS, type Offer, type Offseason, type OffseasonChoice, PRINCIPAL_CHANGE_CHANCE, draftedNext, inMilitary, MILITARY_SEASONS, ROOKIE_GUARANTEE_POS, ROOKIE_GUARANTEE_POS_HOME, hasHomeGp } from './careerCore';
 import { MAJOR_FLOOR, OTHERS_CAP, newRookie, superLicencePoints } from './season';
 import { clamp, juniorTeams, lerp } from './careerInternal';
 import { WEALTH_TIERS } from './creation';
@@ -12,7 +12,8 @@ import { int, normal, pick, rngFor, type Rng } from './rng';
 import { ACADEMIES, nextSeries, SERIES, seriesLabel, SUPER_LICENCE_MIN_AGE, SUPER_LICENCE_REQUIRED, type SeriesId } from './series';
 import { firstNameOf } from './names';
 import { runOffseason } from './teams';
-import { STAT_KEYS } from './types';
+import { STAT_KEYS, type StatKey, type Stats } from './types';
+import { ageCurve, applyXp, difficultyOf, growthWindow, postTrainingOutcome, TRAINING, trainEffect } from './growth';
 
 // ── 오프시즌 ────────────────────────────────────────────────────────
 interface SeatPlan {
@@ -71,6 +72,8 @@ function seatPlan(c: Career): SeatPlan {
 }
 
 /** 처음 F1에 올라가는 신인이 레이스 시트를 받는 팀(SPEC §7 v0.33). 이 안에서는 확률이 같다 */
+const STAT_SHORT: Record<StatKey, string> = { pace: '페이스', racecraft: '레이스크래프트', consistency: '일관성', wet: '우천', tyre: '타이어 관리', feedback: '피드백' };
+
 export const ROOKIE_TEAMS = ['racing_bulls', 'haas', 'williams', 'audi', 'aston_martin', 'alpine', 'cadillac'] as const;
 /** 이 아카데미 소속이면 해당 팀으로 올라갈 확률이 오른다(가중치 ×ROOKIE_ACADEMY_WEIGHT). 다른 아카데미는 반영하지 않는다 */
 export const ROOKIE_ACADEMY_TEAM: Record<string, string> = { 'Red Bull Junior Team': 'racing_bulls', 'Ferrari Driver Academy': 'haas' };
@@ -401,6 +404,20 @@ export function applyOffseason(input: Career, choice: OffseasonChoice): Career {
     c.retired = true;
     if (c.contract?.series === 'f1' && c.contract.seat === 'race') c.contract = null;
     return c;
+  }
+
+  // 시즌 후 훈련(SPEC v0.46): 비용 없는 프로그램만. 군 복무 중에는 없다
+  if (choice.postTraining?.length && !inMilitary(input)) {
+    const post = postTrainingOutcome(choice.postTraining);
+    const eff = ageCurve(c.age, c.driver.hidden.growthType);
+    const gains: Partial<Stats> = {};
+    for (const k of STAT_KEYS) if (post.xp[k]) gains[k] = (post.xp[k] ?? 0) * eff * trainEffect(c.driver.stats, k, difficultyOf(c));
+    const raised = applyXp(c.driver.stats, c.driver.xp, gains, c.driver.hidden.potential, growthWindow(difficultyOf(c)));
+    if (post.pressureRelief) c.media.pressure = Math.max(0, c.media.pressure - post.pressureRelief);
+    const lastRec = c.history[c.history.length - 1];
+    const ups = Object.entries(raised).map(([k, v]) => `${STAT_SHORT[k as StatKey]} +${v}`);
+    const line = `시즌 후 훈련(${choice.postTraining.slice(0, 2).map((id) => TRAINING[id].label).join(', ')})${ups.length ? `: ${ups.join(', ')}` : ''}${post.pressureRelief ? ` · 압박 −${post.pressureRelief}` : ''}`;
+    if (lastRec) lastRec.notes = [...lastRec.notes, line];
   }
 
   if (choice.joinAcademy && off.academyOffer) c.academy = off.academyOffer;

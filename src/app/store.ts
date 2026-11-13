@@ -114,6 +114,9 @@ interface State {
   seenTips: string[];
   planDraft: PlanDraft | null;
   setPlanDraft: (d: PlanDraft | null) => void;
+  /** 오프시즌 시즌 후 훈련 선택(SPEC v0.46). 제안을 고르거나 시트 없이 넘길 때 함께 적용된다 */
+  postPlan: { year: number; plan: TrainingId[] } | null;
+  setPostPlan: (p: { year: number; plan: TrainingId[] } | null) => void;
   createDraft: CreateDraft | null;
   setCreateDraft: (d: CreateDraft | null) => void;
   /** 이어하기: 멈췄던 곳(주말·오프시즌·대시보드)으로 간다 */
@@ -164,6 +167,7 @@ const initial = {
   interviewAuto: null as InterviewAuto,
   seenTips: [] as string[],
   planDraft: null as PlanDraft | null,
+  postPlan: null as { year: number; plan: TrainingId[] } | null,
   createDraft: null as CreateDraft | null,
 };
 
@@ -236,6 +240,7 @@ export const useGame = create<State>()(
       ...initial,
       go: (screen) => set({ screen }),
       setPlanDraft: (planDraft) => set({ planDraft }),
+      setPostPlan: (postPlan) => set({ postPlan }),
       setCreateDraft: (createDraft) => set({ createDraft }),
       resume: () => {
         const { career, live, createDraft } = get();
@@ -269,7 +274,8 @@ export const useGame = create<State>()(
         const c = get().career;
         if (!c) return;
         const firstF1 = offer.series === 'f1' && offer.seat === 'race' && c.f1Debut === null;
-        const next = applyOffseason(c, { offerId: offer.id, joinAcademy });
+        const pp = get().postPlan;
+        const next = applyOffseason(c, { offerId: offer.id, joinAcademy, ...(pp && pp.year === c.year ? { postTraining: pp.plan } : {}) });
         const contracts = [...get().contracts];
         if (offer.id !== 'stay' && signature) {
           contracts.push({
@@ -277,7 +283,7 @@ export const useGame = create<State>()(
             salary: offer.salary, seatCost: offer.seatCost, note: offer.note, signature, firstF1,
           });
         }
-        set({ career: next, contracts, firstF1Signature: firstF1 && signature ? signature : get().firstF1Signature, screen: 'dashboard' });
+        set({ career: next, contracts, firstF1Signature: firstF1 && signature ? signature : get().firstF1Signature, screen: 'dashboard', postPlan: null });
       },
       chooseEvent: (eventId, optionId) => {
         const c = get().career;
@@ -287,7 +293,8 @@ export const useGame = create<State>()(
       skipSeat: (joinAcademy) => {
         const c = get().career;
         if (!c) return;
-        set({ career: applyOffseason(c, { offerId: null, joinAcademy }), screen: 'dashboard' });
+        const pp = get().postPlan;
+        set({ career: applyOffseason(c, { offerId: null, joinAcademy, ...(pp && pp.year === c.year ? { postTraining: pp.plan } : {}) }), screen: 'dashboard', postPlan: null });
       },
       retire: () => {
         const c = get().career;
@@ -342,10 +349,10 @@ export const useGame = create<State>()(
       partialize: (s) => ({
         screen: s.screen === 'create' && !s.createDraft ? 'home' : s.screen, career: s.career, signature: s.signature,
         firstF1Signature: s.firstF1Signature, contracts: s.contracts, lastRecord: s.lastRecord, showKrw: s.showKrw, live: s.live,
-        interviewAuto: s.interviewAuto, seenTips: s.seenTips, planDraft: s.planDraft, createDraft: s.createDraft,
+        interviewAuto: s.interviewAuto, seenTips: s.seenTips, planDraft: s.planDraft, createDraft: s.createDraft, postPlan: s.postPlan,
       }),
       // 이전 저장 파일에는 초안이 없다
-      merge: (persisted, current) => ({ ...current, ...(persisted as object), career: migrateCareer((persisted as any)?.career ?? null), planDraft: (persisted as any)?.planDraft ?? null, createDraft: (persisted as any)?.createDraft ?? null }),
+      merge: (persisted, current) => ({ ...current, ...(persisted as object), career: migrateCareer((persisted as any)?.career ?? null), planDraft: (persisted as any)?.planDraft ?? null, postPlan: (persisted as any)?.postPlan ?? null, createDraft: (persisted as any)?.createDraft ?? null }),
     },
   ),
 );

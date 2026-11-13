@@ -114,3 +114,21 @@ test.describe('중간에 멈춘 곳부터 이어하기', () => {
     expect(left).toBe(0);
   });
 });
+
+test('시즌 후 훈련: 오프시즌에서 비용 없는 훈련 2칸을 고르면 다음 시즌으로 넘어갈 때 적용된다', async ({ page }) => {
+  const c0 = createCareer({ seed: 21, name: '훈련왕', nationality: 'GB', wealthTier: 3, personality: 'calm', candidateIndex: 0, focus: ['pace'] });
+  const { career } = runSeason(c0, DEFAULT_POLICY.training(c0));
+  await loadSave(page, { ...career, pendingEvents: [] }, 'offseason');
+  const card = page.getByRole('region', { name: '시즌 후 훈련' }).or(page.locator('section', { hasText: '시즌 후 훈련' }));
+  await expect(card.first()).toContainText('비용이 없는 프로그램만');
+  const opts = await page.getByLabel('시즌 후 훈련 1칸').locator('option').allTextContents();
+  expect(opts).toEqual(['엔지니어 데이터 분석', '멘탈 코칭', '레이스 시뮬레이션(롱런)', '휴식']);
+  await page.getByLabel('시즌 후 훈련 1칸').selectOption({ label: '멘탈 코칭' });
+  await page.getByLabel('시즌 후 훈련 2칸').selectOption({ label: '엔지니어 데이터 분석' });
+  await page.getByRole('button', { name: '시트 없이 1년 보내기' }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  const log = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)!).state.career.choiceLog.filter((e: { kind: string }) => e.kind === 'offseason').at(-1), KEY);
+  expect(log.choice.postTraining).toEqual(['mental', 'data']);
+  const notes = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)!).state.career.history.at(-1).notes.join(' '), KEY);
+  expect(notes).toContain('시즌 후 훈련(멘탈 코칭, 엔지니어 데이터 분석)');
+});

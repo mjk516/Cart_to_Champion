@@ -445,3 +445,31 @@ describe('타이어·비·전략 회의 (v0.40)', () => {
     expect(runRace({ ...base('calm'), myPlan: 'team', autoRadio: true })).toEqual(runRace({ ...base('calm'), myPlan: 'team', autoRadio: true }));
   });
 });
+
+describe('레드 플래그 (v0.46)', () => {
+  it('레드 플래그가 나면 세션이 멈추고 내 무전으로 재출발 타이어를 고른다. 고른 타이어로 재출발한다', () => {
+    const me = cars[5]!;
+    let checked = 0;
+    for (let seed = 1; seed <= 300 && checked < 2; seed++) {
+      const base = { ...raceInput(seed, 'monaco'), myCarId: me.id };
+      const radio: Record<string, RadioOptionId> = {};
+      for (let i = 0; i < 12; i++) {
+        const r = runRace({ ...base, autoRadio: false, radio });
+        if (r.status !== 'pending') break;
+        if (r.decision.trigger === 'red_flag') {
+          const d = r.decision;
+          expect(d.options.map((o) => o.id)).toEqual(['rf_S', 'rf_M', 'rf_H', 'rf_I', 'rf_W']);
+          expect(d.advice).toContain('세션이 중단');
+          const pick: RadioOptionId = d.options.find((o) => o.recommended)!.id === 'rf_H' ? 'rf_S' : 'rf_H';
+          const after = runRace({ ...base, autoRadio: true, radio: { ...radio, [d.id]: pick } });
+          const lap = after.laps.find((l) => l.lap === d.lap)!;
+          expect(lap.order.find((o) => o.id === me.id)?.compound).toBe(pick === 'rf_H' ? 'H' : 'S');
+          checked++;
+          break;
+        }
+        radio[r.decision.id] = r.decision.options.find((o) => o.recommended)!.id;
+      }
+    }
+    expect(checked).toBe(2);
+  });
+});

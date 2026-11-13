@@ -15,6 +15,7 @@ import { createCareer } from './careerCreate';
 import { runSeason } from './season';
 import { applyEventChoice, EVENT_BY_ID, eventCard, type EventCard } from './events';
 import { recommendedPlan, TRAINING_SLOTS, TRAINING_SLOTS_RESERVE, type TrainingId } from './growth';
+import { postTrainingAdvice } from './coach';
 import { LADDER, type SeriesId } from './series';
 
 // ── 자동 진행(CLI·테스트·밸런스) ─────────────────────────────────────
@@ -51,6 +52,13 @@ export const DEFAULT_POLICY: Policy = {
     return recommendedPlan(c.driver.stats, 'weakness', slots, c.driver.focus);
   },
   offseason: (c, o) => {
+    const choice = defaultOffseasonChoice(c, o);
+    return choice.retire ? choice : { ...choice, postTraining: postTrainingAdvice(c) };
+  },
+};
+
+function defaultOffseasonChoice(c: Career, o: Offseason): OffseasonChoice {
+  {
     // 입대 직전이나 복무 중에는 기다린다
     if (draftedNext(c) || (c.military && c.year < c.military.end)) return { offerId: null };
     const joinAcademy = !!o.academyOffer;
@@ -67,8 +75,8 @@ export const DEFAULT_POLICY: Policy = {
     if (reserve && c.age < 30) return { offerId: reserve.id, joinAcademy };
     if (c.age >= 26 || (c.noSeatSeasons >= 2 && c.age >= 22)) return { offerId: null, retire: true };
     return { offerId: null, joinAcademy };
-  },
-};
+  }
+}
 
 export function autoplayCareer(setup: CareerSetup, policy: Policy = DEFAULT_POLICY, maxSeasons = 35): Career {
   let c = createCareer(setup);
