@@ -265,6 +265,7 @@ export function Weekend() {
               <LiveRace
                 key={`${live.round}:${session.kind}:${skipped}`}
                 input={session.input}
+                personality={c.driver.personality}
                 realLayout
                 cars={displayCars}
                 colorOfTeam={teamColor}

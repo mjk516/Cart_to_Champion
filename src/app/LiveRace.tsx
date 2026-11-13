@@ -2,8 +2,9 @@
 // 그 아래에 무전·결과, 타이밍 타워·사건 자막이 붙는다.
 // 결과는 엔진이 시드로 미리 계산한다. 화면은 랩 기록을 재생할 뿐이다.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+  type Personality,
   TYRE_NAME,
   type Compound,
   raceChat, rngFor, runRace, type Chat, type RaceChatKey,
@@ -13,6 +14,7 @@ import { CIRCUIT_PATHS } from './circuitPaths';
 import { ChatLine } from './FeedList';
 import { Pill } from './ui';
 import { F1TeamBadge } from './TeamBadge';
+import { buildRaceFeed } from './raceRadio';
 
 const ME = 'player';
 export const TYRE_COLOR: Record<string, string> = { S: '#ef4444', M: '#facc15', H: '#e5e7eb', I: '#22c55e', W: '#3b82f6' };
@@ -101,12 +103,13 @@ interface PitMark { car: string; lap: number; compound: Compound }
 /** 피트레인 구간(출발·결승선 기준 랩 비율): 진입 −6%, 박스 −1.2%, 출구 +3% */
 const PIT_IN = -0.06, PIT_BOX = -0.012, PIT_OUT = 0.03;
 
-function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap, banner, focus, neutral, x, outIds = new Set<string>(), culprits = [], pits = [] }: {
+function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap, banner, focus, neutral, x, outIds = new Set<string>(), culprits = [], pits = [], overlay, inset = 0 }: {
   circuitId: string; realLayout: boolean; laps: LapRecord[]; grid: string[]; progress: number; phase: LapRecord['phase']; baseLap: number;
   banner: string; focus: string[]; neutral: Neutralization | null; x: Ctx;
   /** 리타이어한 차(트랙에서 뺀다) */ outIds?: Set<string>;
   /** 지금 깃발을 부른 차(사고 지점에 OUT 표시) */ culprits?: string[];
   /** 피트스톱(차가 피트레인으로 들어가 박스에 섰다 나온다) */ pits?: PitMark[];
+  /** 휴대폰: 왼쪽에 겹쳐 띄울 순위표와 그 폭(화면 폭 비율). 트랙은 그 오른쪽으로 비켜 그린다 */ overlay?: ReactNode; inset?: number;
 }) {
   const W = 640, H = 300;
   const pathRef = useRef<SVGPathElement>(null);
@@ -244,6 +247,13 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
     const w = geo.maxX - geo.minX + geo.span * 0.12;
     // 길쭉한 서킷도 태그 자리가 남게 높이를 폭의 40% 이상으로(위쪽에 여백)
     const h0 = geo.maxY - geo.minY + geo.span * 0.12;
+    // 순위표를 겹쳐 띄우면(휴대폰) 왼쪽을 비우고, 순위표가 들어갈 만큼 높이를 키운다(트랙은 세로 가운데)
+    const wAll = inset ? w / (1 - inset) : w;
+    if (inset) {
+      const hh = Math.max(h0 + geo.span * 0.14, wAll * 0.82);
+      const cy = (geo.minY + geo.maxY) / 2;
+      return { x: geo.minX - geo.span * 0.06 - (wAll - w), y: cy - hh / 2, w: wAll, h: hh };
+    }
     const h = portrait ? h0 + geo.span * 0.22 : Math.max(h0 + geo.span * 0.14, w * 0.4);
     return { x: geo.minX - geo.span * 0.06, y: geo.maxY + geo.span * 0.06 - h, w, h };
   })();
@@ -335,7 +345,8 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
           );
         })}
       </svg>
-      <div className="absolute left-2 top-2 max-w-[85%] truncate rounded-lg px-2 py-0.5 text-xs font-black sm:left-3 sm:top-3 sm:px-3 sm:py-1 sm:text-sm" style={{ background: flag.bannerBg, color: flag.bannerFg }}>{banner}</div>
+      <div className={`absolute top-2 truncate rounded-lg px-2 py-0.5 text-xs font-black sm:top-3 sm:px-3 sm:py-1 sm:text-sm ${overlay ? 'right-2 max-w-[58%]' : 'left-2 max-w-[85%] sm:left-3'}`} style={{ background: flag.bannerBg, color: flag.bannerFg }}>{banner}</div>
+      {overlay && <div className="absolute bottom-8 left-1 top-1 z-10 flex">{overlay}</div>}
       {/* 피트 상황: 칸 높이를 늘 같게 두고(화면이 흔들리지 않게) 넘치면 옆으로 */}
       <div className="flex h-7 items-center gap-1 overflow-x-auto whitespace-nowrap px-2 [scrollbar-width:none]" aria-label="피트 상황">
           {pitStatus.map((q) => (
@@ -426,8 +437,8 @@ type TowerMode = 'interval' | 'leader' | 'tyre';
 const TOWER_MODES: TowerMode[] = ['interval', 'leader', 'tyre'];
 const TOWER_LABEL: Record<TowerMode, string> = { interval: 'INTERVAL', leader: 'LEADER', tyre: 'TIRE' };
 
-function TimingTower({ kind, lap, total, order, outs, mode, onMode, x, teamOf, myTeam, pitting }: {
-  kind: 'race' | 'sprint'; lap: number; total: number; order: Array<{ id: string; gap: number; compound: Compound; stops: number }>;
+function TimingTower({ compact = false, onFold, kind, lap, total, order, outs, mode, onMode, x, teamOf, myTeam, pitting }: {
+  compact?: boolean; onFold?: () => void; kind: 'race' | 'sprint'; lap: number; total: number; order: Array<{ id: string; gap: number; compound: Compound; stops: number }>;
   outs: Array<{ car: string; lap: number; type: string }>; mode: TowerMode; onMode: (m: TowerMode) => void; x: Ctx;
   teamOf: (id: string) => string | undefined; myTeam?: string; pitting: (id: string) => boolean;
 }) {
@@ -447,9 +458,9 @@ function TimingTower({ kind, lap, total, order, outs, mode, onMode, x, teamOf, m
     return `+${g.toFixed(3)}`;
   };
   return (
-    <div className="flex w-[9.5rem] shrink-0 flex-col self-start overflow-hidden rounded-xl border border-white/15 bg-[#05070d] text-[11px] sm:w-56 sm:text-[13px] md:max-h-[calc(62vh+5.5rem)]" aria-label="순위표">
+    <div className={`flex shrink-0 flex-col overflow-hidden rounded-xl border border-white/15 ${compact ? 'h-full w-[7.6rem] bg-[#05070d]/80 text-[10px] backdrop-blur-sm' : 'w-[9.5rem] self-start bg-[#05070d] text-[11px] sm:w-56 sm:text-[13px] md:max-h-[calc(62vh+5.5rem)]'}`} aria-label="순위표">
       <div className="flex items-center justify-between bg-gradient-to-r from-zinc-800 to-zinc-900 px-2 py-1.5">
-        <span className="font-black tracking-widest text-white">{kind === 'sprint' ? 'SPRINT' : 'RACE'}</span>
+        <span className="flex items-center gap-1 font-black tracking-widest text-white">{onFold && <button onClick={onFold} aria-label="순위표 접기" className="-ml-1 px-1 text-zinc-400 hover:text-white">◀</button>}{kind === 'sprint' ? 'SPRINT' : 'RACE'}</span>
         <span className="text-zinc-400">LAP <b className="text-sm text-white sm:text-base">{lap}</b>/{total}</span>
       </div>
       <div className="flex items-center justify-between border-y border-white/10 bg-[#0d1220] text-[10px] font-black tracking-widest text-zinc-200 sm:text-xs">
@@ -458,7 +469,7 @@ function TimingTower({ kind, lap, total, order, outs, mode, onMode, x, teamOf, m
         <button className="px-2 py-1.5 hover:text-white" aria-label="다음 보기" onClick={() => onMode(TOWER_MODES[(i + 1) % 3]!)}>›</button>
       </div>
       {/* 넓은 화면에서는 트랙 영역 높이를 넘지 않게 안에서 스크롤(위에 붙는 영역이 화면을 다 덮지 않게) */}
-      <ol className="min-h-0 flex-1 md:overflow-y-auto md:[scrollbar-width:thin]" aria-label="타이밍 타워">
+      <ol className={`min-h-0 flex-1 ${compact ? 'overflow-y-auto [scrollbar-width:none]' : 'md:overflow-y-auto md:[scrollbar-width:thin]'}`} aria-label="타이밍 타워">
         {order.map((e, n) => {
           const mine = e.id === ME;
           const mate = !mine && myTeam && teamOf(e.id) === myTeam;
@@ -485,8 +496,10 @@ function TimingTower({ kind, lap, total, order, outs, mode, onMode, x, teamOf, m
   );
 }
 
-export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant, chat, onRadio, onDone, startAt = 0, onProgress }: {
+export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant, chat, onRadio, onDone, startAt = 0, onProgress, personality = 'calm' }: {
   input: RaceInput;
+  /** 내 무전 말투(성격) */
+  personality?: Personality;
   /** 이어 보기: 이 랩부터 시작한다(중간에 닫았던 레이스) */
   startAt?: number;
   /** 본 랩 수를 저장한다(몇 랩마다, 그리고 화면을 떠날 때) */
@@ -509,6 +522,17 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
   const [speed, setSpeedState] = useState<number>(loadSpeed);
   // 순위표 보기: 앞차와 간격(INTERVAL, 기본) → 선두와 간격(LEADER) → 타이어(TIRE)
   const [towerMode, setTowerMode] = useState<TowerMode>('interval');
+  // 휴대폰(768px 미만): 순위표를 트랙 위 왼쪽에 겹쳐 띄우고 안에서 스크롤, 트랙은 화면 폭을 다 쓴다(SPEC v0.55)
+  // 휴대폰 순위표 접기(접으면 트랙이 화면 폭을 다 쓴다)
+  const [towerOpen, setTowerOpen] = useState(true);
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia?.('(max-width: 767px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia?.('(max-width: 767px)');
+    if (!mq) return;
+    const on = () => setNarrow(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
   const setSpeed = (v: number) => { setSpeedState(v); try { localStorage.setItem(SPEED_KEY, String(v)); } catch { /* 무시 */ } };
   const done = useRef(false);
   const byId = useMemo(() => new Map(cars.map((c) => [c.id, c])), [cars]);
@@ -628,6 +652,11 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
     : `L${shownLap}/${outcome.totalLaps}${shownLap === outcome.totalLaps ? ' · 파이널 랩' : ''}${culpritText}${headline ? ` · ${describe(headline, x) ?? ''}` : shownLap === 1 ? ' · 스타트' : ''}`;
 
   const myResult = outcome.status === 'finished' ? outcome.classification.find((r) => r.id === ME) : undefined;
+  const feed = useMemo(() => buildRaceFeed({
+    seed: input.seed, laps, incidents: outcome.incidents, classification: outcome.status === 'finished' ? outcome.classification : null,
+    totalLaps: outcome.totalLaps, baseLap: input.circuit.baseLap, me: ME, name: chat?.name ?? '드라이버', personality,
+    mate: cars.find((c2) => c2.id !== ME && c2.teamId === byId.get(ME)?.teamId)?.id, codeOf: x.codeOf,
+  }), [outcome, laps, personality]); // eslint-disable-line react-hooks/exhaustive-deps
   const chats = chat ? raceChats(input.seed, outcome.incidents, p > 0.02, pending ? laps.length + 1 : cur, finished ? myResult : null, chat, x) : [];
 
   const btn = (on: boolean) => `rounded-lg px-2 py-1 text-xs font-bold ${on ? 'bg-racing text-white' : 'bg-white/5 text-zinc-300 hover:bg-white/10'}`;
@@ -640,16 +669,23 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
     </>
   );
 
+  const tower = (compact: boolean) => (
+    <TimingTower compact={compact} onFold={compact ? () => setTowerOpen(false) : undefined} kind={input.kind} lap={shownLap} total={outcome.totalLaps} order={order.filter((e) => !outIds.has(e.id))} outs={outs}
+      mode={towerMode} onMode={setTowerMode} x={x} teamOf={(id) => byId.get(id)?.teamId} myTeam={byId.get(ME)?.teamId}
+      pitting={(id) => !finished && pitMarks.some((q) => q.car === id && q.lap === cur)} />
+  );
+  // 무전·사건 피드: 지금 보이는 랩까지(SPEC v0.55)
+  const feedUntil = finished ? outcome.totalLaps : pending ? laps.length : shownLap;
+  const feedShown = feed.filter((f) => f.lap <= feedUntil).slice().reverse();
+
   return (
     <div className="space-y-3">
       {/* 순위표(왼쪽) + 트랙 뷰. 넓은 화면에서는 스크롤해도 위에 붙어 있다 */}
       <div className="z-30 -mx-1 flex gap-2 bg-zinc-900 px-1 pb-1 pt-1 md:sticky" style={{ top: navH }}>
-        <TimingTower kind={input.kind} lap={shownLap} total={outcome.totalLaps} order={order.filter((e) => !outIds.has(e.id))} outs={outs}
-          mode={towerMode} onMode={setTowerMode} x={x} teamOf={(id) => byId.get(id)?.teamId} myTeam={byId.get(ME)?.teamId}
-          pitting={(id) => !finished && pitMarks.some((q) => q.car === id && q.lap === cur)} />
+        {!narrow && tower(false)}
         <div className="min-w-0 flex-1">
         <TrackView circuitId={input.circuit.id} realLayout={realLayout} laps={laps} grid={input.grid} progress={pt} phase={phase} baseLap={input.circuit.baseLap}
-          banner={banner} focus={focus} neutral={neutral} x={x} pits={pitMarks} />
+          banner={banner} focus={focus} neutral={neutral} x={x} pits={pitMarks} overlay={narrow ? (towerOpen ? tower(true) : <button onClick={() => setTowerOpen(true)} className="self-start rounded-lg border border-white/15 bg-[#05070d]/85 px-2 py-1 text-[11px] font-black text-zinc-200">순위표 ▸</button>) : undefined} inset={narrow && towerOpen ? 0.22 : 0} />
         {/* 상태 줄(높이 고정)과 조작 줄을 나눠, 깃발·비 표시가 생겨도 줄 수가 바뀌지 않게 */}
         <div className="mt-1 flex h-6 items-center gap-2 overflow-hidden whitespace-nowrap text-xs">
           <Pill tone="zinc">L{shownLap} / {outcome.totalLaps}</Pill>
@@ -666,6 +702,20 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
         </div>
       </div>
 
+      {/* 무전·사건 피드: 배속 줄 바로 아래(넓은 화면은 트랙 열에 맞춰). 위에 붙는 영역에 넣지 않아 무전 창을 가리지 않는다 */}
+      <div className="md:pl-[14.5rem]">
+        {/* 레이스 사건 + 팀 무전 + 내 무전(최신이 위, 칸 높이 고정) */}
+        <ol className="h-36 overflow-y-auto rounded-xl border border-white/10 bg-[#05070d] p-2 text-xs" aria-label="무전·사건">
+          {feedShown.length === 0 && <li className="text-zinc-500">출발 대기</li>}
+          {feedShown.map((f, n) => (
+            <li key={feedShown.length - n} className="flex gap-1.5 py-0.5">
+              <span className="w-8 shrink-0 text-right tabular-nums text-zinc-500">L{f.lap}</span>
+              <span className={`shrink-0 rounded px-1 text-[10px] font-black ${f.from === 'team' ? 'bg-sky-500/20 text-sky-300' : f.from === 'me' ? 'bg-racing/25 text-red-200' : 'bg-white/10 text-zinc-300'}`}>{f.from === 'team' ? '📻 팀' : f.from === 'me' ? '🎙 나' : '사건'}</span>
+              <span className={f.from === 'event' ? 'text-zinc-400' : 'text-zinc-100'}>{f.text}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
       {chat && (
         <div className="rounded-xl border border-white/10 bg-zinc-950/60 p-2" aria-label="실시간 댓글">
           <div className="mb-1 flex items-center gap-2 text-xs font-bold text-zinc-300"><span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />실시간 댓글</div>
@@ -693,12 +743,6 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
         </div>
       )}
 
-      {/* 사건 기록 */}
-        <div className="rounded-xl border border-white/10 bg-zinc-950/60 p-2 text-xs" aria-live="polite">
-          <div className="mb-1 font-bold text-zinc-300">사건</div>
-          {ticker.length === 0 && <div className="text-zinc-500">출발 대기</div>}
-          {ticker.map((t, i) => <div key={i} className="py-0.5 text-zinc-300"><span className="text-zinc-500">L{t.lap}</span> {t.text}</div>)}
-        </div>
     </div>
   );
 }
