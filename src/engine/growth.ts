@@ -19,10 +19,10 @@ export interface Hidden {
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
 
 /** 난이도별 잠재력 보정(SPEC v0.45): 쉬움 +2~3(반반, 시드로), 어려움 −2, 보통은 그대로. 1점 차이가 챔피언 확률을 크게 바꿔서 쉬움은 반반으로 맞춘다 */
-export const DIFFICULTY_INFO: Record<Difficulty, { label: string; desc: string; champion: string }> = {
-  easy: { label: '쉬움', desc: '키울 수 있는 능력치가 높다. 월드 챔피언의 꿈을 맛보고 싶다면', champion: '약 45%' },
-  normal: { label: '보통', desc: '기본 밸런스. 노력과 운, 좋은 팀이 모두 맞아야 챔피언', champion: '약 20%' },
-  hard: { label: '어려움', desc: '어떤 훈련을 하느냐에 따라 성장이 크게 갈린다. 실제 F1처럼 챔피언은 극소수만', champion: '약 6%' },
+export const DIFFICULTY_INFO: Record<Difficulty, { label: string; desc: string }> = {
+  easy: { label: '쉬움', desc: '키울 수 있는 능력치가 높다. 월드 챔피언의 꿈을 맛보고 싶다면' },
+  normal: { label: '보통', desc: '기본 밸런스. 노력과 운, 좋은 팀이 모두 맞아야 챔피언' },
+  hard: { label: '어려움', desc: '어떤 훈련을 하느냐에 따라 성장이 크게 갈린다. 실제 F1처럼 챔피언은 극소수만' },
 };
 
 /** 커리어의 난이도(이전 저장 파일은 보통) */
