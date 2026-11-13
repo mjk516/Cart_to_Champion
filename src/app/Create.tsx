@@ -156,7 +156,6 @@ export function Create() {
               <button key={d} role="radio" aria-checked={difficulty === d} onClick={() => setDifficulty(d)}
                 className={`rounded-xl border p-2.5 text-left transition ${difficulty === d ? 'border-racing bg-racing/10' : 'border-white/15 hover:bg-white/5'}`}>
                 <div className="text-sm font-black">{DIFFICULTY_INFO[d].label}</div>
-                <div className="mt-0.5 text-[11px] text-zinc-400">챔피언 {DIFFICULTY_INFO[d].champion}</div>
               </button>
             ))}
           </div>
