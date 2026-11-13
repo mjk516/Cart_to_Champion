@@ -258,7 +258,8 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
     return { x: geo.minX - geo.span * 0.06, y: geo.maxY + geo.span * 0.06 - h, w, h };
   })();
   // 실제로 그려지는 배율(폭·높이 한도 중 작은 쪽)에 맞춰 화면에서 일정한 크기가 되게
-  const maxH = typeof window !== 'undefined' ? window.innerHeight * 0.62 : 500;
+  // 넓은 화면은 트랙 50vh(순위표 높이 안에 배속 줄·무전 피드까지 들어가게), 휴대폰은 62vh
+  const maxH = typeof window !== 'undefined' ? window.innerHeight * (window.innerWidth >= 768 ? 0.5 : 0.62) : 500;
   const shown = Math.min(cw / vb.w, maxH / vb.h);
   const u = Math.max(1 / shown, vb.w / 640) * (portrait ? 1.15 : 1);
   const STATE_LABEL = { in: 'PIT IN', stopped: '정지', out: 'PIT OUT' } as const;
@@ -277,7 +278,7 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
     <div ref={boxRef} className="relative overflow-hidden rounded-xl border transition-colors duration-500" style={{ borderColor: flag.border, background: 'radial-gradient(120% 90% at 50% 100%, #111827 0%, #05070d 70%)' }} data-flag={phase}>
       {/* 길이 재기용 원래 경로(보이지 않음) */}
       <svg width={0} height={0} className="absolute" aria-hidden><path ref={pathRef} d={d} /></svg>
-      <svg viewBox={`${vb.x.toFixed(1)} ${vb.y.toFixed(1)} ${vb.w.toFixed(1)} ${vb.h.toFixed(1)}`} className="mx-auto block max-h-[62vh] w-full" role="img" aria-label={`트랙 뷰: ${banner}`}>
+      <svg viewBox={`${vb.x.toFixed(1)} ${vb.y.toFixed(1)} ${vb.w.toFixed(1)} ${vb.h.toFixed(1)}`} className="mx-auto block max-h-[62vh] w-full md:max-h-[50vh]" role="img" aria-label={`트랙 뷰: ${banner}`}>
         {trackLayer}
         {staticLayer && (
           <>
