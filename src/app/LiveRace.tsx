@@ -258,7 +258,8 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
     return { x: geo.minX - geo.span * 0.06, y: geo.maxY + geo.span * 0.06 - h, w, h };
   })();
   // 실제로 그려지는 배율(폭·높이 한도 중 작은 쪽)에 맞춰 화면에서 일정한 크기가 되게
-  const maxH = typeof window !== 'undefined' ? window.innerHeight * 0.62 : 500;
+  // 넓은 화면은 트랙 50vh(순위표 높이 안에 배속 줄·무전 피드까지 들어가게), 휴대폰은 62vh
+  const maxH = typeof window !== 'undefined' ? window.innerHeight * (window.innerWidth >= 768 ? 0.5 : 0.62) : 500;
   const shown = Math.min(cw / vb.w, maxH / vb.h);
   const u = Math.max(1 / shown, vb.w / 640) * (portrait ? 1.15 : 1);
   const STATE_LABEL = { in: 'PIT IN', stopped: '정지', out: 'PIT OUT' } as const;
@@ -277,7 +278,7 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
     <div ref={boxRef} className="relative overflow-hidden rounded-xl border transition-colors duration-500" style={{ borderColor: flag.border, background: 'radial-gradient(120% 90% at 50% 100%, #111827 0%, #05070d 70%)' }} data-flag={phase}>
       {/* 길이 재기용 원래 경로(보이지 않음) */}
       <svg width={0} height={0} className="absolute" aria-hidden><path ref={pathRef} d={d} /></svg>
-      <svg viewBox={`${vb.x.toFixed(1)} ${vb.y.toFixed(1)} ${vb.w.toFixed(1)} ${vb.h.toFixed(1)}`} className="mx-auto block max-h-[62vh] w-full" role="img" aria-label={`트랙 뷰: ${banner}`}>
+      <svg viewBox={`${vb.x.toFixed(1)} ${vb.y.toFixed(1)} ${vb.w.toFixed(1)} ${vb.h.toFixed(1)}`} className="mx-auto block max-h-[62vh] w-full md:max-h-[50vh]" role="img" aria-label={`트랙 뷰: ${banner}`}>
         {trackLayer}
         {staticLayer && (
           <>
@@ -683,7 +684,7 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
       {/* 순위표(왼쪽) + 트랙 뷰. 넓은 화면에서는 스크롤해도 위에 붙어 있다 */}
       <div className="z-30 -mx-1 flex gap-2 bg-zinc-900 px-1 pb-1 pt-1 md:sticky" style={{ top: navH }}>
         {!narrow && tower(false)}
-        <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
         <TrackView circuitId={input.circuit.id} realLayout={realLayout} laps={laps} grid={input.grid} progress={pt} phase={phase} baseLap={input.circuit.baseLap}
           banner={banner} focus={focus} neutral={neutral} x={x} pits={pitMarks} overlay={narrow ? (towerOpen ? tower(true) : <button onClick={() => setTowerOpen(true)} className="self-start rounded-lg border border-white/15 bg-[#05070d]/85 px-2 py-1 text-[11px] font-black text-zinc-200">순위표 ▸</button>) : undefined} inset={narrow && towerOpen ? 0.22 : 0} />
         {/* 상태 줄(높이 고정)과 조작 줄을 나눠, 깃발·비 표시가 생겨도 줄 수가 바뀌지 않게 */}
@@ -699,13 +700,8 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
             <button onClick={() => setProgress(outcome.status === 'finished' ? endP : laps.length)} className="rounded-lg border border-white/15 px-2 py-1 text-xs">다음 결정·결과까지</button>
           </div>
         )}
-        </div>
-      </div>
-
-      {/* 무전·사건 피드: 배속 줄 바로 아래(넓은 화면은 트랙 열에 맞춰). 위에 붙는 영역에 넣지 않아 무전 창을 가리지 않는다 */}
-      <div className="md:pl-[14.5rem]">
-        {/* 레이스 사건 + 팀 무전 + 내 무전(최신이 위, 칸 높이 고정) */}
-        <ol className="h-36 overflow-y-auto rounded-xl border border-white/10 bg-[#05070d] p-2 text-xs" aria-label="무전·사건">
+        {/* 무전·사건 피드: 배속 줄 바로 아래. 넓은 화면에서는 순위표 높이까지 남는 자리를 채우고 안에서 스크롤(위에 붙는 영역이 더 커지지 않게) */}
+        <ol className="mt-1 h-36 overflow-y-auto md:h-auto md:min-h-[5rem] md:flex-1 md:basis-0 rounded-xl border border-white/10 bg-[#05070d] p-2 text-xs" aria-label="무전·사건">
           {feedShown.length === 0 && <li className="text-zinc-500">출발 대기</li>}
           {feedShown.map((f, n) => (
             <li key={feedShown.length - n} className="flex gap-1.5 py-0.5">
@@ -715,7 +711,9 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
             </li>
           ))}
         </ol>
+        </div>
       </div>
+
       {chat && (
         <div className="rounded-xl border border-white/10 bg-zinc-950/60 p-2" aria-label="실시간 댓글">
           <div className="mb-1 flex items-center gap-2 text-xs font-bold text-zinc-300"><span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />실시간 댓글</div>
