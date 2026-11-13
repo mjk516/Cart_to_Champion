@@ -47,7 +47,7 @@ function Journey() {
           {last && <text y={-20} textAnchor="middle" fontSize={22}>🏆</text>}
         </g>
       </svg>
-      <p className="mt-1 text-center text-base font-black" aria-live="polite">{JOURNEY[step]!.caption}</p>
+      <p className="mt-1 flex h-12 items-center justify-center text-center text-base font-black leading-tight" aria-live="polite">{JOURNEY[step]!.caption}</p>
       <ol className="mt-4 grid grid-cols-5 gap-1 text-center text-[11px]">
         {JOURNEY.map((j, i) => (
           <li key={j.label} className="flex flex-col items-center gap-1">

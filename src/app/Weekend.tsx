@@ -293,7 +293,7 @@ export function Weekend() {
           )}
 
           {session?.type === 'race' && !raceDone && (
-            <div className="mt-3 flex justify-end">
+            <div className="mt-3 flex justify-start">
               <Button variant="ghost" size="sm" onClick={() => setSkipAsk(true)}>⏭ 이 {session.kind === 'sprint' ? '스프린트' : '레이스'} 넘기기</Button>
             </div>
           )}
@@ -316,7 +316,7 @@ export function Weekend() {
             </Button>
             {qualiStep > live.step && <Button variant="ghost" onClick={() => updateLive({ step: qualiStep })}>{wk.circuit.sprint ? '스프린트 퀄리파잉으로 바로 가기' : '퀄리파잉으로 바로 가기'}</Button>}
             {!lastStep && <Button variant="ghost" onClick={skipToResult}>레이스 결과로 바로 가기</Button>}
-            <Button variant="ghost" className="ml-auto" onClick={() => beforeMidTraining(c, live)
+            <Button variant="ghost" onClick={() => beforeMidTraining(c, live)
               ? confirmBox.ask(<>시즌 중 훈련 세션(라운드 {midTrainingRound(rounds) + 1})까지 자동으로 진행할까요? 훈련을 고른 뒤 남은 시즌을 계속 자동으로 돌리거나 직접 참여할 수 있습니다.</>, () => updateLive(advanceToMidTraining(c, live)), { confirmLabel: '훈련 세션까지 자동 진행' })
               : confirmBox.ask(<>남은 {rounds - live.round}개 라운드를 자동으로 진행하고 시즌을 마칠까요? 지금까지 고른 무전은 그대로 반영되고, 남은 무전은 엔지니어 추천을 따릅니다.</>, finishLive, { confirmLabel: '남은 시즌 자동 진행' })}>남은 시즌 자동 진행</Button>
           </div>

@@ -39,12 +39,13 @@ export function FeedList({ items }: { items: FeedItem[] }) {
 }
 
 /** 댓글 한 줄 */
-export function ChatLine({ c }: { c: Chat }) {
+/** 댓글 한 줄. compact면 한 줄로 자른다(계속 바뀌는 칸의 높이가 흔들리지 않게) */
+export function ChatLine({ c, compact }: { c: Chat; compact?: boolean }) {
   return (
-    <li className="chat-in flex items-start gap-2 text-xs">
+    <li className={`chat-in flex gap-2 text-xs ${compact ? 'h-6 min-w-0 items-center' : 'items-start'}`}>
       <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-bold ${PLATFORM_STYLE[c.platform]}`}>{PLATFORM_LABEL[c.platform]}</span>
-      <span className="shrink-0 font-bold text-zinc-400">{c.author}</span>
-      <span className="text-zinc-200">{c.text}</span>
+      <span className={`shrink-0 font-bold text-zinc-400 ${compact ? 'max-w-[40%] truncate' : ''}`}>{c.author}</span>
+      <span className={`text-zinc-200 ${compact ? 'min-w-0 truncate' : ''}`}>{c.text}</span>
     </li>
   );
 }
@@ -62,7 +63,7 @@ export function RollingComments({ comments, title = '실시간 댓글' }: { comm
   return (
     <div className="mt-3 rounded-xl border border-white/10 bg-zinc-950/60 p-3" aria-label={title}>
       <div className="mb-2 flex items-center gap-2 text-xs font-bold text-zinc-300"><span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />{title}</div>
-      <ul className="space-y-1.5">{shown.map(({ i, c }) => <ChatLine key={i} c={c} />)}</ul>
+      <ul className="h-[4.75rem] space-y-0.5 overflow-hidden">{shown.map(({ i, c }) => <ChatLine key={i} c={c} compact />)}</ul>
     </div>
   );
 }

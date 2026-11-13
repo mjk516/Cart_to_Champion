@@ -352,15 +352,14 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
         })}
       </svg>
       <div className="absolute left-2 top-2 max-w-[85%] truncate rounded-lg px-2 py-0.5 text-xs font-black sm:left-3 sm:top-3 sm:px-3 sm:py-1 sm:text-sm" style={{ background: flag.bannerBg, color: flag.bannerFg }}>{banner}</div>
-      {pitStatus.length > 0 && (
-        <div className="flex flex-wrap gap-1 px-2 pb-2" aria-label="피트 상황">
+      {/* 피트 상황: 칸 높이를 늘 같게 두고(화면이 흔들리지 않게) 넘치면 옆으로 */}
+      <div className="flex h-7 items-center gap-1 overflow-x-auto whitespace-nowrap px-2 [scrollbar-width:none]" aria-label="피트 상황">
           {pitStatus.map((q) => (
-            <span key={q.id} className={`rounded-md px-1.5 py-0.5 text-[11px] font-black ${q.state === 'in' ? 'bg-yellow-400 text-zinc-900' : q.state === 'out' ? 'bg-green-400 text-zinc-900' : 'bg-white text-zinc-900'}`}>
+            <span key={q.id} className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-black ${q.state === 'in' ? 'bg-yellow-400 text-zinc-900' : q.state === 'out' ? 'bg-green-400 text-zinc-900' : 'bg-white text-zinc-900'}`}>
               🔧 {x.codeOf(q.id)} {q.state === 'in' ? '피트 인' : q.state === 'out' ? '피트 아웃' : `정지 · 새 타이어 ${TYRE_NAME[q.compound]}`}
             </span>
           ))}
         </div>
-      )}
     </div>
   );
 }
@@ -599,20 +598,25 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
       <div className="sticky z-30 -mx-1 bg-zinc-900 px-1 pb-1 pt-1" style={{ top: navH }}>
         <TrackView circuitId={input.circuit.id} realLayout={realLayout} laps={laps} grid={input.grid} progress={pt} phase={phase} baseLap={input.circuit.baseLap}
           banner={banner} focus={focus} neutral={neutral} x={x} pits={pitMarks} />
-        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+        {/* 상태 줄(높이 고정)과 조작 줄을 나눠, 깃발·비 표시가 생겨도 줄 수가 바뀌지 않게 */}
+        <div className="mt-1 flex h-6 items-center gap-2 overflow-hidden whitespace-nowrap text-xs">
           <Pill tone="zinc">L{shownLap} / {outcome.totalLaps}</Pill>
           {phase !== 'green' && <Pill tone={phase === 'red' ? 'red' : 'amber'}>{phase === 'sc' ? '세이프티카' : phase === 'vsc' ? 'VSC' : '레드 플래그'}</Pill>}
           {running?.wet && !finished && <Pill tone="blue">비</Pill>}
           <span className="text-zinc-400">내 순위 <b className="text-zinc-100">P{Math.max(1, order.findIndex((e) => e.id === ME) + 1)}</b></span>
-          {controls && <div className="ml-auto flex flex-wrap gap-1">{controls}</div>}
-          {!finished && <button onClick={() => setProgress(laps.length)} className="rounded-lg border border-white/15 px-2 py-1 text-xs">다음 결정·결과까지</button>}
         </div>
+        {!finished && (
+          <div className="mt-1 flex flex-wrap items-center justify-start gap-1 text-xs">
+            {controls}
+            <button onClick={() => setProgress(laps.length)} className="rounded-lg border border-white/15 px-2 py-1 text-xs">다음 결정·결과까지</button>
+          </div>
+        )}
       </div>
 
       {chat && (
         <div className="rounded-xl border border-white/10 bg-zinc-950/60 p-2" aria-label="실시간 댓글">
           <div className="mb-1 flex items-center gap-2 text-xs font-bold text-zinc-300"><span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />실시간 댓글</div>
-          <ul className="space-y-1">{chats.slice(-3).reverse().map((c2, i) => <ChatLine key={chats.length - i} c={c2} />)}{!chats.length && <li className="text-xs text-zinc-500">출발을 기다리는 중…</li>}</ul>
+          <ul className="h-[4.75rem] space-y-0.5 overflow-hidden">{chats.slice(-3).reverse().map((c2, i) => <ChatLine key={chats.length - i} c={c2} compact />)}{!chats.length && <li className="flex h-6 items-center text-xs text-zinc-500">출발을 기다리는 중…</li>}</ul>
         </div>
       )}
 
