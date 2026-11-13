@@ -8,7 +8,7 @@ export interface FeedItem { lap: number; from: FeedFrom; text: string }
 
 const BLEEP = '********';
 
-/** 성격별 내 무전. swear: 화났을 때(추월당함·사고·팀 불만) 욕(********)을 섞는 확률 */
+/** 성격별 내 무전. swear: 화났을 때(추월당함·사고·팀 불만) 욕(********)을 섞는 확률. 공격형 > 본능형 > 투사형 > 쇼맨형 > 분석형 > 침착형 */
 const ME_LINES: Record<Personality, { swear: number; overtook: string[]; passed: string[]; crash: string[]; gripe: string[]; win: string[]; podium: string[]; points: string[]; out: string[]; pit: string[] }> = {
   aggressive: {
     swear: 1,
@@ -47,11 +47,11 @@ const ME_LINES: Record<Personality, { swear: number; overtook: string[]; passed:
     pit: ['좋아, 새 타이어로 다시 싸운다.'],
   },
   showman: {
-    swear: 0,
+    swear: 0.4,
     overtook: ['카메라 잡았지? 방금 거 하이라이트 각이야!', '팬들 함성 들려? 하나 더 간다!'],
-    passed: ['괜찮아, 쇼는 이제부터야.', '잠깐 비켜준 거야. 더 멋지게 되찾을게.'],
-    crash: ['이건... 하이라이트엔 안 나왔으면 좋겠다.'],
-    gripe: ['이 전략, 팬들이 좋아할까?'],
+    passed: ['괜찮아, 쇼는 이제부터야.', '잠깐 비켜준 거야. 더 멋지게 되찾을게.', `${BLEEP}! 방금 건 하이라이트에서 빼 줘.`],
+    crash: ['이건... 하이라이트엔 안 나왔으면 좋겠다.', `${BLEEP}! 카메라 다 보고 있었는데!`],
+    gripe: ['이 전략, 팬들이 좋아할까?', `${BLEEP}, 이러면 쇼가 안 되잖아!`],
     win: ['우승이다! 시상대에서 제대로 보여줄게!'],
     podium: ['포디움 세리머니 준비됐어!'],
     points: ['포인트! 팬들한테 손 흔들어도 되지?'],
@@ -59,11 +59,11 @@ const ME_LINES: Record<Personality, { swear: number; overtook: string[]; passed:
     pit: ['피트 크루, 오늘도 멋지게 부탁해!'],
   },
   calm: {
-    swear: 0,
+    swear: 0.12,
     overtook: ['깔끔하게 넘었어. 페이스 유지할게.', '자리 잡았어. 타이어 아끼면서 간다.'],
-    passed: ['알겠어. 타이어 아끼고 다시 붙을게.', '괜찮아, 아직 랩 많이 남았어.'],
-    crash: ['미안해. 차 상태 확인해 줘.'],
-    gripe: ['이유가 있겠지. 일단 따를게.'],
+    passed: ['알겠어. 타이어 아끼고 다시 붙을게.', '괜찮아, 아직 랩 많이 남았어.', `${BLEEP}... 아니야, 괜찮아. 다시 간다.`],
+    crash: ['미안해. 차 상태 확인해 줘.', `${BLEEP}... 미안해, 차 상태 확인해 줘.`],
+    gripe: ['이유가 있겠지. 일단 따를게.', `${BLEEP}, 이번 판단은 이해가 안 돼.`],
     win: ['고마워, 다들. 정말 완벽한 하루였어.'],
     podium: ['좋은 결과야. 팀 덕분이야.'],
     points: ['포인트 챙겼어. 차분하게 잘 버텼다.'],
@@ -71,11 +71,11 @@ const ME_LINES: Record<Personality, { swear: number; overtook: string[]; passed:
     pit: ['알겠어, 들어간다.'],
   },
   analytical: {
-    swear: 0,
+    swear: 0.25,
     overtook: ['예상한 대로 섹터 2에서 넘었어.', '탈출 속도가 좋았어. 데이터 확인해 줘.'],
-    passed: ['저 차 직선 속도가 빨라. 섹터 2에서 다시 노릴게.', '앞 타이어가 먼저 갔어. 데이터 봐줘.'],
-    crash: ['리어가 갑자기 빠졌어. 원인 분석 부탁해.'],
-    gripe: ['이 판단 근거가 뭐야? 데이터로 설명해 줘.'],
+    passed: ['저 차 직선 속도가 빨라. 섹터 2에서 다시 노릴게.', '앞 타이어가 먼저 갔어. 데이터 봐줘.', `${BLEEP}, 저 브레이킹 포인트는 말이 안 돼.`],
+    crash: ['리어가 갑자기 빠졌어. 원인 분석 부탁해.', `${BLEEP}! 리어가 갑자기 빠졌어!`],
+    gripe: ['이 판단 근거가 뭐야? 데이터로 설명해 줘.', `${BLEEP}, 이건 데이터랑 정반대잖아.`],
     win: ['계획대로 됐어. 모델이 맞았네.'],
     podium: ['좋아. 남은 차이는 데이터로 줄이자.'],
     points: ['포인트 확보. 타이어 데이터 정리해 둘게.'],
