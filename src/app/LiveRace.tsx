@@ -12,6 +12,7 @@ import {
 import { CIRCUIT_PATHS } from './circuitPaths';
 import { ChatLine } from './FeedList';
 import { Pill } from './ui';
+import { F1TeamBadge } from './TeamBadge';
 
 const ME = 'player';
 export const TYRE_COLOR: Record<string, string> = { S: '#ef4444', M: '#facc15', H: '#e5e7eb', I: '#22c55e', W: '#3b82f6' };
@@ -420,6 +421,70 @@ function raceChats(seed: number, incidents: Incident[], started: boolean, upto: 
   return out;
 }
 
+/** 순위표 보기(SPEC v0.54): 오른쪽 ›는 INTERVAL → LEADER → TIRE, 왼쪽 ‹는 반대 */
+type TowerMode = 'interval' | 'leader' | 'tyre';
+const TOWER_MODES: TowerMode[] = ['interval', 'leader', 'tyre'];
+const TOWER_LABEL: Record<TowerMode, string> = { interval: 'INTERVAL', leader: 'LEADER', tyre: 'TIRE' };
+
+function TimingTower({ kind, lap, total, order, outs, mode, onMode, x, teamOf, myTeam, pitting }: {
+  kind: 'race' | 'sprint'; lap: number; total: number; order: Array<{ id: string; gap: number; compound: Compound; stops: number }>;
+  outs: Array<{ car: string; lap: number; type: string }>; mode: TowerMode; onMode: (m: TowerMode) => void; x: Ctx;
+  teamOf: (id: string) => string | undefined; myTeam?: string; pitting: (id: string) => boolean;
+}) {
+  const i = TOWER_MODES.indexOf(mode);
+  const value = (e: { id: string; gap: number; compound: Compound; stops: number }, n: number) => {
+    if (pitting(e.id) && mode !== 'tyre') return <span className="rounded bg-amber-400 px-1 font-black text-zinc-900" aria-label={`${x.codeOf(e.id)} 피트인`}>PIT</span>;
+    if (mode === 'tyre') {
+      return (
+        <span className="inline-flex items-center justify-end gap-1">
+          <span className="inline-flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-black text-zinc-900 sm:h-[18px] sm:w-[18px] sm:text-[10px]" style={{ background: TYRE_COLOR[e.compound] }}>{e.compound}</span>
+          <span className="hidden sm:inline">{TYRE_NAME[e.compound]}</span>
+        </span>
+      );
+    }
+    if (n === 0) return '-';
+    const g = mode === 'interval' ? e.gap - (order[n - 1]?.gap ?? 0) : e.gap;
+    return `+${g.toFixed(3)}`;
+  };
+  return (
+    <div className="flex w-[9.5rem] shrink-0 flex-col self-start overflow-hidden rounded-xl border border-white/15 bg-[#05070d] text-[11px] sm:w-56 sm:text-[13px] md:max-h-[calc(62vh+5.5rem)]" aria-label="순위표">
+      <div className="flex items-center justify-between bg-gradient-to-r from-zinc-800 to-zinc-900 px-2 py-1.5">
+        <span className="font-black tracking-widest text-white">{kind === 'sprint' ? 'SPRINT' : 'RACE'}</span>
+        <span className="text-zinc-400">LAP <b className="text-sm text-white sm:text-base">{lap}</b>/{total}</span>
+      </div>
+      <div className="flex items-center justify-between border-y border-white/10 bg-[#0d1220] text-[10px] font-black tracking-widest text-zinc-200 sm:text-xs">
+        <button className="px-2 py-1.5 hover:text-white" aria-label="이전 보기" onClick={() => onMode(TOWER_MODES[(i + 2) % 3]!)}>‹</button>
+        <span aria-live="polite">{TOWER_LABEL[mode]}</span>
+        <button className="px-2 py-1.5 hover:text-white" aria-label="다음 보기" onClick={() => onMode(TOWER_MODES[(i + 1) % 3]!)}>›</button>
+      </div>
+      {/* 넓은 화면에서는 트랙 영역 높이를 넘지 않게 안에서 스크롤(위에 붙는 영역이 화면을 다 덮지 않게) */}
+      <ol className="min-h-0 flex-1 md:overflow-y-auto md:[scrollbar-width:thin]" aria-label="타이밍 타워">
+        {order.map((e, n) => {
+          const mine = e.id === ME;
+          const mate = !mine && myTeam && teamOf(e.id) === myTeam;
+          return (
+            <li key={e.id} className={`flex h-[22px] items-center gap-1 border-b border-white/5 px-1.5 sm:h-[26px] sm:gap-1.5 ${mine ? 'bg-white font-bold text-zinc-900' : 'text-zinc-100'}`}
+              style={mate ? { background: `${x.colorOf(e.id)}33` } : undefined}>
+              <span className={`w-4 text-right font-bold sm:w-5 ${mine ? 'text-zinc-900' : 'text-zinc-400'}`}>{n + 1}</span>
+              <span className="flex w-4 justify-center sm:w-5"><F1TeamBadge teamId={teamOf(e.id)} size={14} /></span>
+              <span className="font-bold tracking-wide">{x.codeOf(e.id)}</span>
+              <span className={`ml-auto tabular-nums ${mine ? 'text-zinc-800' : 'text-zinc-300'}`}>{value(e, n)}</span>
+            </li>
+          );
+        })}
+        {outs.map((o) => (
+          <li key={`out-${o.car}`} aria-label={`${x.codeOf(o.car)} 리타이어`} className={`flex h-[22px] items-center gap-1 border-b border-white/5 px-1.5 text-zinc-500 sm:h-[26px] sm:gap-1.5 ${o.car === ME ? 'bg-white/80 font-bold text-zinc-700' : ''}`}>
+            <span className="w-4 text-right sm:w-5">✕</span>
+            <span className="flex w-4 justify-center opacity-50 sm:w-5"><F1TeamBadge teamId={teamOf(o.car)} size={14} /></span>
+            <span className="line-through">{x.codeOf(o.car)}</span>
+            <span className="ml-auto rounded bg-red-600 px-1 py-0.5 text-[10px] font-black text-white">OUT</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant, chat, onRadio, onDone, startAt = 0, onProgress }: {
   input: RaceInput;
   /** 이어 보기: 이 랩부터 시작한다(중간에 닫았던 레이스) */
@@ -442,8 +507,8 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
   const [progress, setProgress] = useState(instant ? Number.MAX_SAFE_INTEGER : Math.max(0, Math.min(startAt, laps.length)));
   const [playing, setPlaying] = useState(!instant);
   const [speed, setSpeedState] = useState<number>(loadSpeed);
-  // 타이밍 타워 간격: 앞차와의 간격(INTERVAL) / 선두와의 간격
-  const [gapMode, setGapMode] = useState<'interval' | 'leader'>('interval');
+  // 순위표 보기: 앞차와 간격(INTERVAL, 기본) → 선두와 간격(LEADER) → 타이어(TIRE)
+  const [towerMode, setTowerMode] = useState<TowerMode>('interval');
   const setSpeed = (v: number) => { setSpeedState(v); try { localStorage.setItem(SPEED_KEY, String(v)); } catch { /* 무시 */ } };
   const done = useRef(false);
   const byId = useMemo(() => new Map(cars.map((c) => [c.id, c])), [cars]);
@@ -577,8 +642,12 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
 
   return (
     <div className="space-y-3">
-      {/* 트랙 뷰는 스크롤해도 화면 위에 붙어 있다 */}
-      <div className="sticky z-30 -mx-1 bg-zinc-900 px-1 pb-1 pt-1" style={{ top: navH }}>
+      {/* 순위표(왼쪽) + 트랙 뷰. 넓은 화면에서는 스크롤해도 위에 붙어 있다 */}
+      <div className="z-30 -mx-1 flex gap-2 bg-zinc-900 px-1 pb-1 pt-1 md:sticky" style={{ top: navH }}>
+        <TimingTower kind={input.kind} lap={shownLap} total={outcome.totalLaps} order={order.filter((e) => !outIds.has(e.id))} outs={outs}
+          mode={towerMode} onMode={setTowerMode} x={x} teamOf={(id) => byId.get(id)?.teamId} myTeam={byId.get(ME)?.teamId}
+          pitting={(id) => !finished && pitMarks.some((q) => q.car === id && q.lap === cur)} />
+        <div className="min-w-0 flex-1">
         <TrackView circuitId={input.circuit.id} realLayout={realLayout} laps={laps} grid={input.grid} progress={pt} phase={phase} baseLap={input.circuit.baseLap}
           banner={banner} focus={focus} neutral={neutral} x={x} pits={pitMarks} />
         {/* 상태 줄(높이 고정)과 조작 줄을 나눠, 깃발·비 표시가 생겨도 줄 수가 바뀌지 않게 */}
@@ -591,9 +660,10 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
         {!finished && (
           <div className="mt-1 flex flex-wrap items-center justify-start gap-1 text-xs">
             {controls}
-            <button onClick={() => setProgress(laps.length)} className="rounded-lg border border-white/15 px-2 py-1 text-xs">다음 결정·결과까지</button>
+            <button onClick={() => setProgress(outcome.status === 'finished' ? endP : laps.length)} className="rounded-lg border border-white/15 px-2 py-1 text-xs">다음 결정·결과까지</button>
           </div>
         )}
+        </div>
       </div>
 
       {chat && (
@@ -623,47 +693,12 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
         </div>
       )}
 
-      <div className="grid gap-3 md:grid-cols-[1fr_16rem]">
-        <div className="overflow-hidden rounded-xl border border-white/10 bg-[#070a12] text-sm">
-          <div className="flex items-center justify-between border-b border-white/10 bg-gradient-to-r from-zinc-900 to-[#0b1020] px-3 py-1.5">
-            <span className="text-xs font-black tracking-widest text-zinc-300">RACE</span>
-            <span className="text-xs text-zinc-400">LAP <b className="text-base text-white">{shownLap}</b> / {outcome.totalLaps}</span>
-          </div>
-          <div className="flex items-center justify-between border-b border-white/10 px-1 py-0.5 text-[11px] font-black tracking-widest text-zinc-300">
-            <button className="px-2 py-1 hover:text-white" aria-label="간격 표시 바꾸기" onClick={() => setGapMode(gapMode === 'interval' ? 'leader' : 'interval')}>‹</button>
-            <span>{gapMode === 'interval' ? 'INTERVAL' : 'LEADER'}</span>
-            <button className="px-2 py-1 hover:text-white" aria-label="간격 표시 바꾸기" onClick={() => setGapMode(gapMode === 'interval' ? 'leader' : 'interval')}>›</button>
-          </div>
-        <ol className="max-h-72 overflow-y-auto" aria-label="타이밍 타워">
-          {order.filter((e) => !outIds.has(e.id)).map((e, i, arr) => (
-            <li key={e.id} className={`flex items-center gap-2 border-b border-white/5 px-2 py-1 ${e.id === ME ? 'bg-white font-bold text-zinc-900' : 'text-zinc-100'}`}>
-              <span className={`w-6 text-right font-bold ${e.id === ME ? 'text-zinc-900' : 'text-zinc-400'}`}>{i + 1}</span>
-              <span className="h-4 w-1 rounded" style={{ background: x.colorOf(e.id) }} />
-              <span className="w-12 font-bold tracking-wide">{x.codeOf(e.id)}</span>
-              <span className={`flex-1 text-right tabular-nums ${e.id === ME ? 'text-zinc-700' : 'text-zinc-300'}`}>{i === 0 ? '선두' : `+${(gapMode === 'interval' ? e.gap - (arr[i - 1]?.gap ?? 0) : e.gap).toFixed(gapMode === 'interval' ? 3 : 1)}`}</span>
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-black text-zinc-900" style={{ background: TYRE_COLOR[e.compound] }}>{e.compound}</span>
-              {pitMarks.some((q) => q.car === e.id && q.lap === cur) && !finished
-                ? <span className="w-10 rounded bg-amber-400 text-center text-[11px] font-black text-zinc-900" aria-label={`${x.codeOf(e.id)} 피트인`}>PIT</span>
-                : <span className="w-10 text-right text-xs text-zinc-500">{e.stops}스톱</span>}
-            </li>
-          ))}
-          {outs.map((o) => (
-            <li key={`out-${o.car}`} aria-label={`${x.codeOf(o.car)} 리타이어`} className={`flex items-center gap-2 border-b border-white/5 px-2 py-1 text-zinc-500 ${o.car === ME ? 'bg-racing/10 font-bold' : ''}`}>
-              <span className="w-6 text-right">–</span>
-              <span className="h-4 w-1 rounded opacity-40" style={{ background: x.colorOf(o.car) }} />
-              <span className="w-12 line-through">{x.codeOf(o.car)}</span>
-              <span className="flex-1 text-right text-xs">{o.type === 'crash' ? '사고' : '기계 결함'} · L{o.lap}</span>
-              <span className="rounded bg-red-600 px-1.5 py-0.5 text-[11px] font-black text-white">OUT</span>
-            </li>
-          ))}
-        </ol>
-        </div>
+      {/* 사건 기록 */}
         <div className="rounded-xl border border-white/10 bg-zinc-950/60 p-2 text-xs" aria-live="polite">
           <div className="mb-1 font-bold text-zinc-300">사건</div>
           {ticker.length === 0 && <div className="text-zinc-500">출발 대기</div>}
           {ticker.map((t, i) => <div key={i} className="py-0.5 text-zinc-300"><span className="text-zinc-500">L{t.lap}</span> {t.text}</div>)}
         </div>
-      </div>
     </div>
   );
 }

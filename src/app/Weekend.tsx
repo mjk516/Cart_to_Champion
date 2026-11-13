@@ -1,6 +1,6 @@
 // F1 그랑프리 주말(SPEC §5.3, §5.4): 주말 시작 → 세션마다 클릭 → 레이스 라이브 → 다음 그랑프리
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { midPlanFor, midTrainingAdvice, midTrainingPreview, midTrainingRound, TRAINING, type Career, type TrainingId,
   circuitType, strategyKey, enduranceOffer, f1Calendar, f1WeekendFor, homeGpEffect, forecastFinish, ovr, radioKey, runRace,
   type Classified, type F1Weekend, type F1WeekendSession,
@@ -85,6 +85,8 @@ export function Weekend() {
     () => (c && live && live.year === c.year ? f1WeekendFor(c, live.plan, live.round, live.radio, live.strategy ?? {}, live.midPlan) : null),
     [c, live?.plan, live?.round, live?.radio, live?.year, live?.strategy, live?.midPlan], // eslint-disable-line react-hooks/exhaustive-deps
   );
+  // 다음 세션·다음 그랑프리로 넘어가면 맨 위(세션 결과·순위)부터 보여 준다(SPEC v0.54, 휴대폰에서 스크롤이 그대로 남던 문제)
+  useEffect(() => { window.scrollTo({ top: 0 }); }, [live?.step, live?.round]);
   const mainRace = wk?.sessions.filter((s) => s.type === 'race').slice(-1)[0];
   const forecast = useMemo(
     () => (mainRace && mainRace.type === 'race' && live?.step === 0 ? forecastFinish({ ...mainRace.input, autoRadio: true }, ME, 80) : null),
