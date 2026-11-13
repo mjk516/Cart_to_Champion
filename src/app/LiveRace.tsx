@@ -683,7 +683,7 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
       {/* 순위표(왼쪽) + 트랙 뷰. 넓은 화면에서는 스크롤해도 위에 붙어 있다 */}
       <div className="z-30 -mx-1 flex gap-2 bg-zinc-900 px-1 pb-1 pt-1 md:sticky" style={{ top: navH }}>
         {!narrow && tower(false)}
-        <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
         <TrackView circuitId={input.circuit.id} realLayout={realLayout} laps={laps} grid={input.grid} progress={pt} phase={phase} baseLap={input.circuit.baseLap}
           banner={banner} focus={focus} neutral={neutral} x={x} pits={pitMarks} overlay={narrow ? (towerOpen ? tower(true) : <button onClick={() => setTowerOpen(true)} className="self-start rounded-lg border border-white/15 bg-[#05070d]/85 px-2 py-1 text-[11px] font-black text-zinc-200">순위표 ▸</button>) : undefined} inset={narrow && towerOpen ? 0.22 : 0} />
         {/* 상태 줄(높이 고정)과 조작 줄을 나눠, 깃발·비 표시가 생겨도 줄 수가 바뀌지 않게 */}
@@ -699,13 +699,8 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
             <button onClick={() => setProgress(outcome.status === 'finished' ? endP : laps.length)} className="rounded-lg border border-white/15 px-2 py-1 text-xs">다음 결정·결과까지</button>
           </div>
         )}
-        </div>
-      </div>
-
-      {/* 무전·사건 피드: 배속 줄 바로 아래(넓은 화면은 트랙 열에 맞춰). 위에 붙는 영역에 넣지 않아 무전 창을 가리지 않는다 */}
-      <div className="md:pl-[14.5rem]">
-        {/* 레이스 사건 + 팀 무전 + 내 무전(최신이 위, 칸 높이 고정) */}
-        <ol className="h-36 overflow-y-auto rounded-xl border border-white/10 bg-[#05070d] p-2 text-xs" aria-label="무전·사건">
+        {/* 무전·사건 피드: 배속 줄 바로 아래. 넓은 화면에서는 순위표 높이까지 남는 자리를 채우고 안에서 스크롤(위에 붙는 영역이 더 커지지 않게) */}
+        <ol className="mt-1 h-36 overflow-y-auto md:h-auto md:min-h-[5rem] md:flex-1 md:basis-0 rounded-xl border border-white/10 bg-[#05070d] p-2 text-xs" aria-label="무전·사건">
           {feedShown.length === 0 && <li className="text-zinc-500">출발 대기</li>}
           {feedShown.map((f, n) => (
             <li key={feedShown.length - n} className="flex gap-1.5 py-0.5">
@@ -715,7 +710,9 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
             </li>
           ))}
         </ol>
+        </div>
       </div>
+
       {chat && (
         <div className="rounded-xl border border-white/10 bg-zinc-950/60 p-2" aria-label="실시간 댓글">
           <div className="mb-1 flex items-center gap-2 text-xs font-bold text-zinc-300"><span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />실시간 댓글</div>
