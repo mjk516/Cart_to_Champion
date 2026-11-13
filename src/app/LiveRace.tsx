@@ -114,7 +114,8 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
   const [k, setK] = useState(1);
   const [len, setLen] = useState(0);
   const [cw, setCw] = useState(640);
-  const portrait = k >= 1.4;
+  // 휴대폰도 가로로 보여 준다(세로로 세우지 않는다)
+  const portrait = false;
   useEffect(() => {
     const el = boxRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
@@ -169,7 +170,9 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
   const scr = (q: { x: number; y: number } | null) => (q && geo ? geo.P2(q) : null);
   // 지금 달리는 랩(i)과 그 랩에서의 진행 비율(frac)
   const i = Math.min(Math.floor(progress), Math.max(0, laps.length - 1));
-  const frac = laps.length ? Math.min(1, progress - i) : 0;
+  // 마지막 랩 뒤(체커기 뒤)에도 진행이 이어진다: 남은 차가 결승선을 다 지날 때까지(SPEC v0.52)
+  const lastLap = i === laps.length - 1;
+  const frac = laps.length ? (lastLap ? Math.max(0, progress - i) : Math.min(1, progress - i)) : 0;
   const cur = laps[i];
   const prev = i > 0 ? laps[i - 1]!.order : grid.map((id, n) => ({ id, gap: n * 0.22 }));
   const prevGap = new Map(prev.map((e) => [e.id, e.gap]));
@@ -203,8 +206,13 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
   const LANE_IN = PIT_BOX - PIT_IN, LANE_OUT = PIT_OUT - PIT_BOX;
   const pitStatus: Array<{ id: string; state: 'in' | 'stopped' | 'out'; compound: Compound }> = [];
   const placed = shownCars.map((e, rank) => {
-    const g = (prevGap.get(e.id) ?? e.gap) * (1 - frac) + e.gap * frac;
-    let q2: { x: number; y: number } | null = at2(frac - g / baseLap);
+    const fi = Math.min(1, frac);
+    const g = (prevGap.get(e.id) ?? e.gap) * (1 - fi) + e.gap * fi;
+    // 마지막 랩에서 결승선을 지난 차는 선 바로 뒤에 멈춘다(들어온 순서대로 조금씩 앞)
+    const raw = frac - g / baseLap;
+    const parked = lastLap && raw >= 1;
+    // 들어온 차는 결승선 뒤로 들어온 순서대로 늘어선다(선두가 가장 앞)
+    let q2: { x: number; y: number } | null = at2(parked ? 1.006 + (shownCars.length - rank) * 0.004 : raw);
     let state: 'in' | 'stopped' | 'out' | null = null;
     let pitting: PitMark | null = null;
     // 피트 랩 앞뒤: 진입 → 피트레인 저속(절반 속도) → 박스 정지 → 저속 → 출구. 잃는 시간 합 = 피트 랩 앞뒤 간격 차이
@@ -223,7 +231,7 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
       else pos = adv - (LANE_IN + stop + LANE_OUT);
       if (state) { q2 = lane2(pos - pit.lap); pitting = pit; pitStatus.push({ id: e.id, state, compound: pit.compound }); } else q2 = at2(pos);
     }
-    return { e, rank, pt: scr(q2), state, pitting };
+    return { e, rank, pt: scr(q2), state, pitting, parked };
   });
   // 뒤(화면 위쪽)부터 그려서 앞 차가 위에 오게
   const drawOrder = [...placed].filter((c) => c.pt).sort((a, b) => a.pt!.y - b.pt!.y);
@@ -259,7 +267,7 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
   const tagLevel = new Map<string, number>();
   {
     const lastRight: number[] = [];
-    const items = placed.filter((c) => c.pt).map((c) => {
+    const items = placed.filter((c) => c.pt && (c.e.id === ME || c.rank === 0 || (!c.parked && (showAllTags || focus.includes(c.e.id) || !!c.state)))).map((c) => {
       const label = c.state && c.pitting ? `${x.codeOf(c.e.id)} ${STATE_LABEL[c.state]}${c.state === 'stopped' ? ` → ${c.pitting.compound}` : ''}` : `${c.rank + 1} | ${x.codeOf(c.e.id)}`;
       const tw = (label.length * 5.6 + 8) * u;
       return { id: c.e.id, x0: c.pt!.x - tw / 2, x1: c.pt!.x + tw / 2 };
@@ -312,10 +320,10 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
           </g>
         )}
         {/* 차와 "순위 | 코드" 태그 */}
-        {drawOrder.map(({ e, rank, pt, state, pitting }) => {
+        {drawOrder.map(({ e, rank, pt, state, pitting, parked }) => {
           const p = pt!;
           const mine = e.id === ME;
-          const tagged = showAllTags || mine || rank === 0 || focus.includes(e.id) || !!state;
+          const tagged = mine || rank === 0 || (!parked && (showAllTags || focus.includes(e.id) || !!state));
           const r = (mine ? 5.5 : 4.5) * u * p.s;
           const label = state && pitting ? `${x.codeOf(e.id)} ${STATE_LABEL[state]}${state === 'stopped' ? ` → ${pitting.compound}` : ''}` : `${rank + 1} | ${x.codeOf(e.id)}`;
           const tw = (label.length * 5.6 + 8) * u;
@@ -461,6 +469,15 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
   const p = Math.min(progress, laps.length);
   const cur = Math.floor(p);
   const pending = outcome.status === 'pending' && p >= laps.length;
+  // 레이스 끝: 선두가 아니라 남아 있는 차 중 맨 뒤 차가 결승선을 지날 때(SPEC v0.52). 마지막 랩 간격의 최댓값만큼 더 달린다
+  const endP = useMemo(() => {
+    if (outcome.status !== 'finished' || !laps.length) return laps.length;
+    const finishers = new Set(outcome.classification.filter((r) => r.status === 'finished').map((r) => r.id));
+    const last = laps[laps.length - 1]!.order.filter((o) => finishers.has(o.id));
+    const maxGap = Math.max(0, ...last.map((o) => o.gap));
+    return laps.length + Math.min(0.98, maxGap / input.circuit.baseLap) + 0.02;
+  }, [outcome, laps, input.circuit.baseLap]);
+  const pt = Math.min(progress, endP);
 
   // 트랙 뷰를 상단 메뉴 바로 아래에 붙인다(메뉴 높이는 화면 폭마다 다르다)
   const [navH, setNavH] = useState(0);
@@ -479,7 +496,7 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
   const lapsRef = useRef(laps);
   lapsRef.current = laps;
   useEffect(() => {
-    if (!playing || p >= laps.length) return;
+    if (!playing || pt >= endP) return;
     let raf = 0;
     let last = performance.now();
     const tick = (now: number) => {
@@ -489,13 +506,13 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
         const ls = lapsRef.current;
         const lapNow = ls[Math.min(Math.floor(v), ls.length - 1)];
         const pace = TRACK_FLAG[lapNow?.phase ?? 'green'].pace;
-        return Math.min(ls.length, v + (dt * speedRef.current * pace) / input.circuit.baseLap);
+        return Math.min(endP, v + (dt * speedRef.current * pace) / input.circuit.baseLap);
       });
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [playing, laps.length, p >= laps.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [playing, laps.length, endP, pt >= endP]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 이어 보기 저장: 3랩마다, 그리고 탭을 숨기거나 닫거나 화면을 떠날 때
   const progressRef = useRef(p);
@@ -519,7 +536,9 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
     return () => { document.removeEventListener('visibilitychange', onVis); window.removeEventListener('pagehide', flush); flush(); };
   }, [instant]);
 
-  const finished = outcome.status === 'finished' && p >= laps.length;
+  const finished = outcome.status === 'finished' && pt >= endP;
+  // 선두는 체커기를 받았고 뒤차들이 들어오는 중
+  const checkered = outcome.status === 'finished' && progress >= laps.length && !finished;
   useEffect(() => {
     if (finished && !done.current && outcome.status === 'finished') {
       done.current = true;
@@ -558,7 +577,7 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
   const culprits = deployLap !== undefined ? outs.filter((o) => o.lap === deployLap && o.neutralization !== 'none').map((o) => o.car) : [];
   const headlineCar = headline && 'car' in headline ? headline.car : null;
   const culpritText = culprits.length && !(headlineCar && culprits.includes(headlineCar)) ? ` · ${culprits.map((id) => x.codeOf(id)).join(', ')} OUT` : '';
-  const banner = finished && winner ? `🏁 체커기 · ${x.codeOf(winner.id)} 우승`
+  const banner = (finished || checkered) && winner ? `🏁 체커기 · ${x.codeOf(winner.id)} 우승${checkered ? ' · 남은 차 들어오는 중' : ''}`
     : `L${shownLap}/${outcome.totalLaps}${shownLap === outcome.totalLaps ? ' · 파이널 랩' : ''}${culpritText}${headline ? ` · ${describe(headline, x) ?? ''}` : shownLap === 1 ? ' · 스타트' : ''}`;
 
   const myResult = outcome.status === 'finished' ? outcome.classification.find((r) => r.id === ME) : undefined;
@@ -578,7 +597,7 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
     <div className="space-y-3">
       {/* 트랙 뷰는 스크롤해도 화면 위에 붙어 있다 */}
       <div className="sticky z-30 -mx-1 bg-zinc-900 px-1 pb-1 pt-1" style={{ top: navH }}>
-        <TrackView circuitId={input.circuit.id} realLayout={realLayout} laps={laps} grid={input.grid} progress={p} phase={phase} baseLap={input.circuit.baseLap}
+        <TrackView circuitId={input.circuit.id} realLayout={realLayout} laps={laps} grid={input.grid} progress={pt} phase={phase} baseLap={input.circuit.baseLap}
           banner={banner} focus={focus} neutral={neutral} x={x} pits={pitMarks} />
         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
           <Pill tone="zinc">L{shownLap} / {outcome.totalLaps}</Pill>
