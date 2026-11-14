@@ -179,8 +179,8 @@ export function Weekend() {
           {myPos > 3 && <span className="font-bold text-racing">{myPos}. {codeOf(ME)} {live.points[ME] ?? 0}</span>}
         </div>
       )}
-      <div className={`grid gap-4 ${live.step === 0 ? 'lg:grid-cols-[1fr_17rem]' : ''}`}>
-        <Card>
+      <div className={`grid grid-cols-1 gap-4 ${live.step === 0 ? 'lg:grid-cols-[minmax(0,1fr)_17rem]' : ''}`}>
+        <Card className="min-w-0">
           {live.step === 0 && (
             <div className="space-y-4">
               <Tip id="weekend" title="그랑프리 주말">

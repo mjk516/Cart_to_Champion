@@ -52,7 +52,7 @@ function describe(inc: Incident, x: Ctx): string | null {
     case 'sc_end': return `세이프티카 복귀${vsText(inc.vsExpected)}`;
     case 'vsc_end': return `VSC 종료${vsText(inc.vsExpected)}`;
     case 'neutral_update': return inc.delta > 0 ? `${inc.phase === 'sc' ? '세이프티카' : 'VSC'} ${inc.delta}랩 더 길어진다` : `${inc.phase === 'sc' ? '세이프티카' : 'VSC'} 예상보다 빨리 끝난다`;
-    case 'restart': return '재출발';
+    case 'restart': return inc.kind === 'standing' ? `스탠딩 스타트 · L${inc.lap}부터 재출발` : inc.kind === 'rolling' ? `롤링 스타트 · L${inc.lap}부터 재개` : '재출발';
     case 'rain_start': return '🌧 비 시작';
     case 'rain_stop': return '비 그침';
     case 'radio': return inc.forced ? `📻 팀 판단: ${RADIO_LABEL[inc.choice] ?? inc.choice} (${inc.forced.split('.')[0]})` : `📻 무전: ${RADIO_LABEL[inc.choice] ?? inc.choice}`;
@@ -209,7 +209,11 @@ function TrackView({ circuitId, realLayout, laps, grid, progress, phase, baseLap
   const P = Math.min(progress, laps.length);
   const LANE_IN = PIT_BOX - PIT_IN, LANE_OUT = PIT_OUT - PIT_BOX;
   const pitStatus: Array<{ id: string; state: 'in' | 'stopped' | 'out'; compound: Compound }> = [];
-  const placed = shownCars.map((e, rank) => {
+  // 태그 순위도 지금 위치(이어 그린 간격) 순서로
+  const fiAll = Math.min(1, frac);
+  const liveRank = new Map(shownCars.map((e) => ({ id: e.id, g: (prevGap.get(e.id) ?? e.gap) * (1 - fiAll) + e.gap * fiAll })).sort((a, b) => a.g - b.g).map((q, n) => [q.id, n]));
+  const placed = shownCars.map((e) => {
+    const rank = liveRank.get(e.id) ?? 0;
     const fi = Math.min(1, frac);
     const g = (prevGap.get(e.id) ?? e.gap) * (1 - fi) + e.gap * fi;
     // 마지막 랩에서 결승선을 지난 차는 선 바로 뒤에 멈춘다(들어온 순서대로 조금씩 앞)
@@ -632,7 +636,19 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
   const pitMarks: PitMark[] = outcome.incidents.flatMap((i) => (i.type === 'pit' ? [{ car: i.car, lap: i.lap, compound: i.compound }] : []));
   // 타이밍 타워는 다 달린 랩 기준
   const rec = cur > 0 ? laps[cur - 1] : null;
-  const order = rec ? rec.order : input.grid.map((id) => ({ id, gap: 0, compound: 'M' as const, stops: 0 }));
+  const baseOrder = rec ? rec.order : input.grid.map((id) => ({ id, gap: 0, compound: 'M' as const, stops: 0 }));
+  // 순위는 랩이 끝날 때가 아니라 지금 달리는 랩 안에서 바로 바뀐다(SPEC v0.57): 이번 랩 앞뒤 간격을 진행 비율로 이어 정렬
+  const runningLap = !finished && cur < laps.length ? laps[cur] : undefined;
+  const order = (() => {
+    if (!runningLap) return baseOrder;
+    const f = Math.max(0, Math.min(1, pt - cur));
+    const prevGap = new Map(baseOrder.map((e) => [e.id, e.gap]));
+    const now = new Map(runningLap.order.map((e) => [e.id, e]));
+    return runningLap.order
+      .map((e) => ({ ...(baseOrder.find((b) => b.id === e.id) ?? e), id: e.id, gap: (prevGap.get(e.id) ?? e.gap) * (1 - f) + e.gap * f, compound: f > 0.5 ? (now.get(e.id)?.compound ?? e.compound) : (baseOrder.find((b) => b.id === e.id)?.compound ?? e.compound), stops: f > 0.5 ? e.stops : (baseOrder.find((b) => b.id === e.id)?.stops ?? e.stops) }))
+      .sort((a, b) => a.gap - b.gap)
+      .map((e, _n, arr) => ({ ...e, gap: e.gap - (arr[0]?.gap ?? 0) }));
+  })();
   const shownLap = Math.min(outcome.totalLaps, finished ? laps.length : cur + 1);
   const ticker = outcome.incidents
     .filter((i) => i.lap <= (pending ? laps.length + 1 : cur))
@@ -694,7 +710,7 @@ export function LiveRace({ input, realLayout = false, cars, colorOfTeam, instant
       {/* 순위표(왼쪽) + 트랙 뷰. 넓은 화면에서는 스크롤해도 위에 붙어 있다 */}
       {/* 큰 영역이 화면 밖으로 나가면 위에 한 줄 막대만 붙는다(PC에서 아래로 내릴 때 답답하지 않게, SPEC v0.56) */}
       {!blockVisible && !finished && (
-        <div className="sticky z-30 -mx-1 flex h-9 items-center gap-2 overflow-hidden whitespace-nowrap rounded-b-xl border-b border-white/10 bg-zinc-900/95 px-2 text-xs backdrop-blur" style={{ top: navH }} aria-label="레이스 요약 막대">
+        <div className="fixed inset-x-0 z-30 mx-auto flex h-9 max-w-6xl items-center gap-2 overflow-hidden whitespace-nowrap rounded-b-xl border-b border-white/10 bg-zinc-900/95 px-3 text-xs shadow-lg backdrop-blur" style={{ top: navH }} aria-label="레이스 요약 막대">
           <span className="font-black text-white">{input.kind === 'sprint' ? 'SPRINT' : 'RACE'}</span>
           <Pill tone="zinc">L{shownLap} / {outcome.totalLaps}</Pill>
           {phase !== 'green' && <Pill tone={phase === 'red' ? 'red' : 'amber'}>{phase === 'sc' ? '세이프티카' : phase === 'vsc' ? 'VSC' : '레드 플래그'}</Pill>}

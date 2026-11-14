@@ -42,6 +42,8 @@ export interface Neutralization {
   longer: number;
   /** 사고 차(잔해면 없음) */
   car?: string;
+  /** 레드 플래그 재출발: 스탠딩(마른 트랙, 출발선에서) / 롤링(젖은 트랙, 세이프티카 뒤) */
+  restart?: 'standing' | 'rolling';
 }
 export interface RadioDecision {
   id: string; lap: number; trigger: RadioTrigger; options: RadioOption[]; neutral?: Neutralization;
@@ -132,7 +134,7 @@ export type Incident =
   | { type: 'debris'; lap: number }
   | { type: 'sc_deploy' | 'vsc_deploy' | 'red_flag'; lap: number; info?: Neutralization }
   | { type: 'sc_end' | 'vsc_end'; lap: number; /** 실제 − 예상 랩 수 */ vsExpected?: number }
-  | { type: 'restart'; lap: number }
+  | { type: 'restart'; lap: number; /** 레드 플래그 뒤 재출발 방식(SPEC v0.57) */ kind?: 'standing' | 'rolling' }
   | { type: 'neutral_update'; lap: number; delta: number; phase: Exclude<Phase, 'green'> }
   | { type: 'pit'; lap: number; car: string; compound: Compound; under: Phase }
   | { type: 'rain_start' | 'rain_stop'; lap: number }
@@ -364,14 +366,17 @@ export function runRace(input: RaceInput): RaceOutcome {
     const last = incidents[incidents.length - 1];
     return last && last.lap === laps.length + 1 && (last.type === 'crash' || last.type === 'mech_dnf') ? last : null;
   };
-  const startPhase = (p: Exclude<Phase, 'green'>, lap: number, _rng: Rng) => {
+  let redRestart: 'standing' | 'rolling' = 'standing';
+  let rollingAfterRed = false;
+  const startPhase = (p: Exclude<Phase, 'green'>, lap: number, _rng: Rng, restart: 'standing' | 'rolling' = 'standing') => {
     phase = p;
     const nr = rngFor(input.seed, 'neutral', lap);
     const cause = lastIncidentCar();
     let info: Neutralization;
     if (p === 'red') {
       phaseLapsLeft = 1;
-      info = { phase: 'red', at: nr(), severity: 'L', expectedLaps: 1, shorter: 0, longer: 0, car: cause?.car };
+      redRestart = restart;
+      info = { phase: 'red', at: nr(), severity: 'L', expectedLaps: 1, shorter: 0, longer: 0, car: cause?.car, restart };
     } else {
       // 사고는 크기가 크고, 기계 결함·잔해는 작은 편
       const roll = nr();
@@ -447,7 +452,7 @@ export function runRace(input: RaceInput): RaceOutcome {
         const victim = weightedPick(rng, running(), crashWeight);
         retire(victim, lap, 'crash', 'red');
         if (rng() < 0.3 && running().length > 1) retire(weightedPick(rng, running(), crashWeight), lap, 'crash', 'red');
-        startPhase('red', lap, rng);
+        startPhase('red', lap, rng, wet || raining ? 'rolling' : 'standing');
         deployedNow = 'red';
       } else if (r < (acc += per(HAZARD.sc))) {
         const cause = rng();
@@ -479,7 +484,7 @@ export function runRace(input: RaceInput): RaceOutcome {
           : rainStartNow ? 'rain_start' : rainStopNow && isWetTyre(my.compound) ? 'rain_stop' : pitWindow ? 'pit_window' : null;
       if (trigger) {
         const pos = Math.max(1, order.filter((x) => !x.out).indexOf(my) + 1);
-        const decision = buildDecision(trigger, lap, my, L, mandatoryStop, circuit, pos, (trigger === 'sc' || trigger === 'vsc') ? neutral ?? undefined : undefined, !!weather?.heavy);
+        const decision = buildDecision(trigger, lap, my, L, mandatoryStop, circuit, pos, (trigger === 'sc' || trigger === 'vsc' || trigger === 'red_flag') ? neutral ?? undefined : undefined, !!weather?.heavy);
         const recommended = decision.options.find((o) => o.recommended)?.id;
         // 급박한 상황(의무 피트스톱이 코앞, 타이어가 한계를 넘음)이면 팀이 바로 부른다
         const choice = decision.urgent ? recommended : input.radio?.[decision.id] ?? (input.autoRadio ? recommended : undefined);
@@ -611,12 +616,24 @@ export function runRace(input: RaceInput): RaceOutcome {
     if (phase !== 'green') {
       phaseLapsLeft -= 1;
       if (phaseLapsLeft <= 0) {
-        if (phase === 'red') {
+        if (phase === 'red' && redRestart === 'standing') {
+          // 스탠딩 스타트: 지금 순서대로 출발선 그리드에 다시 서서, 멈춘 랩 다음 랩부터 정지 출발
+          const grid = order.filter((s) => !s.out).sort((a, b) => a.time - b.time);
+          const lead = grid[0]?.time ?? 0;
+          grid.forEach((s, i) => { s.time = lead + i * 0.22; });
+          incidents.push({ type: 'restart', lap: lap + 1, kind: 'standing' });
+          phase = 'green';
+          neutral = null;
+          neutralExpected = 0;
+        } else if (phase === 'red') {
+          // 롤링 스타트: 세이프티카 뒤 일렬로 2랩, 세이프티카가 들어가면 바로 재개
           phase = 'sc';
-          phaseLapsLeft = 1;
+          phaseLapsLeft = 2;
+          rollingAfterRed = true;
         } else {
           incidents.push({ type: phase === 'sc' ? 'sc_end' : 'vsc_end', lap, vsExpected: neutralExpected ? neutralDelta : undefined });
-          if (phase === 'sc') incidents.push({ type: 'restart', lap: lap + 1 });
+          if (phase === 'sc') incidents.push(rollingAfterRed ? { type: 'restart', lap: lap + 1, kind: 'rolling' } : { type: 'restart', lap: lap + 1 });
+          rollingAfterRed = false;
           phase = 'green';
           neutral = null;
           neutralExpected = 0;
@@ -845,7 +862,7 @@ function buildDecision(trigger: RadioTrigger, lap: number, s: CarState, L: numbe
       notes.stay_slicks = '비가 금방 그친다는 데 거는 도박. 맞으면 크게 번다';
       break;
     case 'red_flag': {
-      advice = `${where}레드 플래그! 세션이 중단됐다. 모두 피트레인에 서고, 재출발 전에 타이어를 공짜로 바꿀 수 있어. 남은 ${remaining}랩, 지금 ${tyre}.`;
+      advice = `${where}레드 플래그! 세션이 중단됐다. 모두 피트레인에 서고, 재출발 전에 타이어를 공짜로 바꿀 수 있어(쓰던 타이어로 가도 돼). 남은 ${remaining}랩, 지금 ${tyre}. ${neutral?.restart === 'rolling' ? '노면이 미끄러워 세이프티카 뒤 롤링 스타트로 재개한다' : '트랙 상태가 좋아 출발선 그리드에서 스탠딩 스타트로 다시 출발한다'}(${lap + 1}랩부터).`;
       const fits = (c: Compound) => (lifeOf(c) >= remaining ? `끝까지 버틴다(수명 약 ${lifeOf(c)}랩)` : `약 ${lifeOf(c)}랩 뒤 한 번 더 들어와야 한다`);
       const rule = needsCompound ? ' 아직 다른 컴파운드를 안 썼으면 그 규칙도 채운다' : '';
       notes.rf_S = `가장 빠르다. ${fits('S')}.${needsCompound && s.compound !== 'S' ? rule : ''}`;

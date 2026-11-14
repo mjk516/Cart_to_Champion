@@ -473,3 +473,32 @@ describe('레드 플래그 (v0.46)', () => {
     expect(checked).toBe(2);
   });
 });
+
+describe('레드 플래그 재출발 (v0.57)', () => {
+  it('마른 트랙은 스탠딩 스타트(다음 랩 그린, 그리드 간격), 젖은 트랙은 롤링 스타트(세이프티카 2랩 뒤 재개). 멈춘 랩부터 이어진다', () => {
+    const seen = { standing: 0, rolling: 0 };
+    for (let seed = 1; seed <= 600 && (seen.standing < 2 || seen.rolling < 1); seed++) {
+      for (const cid of ['monaco', 'belgium', 'brazil']) {
+        const out = runRace({ ...raceInput(seed, cid), autoRadio: true });
+        const red = out.incidents.find((i) => i.type === 'red_flag') as { lap: number; info?: { restart?: 'standing' | 'rolling' } } | undefined;
+        if (!red?.info?.restart) continue;
+        const rs = out.incidents.find((i) => i.type === 'restart' && i.lap > red.lap) as { lap: number; kind?: string } | undefined;
+        expect(rs?.kind).toBe(red.info.restart);
+        if (red.info.restart === 'standing') {
+          seen.standing++;
+          expect(rs!.lap).toBe(red.lap + 1);
+          // 다음 랩은 세이프티카 없이 바로 출발(재출발 랩에 새 사고가 나면 그때 세이프티카가 나올 수 있다)
+          expect(out.laps[red.lap]!.phase).not.toBe('red');
+          expect(out.incidents.some((i) => i.type === 'sc_end' && i.lap === red.lap)).toBe(false);
+        } else {
+          seen.rolling++;
+          expect(out.laps[red.lap]!.phase).toBe('sc');
+          expect(rs!.lap).toBeGreaterThanOrEqual(red.lap + 3);
+        }
+        // 랩 수는 처음부터 다시가 아니라 이어진다
+        expect(out.laps.length).toBe(out.totalLaps);
+      }
+    }
+    expect(seen.standing).toBeGreaterThan(0);
+  });
+});
