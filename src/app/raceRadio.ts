@@ -149,8 +149,12 @@ export function buildRaceFeed(o: {
           break;
         case 'sc_deploy': event(lap, '세이프티카 출동'); team(lap, '세이프티카. 델타 지키고 타이어 온도 유지해.'); break;
         case 'vsc_deploy': event(lap, 'VSC 발령'); team(lap, 'VSC. 델타 지켜, 앞차 간격 유지.'); break;
-        case 'red_flag': event(lap, '레드 플래그 · 세션 중단'); team(lap, '레드 플래그. 피트레인으로 들어와.'); break;
-        case 'restart': team(lap, '곧 재시작. 타이어 데워 둬.'); break;
+        case 'red_flag': event(lap, `레드 플래그 · 세션 중단${i.info?.restart === 'rolling' ? ' · 롤링 스타트 예정' : ' · 스탠딩 스타트 예정'}`); team(lap, `레드 플래그. 피트레인으로 들어와. ${i.info?.restart === 'rolling' ? '노면이 미끄러워 세이프티카 뒤 롤링 스타트로 재개해.' : '그리드에서 스탠딩 스타트로 다시 출발해.'}`); break;
+        case 'restart':
+          if (i.kind === 'standing') { event(lap, `스탠딩 스타트 · L${lap}부터 재출발`); team(lap, '그리드에 서. 스탠딩 스타트다. 출발 집중해!'); }
+          else if (i.kind === 'rolling') { event(lap, `롤링 스타트 · L${lap}부터 재개`); team(lap, '세이프티카 들어간다. 롤링 스타트, 선두 가속에 맞춰 바로 간다!'); }
+          else team(lap, '곧 재시작. 타이어 데워 둬.');
+          break;
         case 'sc_end': case 'vsc_end': event(lap, i.type === 'sc_end' ? '세이프티카 복귀' : 'VSC 해제'); break;
         case 'rain_start': event(lap, '비 시작'); team(lap, '비 온다. 브레이킹 일찍 가져가.'); break;
         case 'rain_stop': event(lap, '비 그침'); team(lap, '트랙이 마르고 있어. 라인 따라 달려.'); break;
